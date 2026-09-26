@@ -2856,6 +2856,91 @@ class BotTests(unittest.TestCase):
         # فونت: عرضِ متن مثبت و draw_text بدونِ خطا
         self.assertGreater(m._text_w("MB", 2), 0)
 
+    def test_chart_font_covers_caller_literals(self):
+        """هر نویسه‌ی عنوان/راهنمای ثابتی که به render_chart_png داده می‌شود
+        باید در _FONT5x7 گلیف داشته باشد؛ وگرنه جای خالی رسم می‌شود
+        (باگِ قبلی: DOWN → «D W» و UP → خالی)."""
+        m = self.m
+        font = m._FONT5x7
+        for ch, rows in font.items():
+            self.assertEqual(len(rows), 7, ch)
+            self.assertTrue(all(0 <= r < 32 for r in rows), ch)
+        # ثابت‌های رشته‌ای داخلِ هر فراخوانیِ render_chart_png در کد
+        tree = ast.parse(_read_panel_source())
+        spec = re.compile(r"%[-#0 +]*\d*(?:\.\d+)?[sdif]")
+        literals = set()
+        for node in ast.walk(tree):
+            if (isinstance(node, ast.Call)
+                    and getattr(node.func, "id", None) == "render_chart_png"):
+                parts = list(node.args) + [k.value for k in node.keywords]
+                for part in parts:
+                    for sub in ast.walk(part):
+                        if (isinstance(sub, ast.Constant)
+                                and isinstance(sub.value, str)):
+                            literals.add(spec.sub("", sub.value))
+        # گارد: پارسِ AST واقعاً فراخوانی‌ها را پیدا کرده باشد
+        for must in ("DOWN", "UP", "SPEEDTEST - 7D", "TOP USERS - 7D",
+                     "TOTAL/DAY", "RX", "TX"):
+            self.assertIn(must, literals)
+        # عنوانِ بازه‌ها (RANGES) و برچسب‌های محورِ Y هم روی تصویر می‌آیند
+        literals.update(r[2] for r in m.TelegramBot.RANGES)
+        literals.update(m._fmt_bytes_ascii(v) for v in (0, 5, 5e3, 5e6, 5e9, 5e12))
+        literals.update(m._fmt_mbps_ascii(v) for v in (0, 0.5, 95, 1500))
+        for text in literals:
+            missing = [ch for ch in text.upper() if ch not in font]
+            self.assertEqual(missing, [], "no glyph for %r in %r"
+                             % (missing, text))
+        # نامِ کاربر (ascii) روی محورِ X می‌آید → کلِ ASCIIِ چاپی
+        missing = [chr(c) for c in range(32, 127)
+                   if chr(c).upper() not in font]
+        self.assertEqual(missing, [])
+
+    def test_speed_chart_y_labels_are_mbps(self):
+        """نمودارهای تستِ سرعت (ربات و گزارشِ دوره‌ای) مقدارِ Mbit/s دارند؛
+        برچسبِ محورِ Y نباید واحدِ بایت (مثلِ «95 B») داشته باشد."""
+        m = self.m
+        now = time.time()
+        for i, (dn, up) in enumerate(((95e6, 40e6), (380e6, 120e6),
+                                      (240e6, 90e6))):
+            m.META.speedtest_add({"ts": now - 3600 * (i + 1), "iface": "awgx",
+                                  "server_id": 1, "ping_ms": 20.0,
+                                  "down_bps": dn, "up_bps": up, "ok": 1,
+                                  "error": ""})
+        calls = []
+        real_render = m.render_chart_png
+        real_ifaces = m.SPEEDTEST.ifaces
+        orig_api = m.tg_api
+
+        def spy(series, **kw):
+            calls.append((series, kw))
+            return real_render(series, **kw)
+        m.render_chart_png = spy
+        m.SPEEDTEST.ifaces = lambda: ["awgx"]
+        m.tg_api = lambda *a, **k: (True, {})
+        try:
+            bot = m.TelegramBot()
+            bot.send_photo = lambda *a, **k: None
+            bot._speed_graph("1")
+            m.build_report_photos()
+        finally:
+            m.render_chart_png = real_render
+            m.SPEEDTEST.ifaces = real_ifaces
+            m.tg_api = orig_api
+        speed = [(s, kw) for s, kw in calls
+                 if any(name == "DOWN" for _, _, name in s)]
+        self.assertEqual(len(speed), 2, calls)      # ربات + گزارش
+        byte_unit = re.compile(r"\b[KMGT]?B\b")
+        for series, kw in speed:
+            mx, labels = m._chart_y_labels(series, kw.get("y_fmt"))
+            self.assertAlmostEqual(mx, 380.0)
+            for lbl in labels:
+                self.assertIsNone(byte_unit.search(lbl), labels)
+                self.assertIn("bit/s", lbl)
+            self.assertEqual(labels[0], "380 Mbit/s")
+        # پیش‌فرض (نمودارهای حجم) همچنان بایت است
+        _, labels = m._chart_y_labels([([2048], (1, 2, 3), "RX")])
+        self.assertEqual(labels[0], "2.0 KB")
+
     def test_fmt_bytes_srv(self):
         m = self.m
         # خروجی با ارقامِ فارسی و ممیزِ فارسی (قالبِ نمایشیِ ربات)
