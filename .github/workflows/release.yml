@@ -4,8 +4,9 @@
 #
 # The tag must have a "## [1.1.0]" section in CHANGELOG.md; its text becomes
 # the release notes. The same checks as the verify workflow run first, so a
-# broken build is never released. Assets: wg_panel.py, wg-panel.service and
-# SHA256SUMS — a server can install the panel with one download.
+# broken build is never released. Assets: wg_panel.py, wg-panel.service, the
+# bundled qr.js and three.js files, and SHA256SUMS — everything the panel
+# serves from its own directory, so a server can install it with one download.
 name: release
 
 on:
@@ -36,9 +37,15 @@ jobs:
 
       - name: assets
         run: |
+          # هر فایلی که پنل از کنارِ خودش سرو می‌کند باید در ریلیز باشد:
+          # qr.js و three.js از BASE_DIR خوانده می‌شوند و در نبودشان ۴۰۴
+          # می‌دهند (QR/صفحه‌ی اشتراک و نمای سه‌بعدیِ TV از کار می‌افتند).
+          # tests/test_release.py این فهرست را با wg_panel.py و READMEها
+          # هم‌خوان نگه می‌دارد.
+          ASSETS="wg_panel.py wg-panel.service qr.js three.module.min.js.gz three.core.min.js.gz three.LICENSE.txt"
           mkdir dist
-          cp wg_panel.py wg-panel.service dist/
-          (cd dist && sha256sum wg_panel.py wg-panel.service > SHA256SUMS)
+          cp $ASSETS dist/
+          (cd dist && sha256sum $ASSETS > SHA256SUMS)
           cat dist/SHA256SUMS
 
       - name: publish

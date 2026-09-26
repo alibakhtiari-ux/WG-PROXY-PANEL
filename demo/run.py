@@ -44,7 +44,7 @@ ASSETS = ("wg_panel.py", "qr.js", "three.core.min.js.gz",
 # صدا می‌زد. tests/test_demo.py این فهرست را با خودِ سورس می‌سنجد.
 TOOLS = ("wg", "ip", "tc", "systemctl", "journalctl", "iptables", "ipset",
          "curl", "dig", "ping", "traceroute", "mtr", "rclone", "speedtest",
-         "squid", "ss", "sysctl", "openssl", "qrencode")
+         "squid", "ss", "sysctl", "openssl", "qrencode", "modprobe")
 SYSTEM_PREFIXES = ("/etc/", "/var/", "/opt/", "/usr/", "/run/", "/root/")
 
 CLIENTS = [

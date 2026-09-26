@@ -354,7 +354,8 @@ cd docker/airgap && bash build-offline-bundle.sh --arch amd64
 
 ```bash
 base=https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/releases/latest/download
-curl -fLO "$base/wg_panel.py" -O "$base/wg-panel.service" -O "$base/SHA256SUMS"
+curl -fLO "$base/wg_panel.py" -O "$base/wg-panel.service" -O "$base/qr.js" \
+     -O "$base/three.module.min.js.gz" -O "$base/three.core.min.js.gz" -O "$base/SHA256SUMS"
 sha256sum -c SHA256SUMS
 ```
 
@@ -363,6 +364,7 @@ sha256sum -c SHA256SUMS
 
 ```bash
 sudo install -D -m600 -o root -g root wg_panel.py /opt/wg-panel/wg_panel.py
+sudo install -m644 -t /opt/wg-panel qr.js three.module.min.js.gz three.core.min.js.gz
 sudo install -m644 wg-panel.service /etc/systemd/system/
 ```
 
@@ -432,7 +434,9 @@ docker compose up -d --build
 | `server_host` · `server_endpoint` | 写入生成的客户端配置中的地址 |
 | `client_dns` · `client_mtu` · `client_allowed` | 生成客户端配置时的默认值 |
 | `allow_ips` | 可选的 IP 白名单（`127.0.0.1` 始终允许） |
-| `metrics_token` | `/metrics` 的 Bearer 令牌 |
+| `metrics_token` | `/metrics` 与 `/api/health` 的 Bearer 令牌 |
+| `trusted_proxies` | 面板前置反向代理的 IP/CIDR；仅此时才从 `X-Forwarded-For` 读取客户端 IP |
+| `session_idle_min` | 空闲多少分钟后自动登出（`0`/未设置 = 仅 12 小时绝对上限） |
 | `bot` | Telegram 机器人令牌和授权用户 |
 | `alerts` | Telegram 告警及其阈值 |
 
@@ -454,6 +458,8 @@ scrape_configs:
 
 如果使用自签名证书，请添加 `tls_config: {insecure_skip_verify: true}`，或将
 证书提供给 Prometheus。
+
+`GET /api/health`（同一 Bearer 令牌，或具有 `sys.view` 的已登录用户）报告每个后台线程的心跳，若有线程停止则返回 `503`——适合外部监控或 Docker healthcheck。
 
 <a id="security"></a>
 
