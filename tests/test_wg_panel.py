@@ -644,6 +644,59 @@ class PanelTestCase(unittest.TestCase):
                         self.assertIn("ui.audit.act." + v, self.m.I18N,
                                       "کدِ اکشن بی‌ترجمه")
 
+    def test_server_labels_have_a_translation_keyed_by_their_code(self):
+        """برچسب‌هایی که سرور با کلیدِ پایدار می‌فرستد باید ترجمه داشته باشند.
+
+        مرورگر نقش‌ها، رویدادهای هشدار، اجزای بازیابی و سرویس‌های پیش‌فرض
+        را با `_tOr(پیشوند + کلید, برچسبِ سرور)` نشان می‌دهد؛ کلیدِ جاافتاده
+        بی‌صدا به برچسبِ فارسیِ سرور برمی‌گشت — همان نشتی که این گارد بست.
+        متنِ فارسیِ کاتالوگ هم باید با برچسبِ سرور یکی بماند.
+        """
+        m = self.m
+        pairs = [("ui.permgrp." + g, lbl) for g, lbl, _ in m.PERM_CATALOG]
+        pairs += [("ui.perm." + k, pl)
+                  for _, _, items in m.PERM_CATALOG for k, pl in items]
+        pairs += [("ui.alertev." + k, lbl) for k, lbl in m.ALERT_EVENTS]
+        pairs += [("ui.bk.comp." + k, lbl)
+                  for k, lbl in m.CLOUD_RESTORE_COMPONENTS]
+        pairs += [("ui.svc.name." + k, v["label"])
+                  for k, v in m.SVC_DEFAULTS.items()]
+        pairs += [("ui.warpev." + k, lbl)
+                  for k, lbl in m.WARP_EVENT_LABELS.items()]
+        for key, fa in pairs:
+            with self.subTest(key=key):
+                self.assertIn(key, m.I18N, "برچسب بی‌ترجمه")
+                self.assertEqual(m.I18N[key][0], fa,
+                                 "متنِ فارسیِ کاتالوگ با برچسبِ سرور فرق دارد")
+        js = _read_panel_source()
+        for prefix in ("ui.permgrp.", "ui.perm.", "ui.alertev.",
+                       "ui.bk.comp.", "ui.svc.name.", "ui.warpev."):
+            with self.subTest(prefix=prefix):
+                self.assertIn("_tOr('%s' + " % prefix, js,
+                              "مرورگر این برچسب‌ها را ترجمه نمی‌کند")
+
+    def test_auto_disable_reason_is_stored_as_a_catalog_key(self):
+        """دلیلِ قطع/حذفِ خودکار باید کلید ذخیره شود، نه متنِ فارسی.
+
+        ردیفِ تاریخچه داده است و ماندگار؛ متنِ فارسی در آن برای همیشه در
+        رابطِ en/ru/zh فارسی می‌ماند.
+        """
+        src = _read_panel_source()
+        self.assertIn('det = "ui.audit.reason." + reason', src)
+        for reason in ("expired", "quota", "total_cap"):
+            with self.subTest(reason=reason):
+                self.assertIn("ui.audit.reason." + reason, self.m.I18N)
+        self.assertIn("startsWith('ui.audit.reason.')", src,
+                      "auditDetail پارامترِ دلیل را ترجمه نمی‌کند")
+
+    def test_s4_errors_are_translatable_keys(self):
+        """خطای پیکربندیِ MEGA S4 کلیدِ api.* است تا به زبانِ درخواست برسد."""
+        from unittest import mock
+        with mock.patch("builtins.open", side_effect=OSError):
+            err = self.m._s4_target("panel")[3]
+        self.assertIn(err, self.m.I18N)
+        self.assertTrue(err.startswith("api."), err)
+
     def test_bot_has_no_hardcoded_persian(self):
         """هیچ رشتهٔ فارسیِ کاربر-روی نباید در کلاسِ ربات بماند.
 
@@ -1390,38 +1443,59 @@ class PanelTestCase(unittest.TestCase):
 
     # ---------------------- رویدادهای گراف (نشانگرها/باند قطعی)
     def test_graph_events_peer_tunnel_and_warp(self):
+        """رویدادهای گراف کدِ اکشن برمی‌گردانند و رنگشان از همان کد است.
+
+        پیش از این sev با واژه‌های فارسی سنجیده می‌شد، در حالی که audit
+        از چهارزبانه‌شدن به بعد کد ذخیره می‌کند — پس همه‌ی فلگ‌ها آبی
+        می‌شدند و tooltip کدِ خام نشان می‌داد.
+        """
         m = self.m
         now = m.time.time()
-        m.META.add_audit("admin", "peer", "غیرفعال‌سازی خودکار",
-                         "u1 @ wgtest", "سهمیه", "", True)
-        m.META.add_audit("admin", "peer", "فعال‌سازی", "u1 @ wgtest",
+        det = m.adet("ui.audit.det.autodisable", why="ui.audit.reason.quota")
+        m.META.add_audit("sys:policy", "peer", "peer.disable.auto",
+                         "u1 @ wgtest", det, "", True)
+        m.META.add_audit("admin", "peer", "peer.enable", "u1 @ wgtest",
                          "", "", True)
-        m.META.add_audit("سیستم (پایش)", "tunnel", "قطع شد", "wg21",
+        m.META.add_audit("sys:monitor", "tunnel", "tun.monitor.down", "wg21",
                          "systemd: failed", "", False)
-        m.META.add_audit("سیستم (پایش)", "tunnel", "وصل شد", "wg21",
+        m.META.add_audit("sys:monitor", "tunnel", "tun.monitor.up", "wg21",
                          "systemd: active", "", True)
-        m.META.add_audit("admin", "peer", "افزودن کاربر", "other @ wgtest",
+        m.META.add_audit("admin", "peer", "peer.add", "other @ wgtest",
                          "", "", True)
         # کاربر: فقط رویدادهای خودِ همان peer، مرتب بر اساس زمان
         evs = m.META.graph_events("wgtest", "u1", now - 3600)
-        self.assertEqual([e["label"] for e in evs],
-                         ["غیرفعال‌سازی خودکار", "فعال‌سازی"])
-        self.assertEqual(evs[0]["sev"], "bad")
-        self.assertEqual(evs[1]["sev"], "ok")
+        self.assertEqual([e["action"] for e in evs],
+                         ["peer.disable.auto", "peer.enable"])
+        self.assertEqual([e["sev"] for e in evs], ["bad", "ok"])
+        self.assertEqual(evs[0]["detail"], det)
+        self.assertEqual(evs[0]["actor"], "sys:policy")
+        self.assertEqual(evs[0]["src"], "audit")
         # تونل: category های tunnel/iface با target خودِ اینترفیس
         evs = m.META.graph_events("wg21", "", now - 3600)
-        self.assertEqual([e["label"] for e in evs], ["قطع شد", "وصل شد"])
+        self.assertEqual([e["action"] for e in evs],
+                         ["tun.monitor.down", "tun.monitor.up"])
+        self.assertEqual([e["sev"] for e in evs], ["bad", "ok"])
         # فیلتر زمانی: بازه‌ی گذشته‌ی دور → خالی
         self.assertEqual(m.META.graph_events("wg21", "", now + 10), [])
         # include_warp: رویدادهای warp_event هم بیایند
         con = m.META._connect()
         with con:
             con.execute("INSERT INTO warp_event(ts,kind,detail) VALUES(?,?,?)",
-                        (now, "چرخش endpoint", "1.2.3.4 → 5.6.7.8"))
+                        (now, "degrade", "1.2.3.4 → 5.6.7.8"))
         con.close()
         evs = m.META.graph_events("wgwarp", "", now - 3600, include_warp=True)
         self.assertEqual(len(evs), 1)
-        self.assertIn("WARP", evs[0]["label"])
+        self.assertEqual((evs[0]["src"], evs[0]["action"], evs[0]["sev"]),
+                         ("warp", "degrade", "bad"))
+
+    def test_graph_event_severity_still_reads_legacy_persian_rows(self):
+        """ردیف‌های پیش از چهارزبانه‌شدن متنِ فارسی دارند و باید رنگ بگیرند."""
+        m = self.m
+        now = m.time.time()
+        m.META.add_audit("admin", "peer", "غیرفعال‌سازی", "u1 @ wgtest",
+                         "", "", True)
+        evs = m.META.graph_events("wgtest", "u1", now - 3600)
+        self.assertEqual([e["sev"] for e in evs], ["bad"])
 
     # ---------------------------------------------------------------- رمزها
     def test_password_hash_and_set(self):
@@ -2855,6 +2929,91 @@ class BotTests(unittest.TestCase):
                          b"\x89PNG\r\n\x1a\n")
         # فونت: عرضِ متن مثبت و draw_text بدونِ خطا
         self.assertGreater(m._text_w("MB", 2), 0)
+
+    def test_chart_font_covers_caller_literals(self):
+        """هر نویسه‌ی عنوان/راهنمای ثابتی که به render_chart_png داده می‌شود
+        باید در _FONT5x7 گلیف داشته باشد؛ وگرنه جای خالی رسم می‌شود
+        (باگِ قبلی: DOWN → «D W» و UP → خالی)."""
+        m = self.m
+        font = m._FONT5x7
+        for ch, rows in font.items():
+            self.assertEqual(len(rows), 7, ch)
+            self.assertTrue(all(0 <= r < 32 for r in rows), ch)
+        # ثابت‌های رشته‌ای داخلِ هر فراخوانیِ render_chart_png در کد
+        tree = ast.parse(_read_panel_source())
+        spec = re.compile(r"%[-#0 +]*\d*(?:\.\d+)?[sdif]")
+        literals = set()
+        for node in ast.walk(tree):
+            if (isinstance(node, ast.Call)
+                    and getattr(node.func, "id", None) == "render_chart_png"):
+                parts = list(node.args) + [k.value for k in node.keywords]
+                for part in parts:
+                    for sub in ast.walk(part):
+                        if (isinstance(sub, ast.Constant)
+                                and isinstance(sub.value, str)):
+                            literals.add(spec.sub("", sub.value))
+        # گارد: پارسِ AST واقعاً فراخوانی‌ها را پیدا کرده باشد
+        for must in ("DOWN", "UP", "SPEEDTEST - 7D", "TOP USERS - 7D",
+                     "TOTAL/DAY", "RX", "TX"):
+            self.assertIn(must, literals)
+        # عنوانِ بازه‌ها (RANGES) و برچسب‌های محورِ Y هم روی تصویر می‌آیند
+        literals.update(r[2] for r in m.TelegramBot.RANGES)
+        literals.update(m._fmt_bytes_ascii(v) for v in (0, 5, 5e3, 5e6, 5e9, 5e12))
+        literals.update(m._fmt_mbps_ascii(v) for v in (0, 0.5, 95, 1500))
+        for text in literals:
+            missing = [ch for ch in text.upper() if ch not in font]
+            self.assertEqual(missing, [], "no glyph for %r in %r"
+                             % (missing, text))
+        # نامِ کاربر (ascii) روی محورِ X می‌آید → کلِ ASCIIِ چاپی
+        missing = [chr(c) for c in range(32, 127)
+                   if chr(c).upper() not in font]
+        self.assertEqual(missing, [])
+
+    def test_speed_chart_y_labels_are_mbps(self):
+        """نمودارهای تستِ سرعت (ربات و گزارشِ دوره‌ای) مقدارِ Mbit/s دارند؛
+        برچسبِ محورِ Y نباید واحدِ بایت (مثلِ «95 B») داشته باشد."""
+        m = self.m
+        now = time.time()
+        for i, (dn, up) in enumerate(((95e6, 40e6), (380e6, 120e6),
+                                      (240e6, 90e6))):
+            m.META.speedtest_add({"ts": now - 3600 * (i + 1), "iface": "awgx",
+                                  "server_id": 1, "ping_ms": 20.0,
+                                  "down_bps": dn, "up_bps": up, "ok": 1,
+                                  "error": ""})
+        calls = []
+        real_render = m.render_chart_png
+        real_ifaces = m.SPEEDTEST.ifaces
+        orig_api = m.tg_api
+
+        def spy(series, **kw):
+            calls.append((series, kw))
+            return real_render(series, **kw)
+        m.render_chart_png = spy
+        m.SPEEDTEST.ifaces = lambda: ["awgx"]
+        m.tg_api = lambda *a, **k: (True, {})
+        try:
+            bot = m.TelegramBot()
+            bot.send_photo = lambda *a, **k: None
+            bot._speed_graph("1")
+            m.build_report_photos()
+        finally:
+            m.render_chart_png = real_render
+            m.SPEEDTEST.ifaces = real_ifaces
+            m.tg_api = orig_api
+        speed = [(s, kw) for s, kw in calls
+                 if any(name == "DOWN" for _, _, name in s)]
+        self.assertEqual(len(speed), 2, calls)      # ربات + گزارش
+        byte_unit = re.compile(r"\b[KMGT]?B\b")
+        for series, kw in speed:
+            mx, labels = m._chart_y_labels(series, kw.get("y_fmt"))
+            self.assertAlmostEqual(mx, 380.0)
+            for lbl in labels:
+                self.assertIsNone(byte_unit.search(lbl), labels)
+                self.assertIn("bit/s", lbl)
+            self.assertEqual(labels[0], "380 Mbit/s")
+        # پیش‌فرض (نمودارهای حجم) همچنان بایت است
+        _, labels = m._chart_y_labels([([2048], (1, 2, 3), "RX")])
+        self.assertEqual(labels[0], "2.0 KB")
 
     def test_fmt_bytes_srv(self):
         m = self.m
@@ -5362,6 +5521,22 @@ class PostWarpGroupTests(unittest.TestCase):
             pass
         return dict(h.sent).get("__code__")
 
+    def test_status_body_runs_for_a_signed_in_user(self):
+        """بدنه‌ی وضعیت باید واقعاً اجرا شود، نه فقط از گیت رد شود.
+
+        _code استثنای بدنه را عمداً می‌بلعد؛ همین پوشش NameError ِ sess را
+        پنهان کرد، چون استخراجِ گروه متغیرِ محلیِ do_POST را جا انداخته
+        بود. این‌جا بخشِ شبکه‌ای جایگزین می‌شود تا خودِ بدنه سنجیده شود.
+        """
+        m = self.m
+        m.warp_status = lambda force=False: {"ok": True}
+        m.warp_status_redacted = lambda st, perms: dict(st, perms=len(perms))
+        h = make_fake_handler(m, path="/api/warp/status", method="POST",
+                              body={}, headers={"Cookie": "wgl=en"},
+                              session={"u": "admin", "r": "admin"})
+        h.do_POST()
+        self.assertEqual(dict(h.sent).get("__code__"), 200)
+
     def test_the_two_permission_levels_are_what_the_code_says(self):
         for p in self.VIEW:
             with self.subTest(path=p):
@@ -5414,13 +5589,6 @@ class PostWarpGroupTests(unittest.TestCase):
             lambda entries, by: (self.actors.append(by), (True, None))[1]
         self.m.warp_event = lambda kind, detail="", actor="": \
             self.actors.append(actor)
-
-    def test_status_returns_json_instead_of_dropping_the_connection(self):
-        self._stub_live()
-        code, obj = self._post("/api/warp/status", {"force": True})
-        self.assertEqual(code, 200)
-        self.assertTrue(obj["ok"])
-        self.assertEqual(obj["warp"]["src_labels"], {"10.0.0.2": "x"})
 
     def test_status_is_still_redacted_for_a_tun_view_role(self):
         self._stub_live()

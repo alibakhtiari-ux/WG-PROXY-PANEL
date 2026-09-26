@@ -1,0 +1,52 @@
+<!doctype html>
+<!-- تصویرِ پیش‌نمایشِ مخزن (Settings → Social preview) — 1280×640.
+     screenshots.mjs آن را با اسکرین‌شاتِ تازه‌ی داشبورد (?img=) رندر می‌کند. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>WG-PROXY-PANEL social preview</title>
+<style>
+@font-face{font-family:Vazirmatn;font-weight:400;src:url(../fonts/Vazirmatn-Regular.woff2) format('woff2')}
+@font-face{font-family:Vazirmatn;font-weight:700;src:url(../fonts/Vazirmatn-Bold.woff2) format('woff2')}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1280px;height:640px;overflow:hidden}
+body{font-family:Vazirmatn,system-ui,sans-serif;color:#e6edf3;
+  background:radial-gradient(900px 520px at 88% 30%,#16345c 0%,rgba(13,17,23,0) 70%),
+             radial-gradient(700px 420px at 0% 100%,#10281f 0%,rgba(13,17,23,0) 70%),#0d1117}
+.copy{position:absolute;left:60px;top:0;bottom:0;width:520px;display:flex;
+  flex-direction:column;justify-content:center;gap:22px}
+.eyebrow{font-size:17px;letter-spacing:.14em;text-transform:uppercase;color:#58a6ff;font-weight:700}
+h1{font-size:54px;line-height:1.05;font-weight:700;letter-spacing:-.015em;white-space:nowrap}
+.tag{font-size:25px;line-height:1.35;color:#9aa7b4}
+.tag b{color:#e6edf3;font-weight:700}
+.chips{display:flex;flex-wrap:wrap;gap:10px;margin-top:4px}
+.chip{font-size:16px;padding:7px 14px;border-radius:99px;border:1px solid #30363d;
+  background:rgba(22,27,34,.85);color:#c9d1d9}
+.chip.g{border-color:#2ea04366;color:#56d364}
+.shot{position:absolute;left:606px;top:78px;width:900px;height:562px;border-radius:14px;
+  overflow:hidden;border:1px solid #30363d;
+  box-shadow:0 30px 80px rgba(0,0,0,.55),0 0 0 1px rgba(88,166,255,.08)}
+.shot img{display:block;width:900px;height:auto}
+</style>
+</head>
+<body>
+<div class="copy">
+  <div class="eyebrow">Open source · MIT</div>
+  <h1>WG-PROXY-PANEL</h1>
+  <div class="tag">A web panel for <b>WireGuard</b> and a <b>Squid</b> proxy, in
+    <b>one Python file</b> with no dependencies.</div>
+  <div class="chips">
+    <span class="chip">Speed limits &amp; quotas</span>
+    <span class="chip">Charts</span>
+    <span class="chip">Telegram bot</span>
+    <span class="chip">EN · FA · RU · ZH</span>
+    <span class="chip g">stdlib only</span>
+  </div>
+</div>
+<div class="shot"><img id="shot" alt=""></div>
+<script>
+document.getElementById('shot').src =
+  new URLSearchParams(location.search).get('img') || '../docs/screenshots/overview.png';
+</script>
+</body>
+</html>
