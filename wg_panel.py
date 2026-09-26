@@ -1199,6 +1199,8 @@ I18N = {
                             "恢复码——每个可代替应用验证码使用一次。请立即妥善保存，之后不会再显示。"),
     "ui.js.confirmTotp.4": ("متوجه شدم، ذخیره کردم", "Done, I saved them",
                             "Готово, я сохранил", "已保存，完成"),
+    "ui.js.confirmTotp.5": ("کپیِ کدها", "Copy codes",
+                            "Копировать коды", "复制恢复码"),
     "ui.js.confirmTotp.2": ("ورود دومرحله‌ای فعال شد ✅",
                               "Two-factor login enabled ✅",
                               "Двухфакторный вход включён ✅",
@@ -6604,6 +6606,24 @@ I18N = {
                            "File {v} in the archive is not valid: {why}",
                            "Файл {v} в архиве недействителен: {why}",
                            "归档中的文件 {v} 无效：{why}"),
+    "api.err.bk.unlabeled": ("{v} الان بالاست و کانفیگِ بازیابی {n} بلوکِ "
+                             "[Peer] ِ فعالِ بدونِ برچسبِ #!!! دارد؛ اعمالِ "
+                             "زنده فقط بلوک‌های برچسب‌دار را می‌بیند و "
+                             "کاربرانِ فعلی را از کرنل برمی‌داشت. اول "
+                             "برچسب بزنید یا اینترفیس را پایین بیاورید",
+                             "{v} is up and the restored config has {n} "
+                             "active [Peer] block(s) without a #!!! label; the "
+                             "live apply only sees labelled blocks and would "
+                             "drop the current users from the kernel. Label "
+                             "them first or bring the interface down",
+                             "{v} запущен, а в восстанавливаемом конфиге {n} "
+                             "активных блоков [Peer] без метки #!!!; живое "
+                             "применение видит только помеченные блоки и "
+                             "убрало бы текущих пользователей из ядра. "
+                             "Сначала пометьте их или остановите интерфейс",
+                             "{v} 正在运行，而要恢复的配置中有 {n} 个没有 #!!! "
+                             "标签的活动 [Peer] 块；实时应用只识别带标签的块，"
+                             "会把当前用户从内核中移除。请先加标签或停用该接口"),
     "api.ok.restore": ("{n} فایل بازیابی شد (وضعیت قبلی در restore-backups "
                        "ذخیره شد)",
                        "{n} file(s) restored (the previous state was saved in "
@@ -9292,12 +9312,75 @@ def load_config():
 _USERNAME_RE = re.compile(r"[A-Za-z0-9_.\-]{1,32}\Z")
 
 
+def _user_problems(u, c):
+    """مشکلاتِ یک رکوردِ کاربر → (خطاها، هشدارها). خطا یعنی کاربر قابلِ
+    استفاده نیست (قرنطینه)، نه اینکه پنل نباید بالا بیاید."""
+    if not isinstance(u, dict):
+        return ["must be an object"], []
+    err, warn = [], []
+    name = u.get("username")
+    if not isinstance(name, str) or not _USERNAME_RE.match(name):
+        err.append("invalid \"username\" %r" % (name,))
+    role = u.get("role")
+    if not isinstance(role, str) or not role:
+        err.append("missing \"role\"")
+    elif role not in BUILTIN_ROLES and role not in (c.get("roles") or {}):
+        warn.append("role %r is not defined (user has no permissions)" % role)
+    salt = u.get("salt", "")
+    if salt:
+        try:
+            bytes.fromhex(salt)
+        except (ValueError, TypeError):
+            err.append("\"salt\" is not hex")
+    h = u.get("hash", "")
+    if h and not isinstance(h, str):
+        err.append("\"hash\" must be a string")
+    if bool(salt) != bool(h):
+        warn.append("one of salt/hash is empty — first login sets "
+                    "a new password")
+    exp = u.get("expires", "")
+    if exp and not (isinstance(exp, str)
+                    and re.fullmatch(r"\d{4}-\d{2}-\d{2}", exp)):
+        err.append("\"expires\" must be YYYY-MM-DD")
+    if u.get("allow_ips") is not None and not isinstance(u["allow_ips"], list):
+        err.append("\"allow_ips\" must be a list")
+    return err, warn
+
+
+def invalid_users(c):
+    """[(index, username_or_None, [errors])] برای رکوردهای کاربرِ خراب.
+    تکراری‌ها هم اینجا هستند: اولی می‌ماند، بعدی‌ها خراب‌اند (find_user
+    هم همیشه اولی را برمی‌گرداند)."""
+    out, seen = [], set()
+    users = c.get("users") if isinstance(c, dict) else None
+    if not isinstance(users, list):
+        return out
+    for i, u in enumerate(users):
+        err, _w = _user_problems(u, c)
+        name = u.get("username") if isinstance(u, dict) else None
+        if not err and name in seen:
+            err = ["duplicate username %r" % name]
+        if err:
+            out.append((i, name if isinstance(name, str) else None, err))
+        elif isinstance(name, str):
+            seen.add(name)
+    return out
+
+
 def validate_config(c):
     """بررسیِ شکلِ config.json → (fatal, warnings) — دو لیستِ پیام.
 
     بدونِ این، یک salt ِ غیرهگز یا رکوردِ کاربرِ بی‌نام تا وسطِ یک درخواست
     پنهان می‌ماند و آن‌جا به KeyError/ValueError می‌رسید — ۵۰۰ ِ بی‌توضیح.
     این در راه‌اندازی صدا زده می‌شود: fatal یعنی پنل نباید بالا بیاید.
+
+    خرابیِ **یک کاربر** fatal نیست: پیش از این یک salt ِ غلط یا تاریخِ
+    انقضای بدشکل در رکوردِ یک اپراتورِ فرعی کلِ پنل را از کار می‌انداخت —
+    اعمالِ سهمیه و انقضا، شیپر، ربات، هشدارها — آن هم معمولاً بعد از یک
+    ویرایشِ دستی و ری‌استارتِ شبانه. حالا آن رکورد هشدار می‌گیرد و
+    quarantine_invalid_users کنارش می‌گذارد؛ فقط همان کاربر نمی‌تواند
+    وارد شود. خرابیِ ساختاری (users ِ غیرِ لیست، پورت، TLS، شبکه‌ها) هنوز
+    fatal است.
     """
     fatal, warn = [], []
     if not isinstance(c, dict):
@@ -9306,43 +9389,12 @@ def validate_config(c):
     if users is not None and not isinstance(users, list):
         fatal.append("\"users\" must be a list")
         users = []
-    seen = set()
     for i, u in enumerate(users or []):
-        where = "users[%d]" % i
-        if not isinstance(u, dict):
-            fatal.append("%s must be an object" % where)
-            continue
-        name = u.get("username")
-        if not isinstance(name, str) or not _USERNAME_RE.match(name):
-            fatal.append("%s: invalid \"username\" %r" % (where, name))
-        elif name in seen:
-            fatal.append("%s: duplicate username %r" % (where, name))
-        else:
-            seen.add(name)
-        role = u.get("role")
-        if not isinstance(role, str) or not role:
-            fatal.append("%s: missing \"role\"" % where)
-        elif role not in BUILTIN_ROLES and role not in (c.get("roles") or {}):
-            warn.append("%s: role %r is not defined (user has no permissions)"
-                        % (where, role))
-        salt = u.get("salt", "")
-        if salt:
-            try:
-                bytes.fromhex(salt)
-            except (ValueError, TypeError):
-                fatal.append("%s: \"salt\" is not hex" % where)
-        h = u.get("hash", "")
-        if h and not isinstance(h, str):
-            fatal.append("%s: \"hash\" must be a string" % where)
-        if bool(salt) != bool(h):
-            warn.append("%s: one of salt/hash is empty — first login sets "
-                        "a new password" % where)
-        exp = u.get("expires", "")
-        if exp and not (isinstance(exp, str)
-                        and re.fullmatch(r"\d{4}-\d{2}-\d{2}", exp)):
-            fatal.append("%s: \"expires\" must be YYYY-MM-DD" % where)
-        if u.get("allow_ips") is not None and not isinstance(u["allow_ips"], list):
-            fatal.append("%s: \"allow_ips\" must be a list" % where)
+        _e, w = _user_problems(u, c)
+        warn += ["users[%d]: %s" % (i, x) for x in w]
+    for i, _name, errs in invalid_users(c):
+        warn.append("users[%d] is ignored until fixed: %s"
+                    % (i, "; ".join(errs)))
     for key in ("allow_ips", "trusted_proxies"):
         for e in (c.get(key) or []):
             try:
@@ -9363,7 +9415,29 @@ def validate_config(c):
         warn.append("\"secret\" is short; it will be regenerated on migration")
     if users == []:
         warn.append("no users defined — nobody can log in")
+    elif users and len(invalid_users(c)) == len(users):
+        warn.append("no valid users — nobody can log in until config.json "
+                    "is fixed")
     return fatal, warn
+
+
+# رکوردهای کاربرِ خراب که در راه‌اندازی از CONFIG["users"] کنار رفته‌اند.
+# در حافظه نیستند تا هیچ مسیری (ورود، فهرست، RBAC) به آن‌ها نرسد، ولی
+# save_config عیناً به فایل برشان می‌گرداند: ویرایشِ بعدیِ پنل نباید
+# رکوردی را که اپراتور می‌خواهد درست کند پاک کند.
+_QUARANTINED_USERS = []
+
+
+def quarantine_invalid_users():
+    """رکوردهای خرابِ CONFIG["users"] را به _QUARANTINED_USERS می‌برد."""
+    bad = invalid_users(CONFIG)
+    if not bad:
+        return []
+    idx = {i for i, _n, _e in bad}
+    users = CONFIG["users"]
+    _QUARANTINED_USERS[:] = [users[i] for i in sorted(idx)]
+    CONFIG["users"] = [u for i, u in enumerate(users) if i not in idx]
+    return bad
 
 
 # ضربانِ نخ‌های پس‌زمینه: هر حلقه در ابتدای هر دور خود را ثبت می‌کند و
@@ -9380,9 +9454,35 @@ HEARTBEAT_MAX_AGE = {
 }
 
 
+# نامِ ضربانِ نخِ جاری، تا کارهای طولانیِ داخلِ یک دور هم بتوانند «هنوز
+# زنده‌ام» بگویند (_heartbeat_progress).
+_HB_TLS = threading.local()
+
+
 def _heartbeat(name):
+    _HB_TLS.name = name
     with _HEARTBEAT_LOCK:
         _HEARTBEAT[name] = time.time()
+
+
+def _heartbeat_progress():
+    """ضربانِ میانِ‌دور برای نخی که _heartbeat زده است؛ در بقیه‌ی نخ‌ها no-op.
+
+    سقفِ HEARTBEAT_MAX_AGE برای «یک دورِ عادی» تنظیم شده، نه یک دورِ
+    **خرابی**. ربات در یک دور getUpdates را با timeout ِ ۴۵ ثانیه روی همه‌ی
+    مسیرهای نامزد (مستقیم + هر تونلِ فعال) امتحان می‌کند؛ وقتی تلگرام
+    فیلتر است، با سه تونل همین یک دور از ۱۸۰ ثانیه می‌گذشت و /api/health و
+    متریکِ panel_thread_alive نخِ سالمِ ربات را «مرده» گزارش می‌کردند —
+    دقیقاً همان وقتی که اپراتور دنبالِ علتِ واقعی است. alertmon هم با
+    سنجش‌های subprocess‌ای (هر کدام تا ۲۰ ثانیه) در دورِ خرابی به همین سقف
+    می‌رسید. به‌جای بزرگ‌کردنِ سقف (که مرگِ واقعی را دیرتر نشان می‌دهد)،
+    هر تلاشِ شبکه/subprocess پیشرفت را ثبت می‌کند؛ سقف حالا فقط باید از
+    **یک** فراخوانی بلندتر باشد.
+    """
+    name = getattr(_HB_TLS, "name", None)
+    if name:
+        with _HEARTBEAT_LOCK:
+            _HEARTBEAT[name] = time.time()
 
 
 def health_report():
@@ -9653,6 +9753,7 @@ def wg_pubkey(priv, timeout=10):
 
 def run(cmd, timeout=20):
     """اجرای دستور؛ خروجی (rc, stdout, stderr)."""
+    _heartbeat_progress()
     try:
         p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         return p.returncode, p.stdout, p.stderr
@@ -9714,7 +9815,7 @@ def save_config():
     #
     # عمداً بیرونِ قفل: گرفتنِ قفل برای اینکه بلافاصله raise کنیم بی‌فایده
     # است و قصد را هم مبهم می‌کند.
-    if not CONFIG.get("users"):
+    if not (CONFIG.get("users") or _QUARANTINED_USERS):
         log_action("save_config REFUSED: CONFIG بدون users (بارگذاری‌نشده؟)")
         raise RuntimeError("refusing to save an unpopulated CONFIG")
     with _config_write_lock:
@@ -9725,7 +9826,11 @@ def save_config():
         try:
             os.fchmod(fd, 0o600)   # mkstemp معمولاً ۰۶۰۰ می‌دهد؛ صریح می‌کنیمش
             with os.fdopen(fd, "w", encoding="utf-8") as f:
-                json.dump(CONFIG, f, indent=2, ensure_ascii=False)
+                out = CONFIG
+                if _QUARANTINED_USERS:
+                    out = dict(CONFIG, users=list(CONFIG.get("users") or [])
+                               + _QUARANTINED_USERS)
+                json.dump(out, f, indent=2, ensure_ascii=False)
                 f.flush()
                 os.fsync(f.fileno())   # بدونِ این، قطعِ برق فایلِ صفرطول می‌گذارد
             os.replace(tmp, CONFIG_PATH)
@@ -10146,6 +10251,12 @@ def totp_recovery_consume(user, code):
     """اگر code یکی از کدهای بازیابیِ مصرف‌نشده باشد، آن را حذف می‌کند و
     True برمی‌گرداند (باید داخلِ config_txn صدا زده شود)."""
     code = str(code or "").strip().lower().replace(" ", "")
+    # کدها «xxxxx-xxxxx» صادر می‌شوند، ولی کاربر از روی کاغذ خط‌تیره را
+    # جا می‌اندازد یا خطِ تیره‌ی دیگری (– ‑) تایپ/چسباند می‌کند. شکلِ
+    # کانونی: فقط حروف و ارقام، و اگر ۱۰ تاست، خط‌تیره وسط.
+    bare = re.sub(r"[^0-9a-z]", "", code)
+    if len(bare) == 10:
+        code = "%s-%s" % (bare[:5], bare[5:])
     if not code:
         return False
     h = _recovery_hash(code)
@@ -10252,6 +10363,7 @@ def login_user_failed(username):
             for k in [k for k, v in _login_attempts_user.items()
                       if not v or now - v[-1] > 3600]:
                 _login_attempts_user.pop(k, None)
+                _login_pending_user.pop(k, None)   # رجوع به login_failed
 
 
 def make_session_cookie(user):
@@ -10350,29 +10462,103 @@ def _ip_in_nets(ip, nets):
     return any(addr in n for n in nets)
 
 
+# نشانیِ «کلاینتِ نامعلوم»: وقتی درخواست از proxy ِ معتمد آمده ولی هدرها
+# خراب یا متناقض‌اند. عمداً نه loopback است (که allowlist و تأییدِ تلگرام
+# را دور می‌زند) و نه نشانیِ کسی دیگر؛ سطلِ rate-limit ِ مشترکِ جاعل‌هاست.
+UNKNOWN_CLIENT_IP = "0.0.0.0"
+
+
+def _forwarded_hop(h):
+    """یک hop ِ هدر → IP ِ خالص، یا None اگر IP نباشد."""
+    h = h.strip()
+    if h.startswith("[") and "]" in h:              # [v6] یا [v6]:port
+        h = h[1:h.index("]")]
+    elif h.count(":") == 1 and "." in h:            # a.b.c.d:port
+        h = h.split(":")[0]
+    try:
+        return str(ipaddress.ip_address(h))
+    except ValueError:
+        return None
+
+
 def client_ip_from(peer_ip, headers):
-    """IP ِ واقعیِ کلاینت با توجه به proxyهای مورداعتماد (رجوع به _client_ip)."""
+    """IP ِ واقعیِ کلاینت با توجه به proxyهای مورداعتماد (رجوع به _client_ip).
+
+    سه راهِ جعل که بسته شده‌اند:
+
+    * هدرِ خراب یا زنجیره‌ی «فقط-معتمد» قبلاً به peer برمی‌گشت؛ پشتِ proxy
+      ِ همان میزبان peer یعنی 127.0.0.1 — همان نشانی‌ای که allowlist و تأییدِ
+      تلگرام را دور می‌زند. حالا خراب → UNKNOWN_CLIENT_IP، و loopback ِ
+      آمده از هدر هرگز کلاینت شمرده نمی‌شود.
+    * proxy‌ای که فقط X-Real-IP می‌گذارد، X-Forwarded-For ِ کلاینت را دست‌نخورده
+      رد می‌کند؛ proxy‌ای که فقط XFF می‌گذارد، X-Real-IP را. اگر هر دو باشند
+      و X-Real-IP نامعتمد باشد، باید با نتیجه‌ی XFF یکی باشند (nginx ِ
+      رایج هر دو را از $remote_addr می‌سازد)؛ ناهمخوانی یعنی یکی جعلی است.
+    * HAProxy و برخی دیگر XFF را سطرِ **جدا** اضافه می‌کنند؛ headers.get
+      فقط سطرِ اول — سطرِ مهاجم — را می‌دید. همه‌ی سطرها به ترتیب الحاق
+      می‌شوند.
+
+    بدونِ هیچ هدری peer برمی‌گردد: دسترسیِ اضطراریِ SSH port-forward
+    مستقیم به پورتِ پنل همین است، و proxy ِ درست‌پیکربندی‌شده همیشه
+    هدر می‌گذارد، پس مهاجم نمی‌تواند به این حالت برسد.
+    """
     nets = trusted_proxies()
     if not nets or not _ip_in_nets(peer_ip, nets):
         return peer_ip
-    xff = (headers.get("X-Forwarded-For") or "").strip()
-    hops = [h.strip() for h in xff.split(",") if h.strip()] if xff else []
-    real = (headers.get("X-Real-IP") or "").strip()
-    if real and not hops:
-        hops = [real]
-    # از راست: proxyهای معتمد را کنار بزن؛ اولین آدرسِ نامعتمد کلاینت است
-    for h in reversed(hops):
-        if h.startswith("[") and h.endswith("]"):
-            h = h[1:-1]
-        if h.count(":") == 1 and "." in h:          # a.b.c.d:port
-            h = h.split(":")[0]
-        try:
-            ipaddress.ip_address(h)
-        except ValueError:
-            return peer_ip
-        if not _ip_in_nets(h, nets):
-            return h
-    return peer_ip
+    get_all = getattr(headers, "get_all", None)
+    lines = (get_all("X-Forwarded-For") or []) if get_all \
+        else [headers.get("X-Forwarded-For") or ""]
+    hops = [h.strip() for line in lines for h in str(line).split(",")
+            if h.strip()]
+    real_raw = (headers.get("X-Real-IP") or "").strip()
+    if not hops and not real_raw:
+        return peer_ip
+    real = None
+    if real_raw:
+        real = _forwarded_hop(real_raw)
+        if real is None:
+            return UNKNOWN_CLIENT_IP
+    if hops:
+        client = None
+        # از راست: proxyهای معتمد را کنار بزن؛ اولین آدرسِ نامعتمد کلاینت است
+        for h in reversed(hops):
+            ip = _forwarded_hop(h)
+            if ip is None:
+                return UNKNOWN_CLIENT_IP
+            client = ip
+            if not _ip_in_nets(ip, nets):
+                break
+        # همه معتمد → چپ‌ترین (همان client ِ آخرِ حلقه)
+        if real is not None and not _ip_in_nets(real, nets) \
+                and real != client:
+            return UNKNOWN_CLIENT_IP
+    else:
+        client = real
+    try:
+        if ipaddress.ip_address(client).is_loopback:
+            return UNKNOWN_CLIENT_IP
+    except ValueError:
+        return UNKNOWN_CLIENT_IP
+    return client
+
+
+def request_is_https(peer_ip, headers):
+    """آیا مرورگر پنل را با https می‌بیند؟
+
+    با tls_cert ِ خودِ پنل، بله. پشتِ reverse proxy ای که TLS را خاتمه
+    می‌دهد، پنل http سرو می‌کند و قبلاً لینکِ اشتراک را http:// می‌ساخت
+    (مرورگر روی سایتِ https به http می‌افتاد یا اصلاً باز نمی‌کرد) و کوکیِ
+    سشن را بدونِ Secure می‌داد. X-Forwarded-Proto فقط از proxy ِ **معتمد**
+    خوانده می‌شود — همان قاعده‌ی client_ip_from؛ از کلاینتِ مستقیم، جعل است.
+    اولین مقدار (proxy ِ لبه) ملاک است.
+    """
+    if CONFIG.get("tls_cert"):
+        return True
+    nets = trusted_proxies()
+    if not nets or not _ip_in_nets(peer_ip, nets):
+        return False
+    proto = (headers.get("X-Forwarded-Proto") or "").split(",")[0]
+    return proto.strip().lower() == "https"
 
 
 def ip_allowed(ip):
@@ -10459,6 +10645,11 @@ def login_failed(ip):
                       if not v or now - v[-1] > 3600]:
                 _login_attempts.pop(k, None)
                 _login_alerted.pop(k, None)   # حالتِ هشدار هم با آن برود
+                # رزروِ بازِ یک ساعت پیش هرگز بسته نمی‌شود (درخواستی که وسطِ
+                # ورود به ۵۰۰ خورد). بی این، کلیدش نشت می‌کرد و — بدتر —
+                # اولین شکستِ بعدیِ همان IP فقط این رزروِ کهنه را می‌بست و
+                # هیچ تلاشی ثبت نمی‌کرد: یک شانسِ مجانی.
+                _login_pending.pop(k, None)
         recent10 = sum(1 for t in _login_attempts[ip] if now - t < 600)
         alerted_at = _login_alerted.get(ip)
     # هشدارِ حمله‌ی جستجوی رمز: N خطای اخیر از یک IP (لبه‌ای، هر ۱۰ دقیقه یک‌بار)
@@ -11001,6 +11192,12 @@ def _wg_set_peer(iface, pub, allowed=None, psk=None, keepalive=None):
     psk: None = دست نزن، "" = حذف، رشته = ست. wg کلید را از فایل می‌خواند و
     «حذف» را فقط از فایلِ **صفر بایتی** می‌فهمد — یک `\\n` تنها «Invalid
     length key» است. خروجی: (ok, پیامِ خطا).
+
+    allowed و keepalive هم همین قرارداد را دارند: None = دست نزن، و مقدارِ
+    «خالی» (رشته‌ی "" / عددِ 0) یعنی **پاک کن**. پیش از این هر دو با
+    `if allowed:` / `if keepalive:` فیلتر می‌شدند، پس حذفِ PersistentKeepalive
+    یا خالی‌کردنِ AllowedIPs در فایل هیچ‌وقت به کرنل نمی‌رسید و مقدارِ کهنه
+    تا ری‌استارتِ wg-quick زنده می‌ماند.
     """
     args = ["wg", "set", iface, "peer", pub]
     tmp = None
@@ -11011,10 +11208,10 @@ def _wg_set_peer(iface, pub, allowed=None, psk=None, keepalive=None):
             os.close(fd)
             os.chmod(tmp, 0o600)
             args += ["preshared-key", tmp]
-        if allowed:
+        if allowed is not None:
             args += ["allowed-ips", allowed.replace(" ", "")]
-        if keepalive:
-            args += ["persistent-keepalive", str(int(keepalive))]
+        if keepalive is not None:
+            args += ["persistent-keepalive", str(int(keepalive or 0))]
         rc, out, err = run(args)
         return rc == 0, (err or out)
     finally:
@@ -11129,9 +11326,13 @@ def set_peer_enabled(iface, name, enable):
             rc, out, err = run(["wg", "set", iface, "peer",
                                 blk["public_key"], "remove"])
             ok, err = rc == 0, (err or out)
-    WATCHER.resync()
     if not ok:
+        # بدونِ resync: ناظر هنوز حالتِ قبلیِ فایل را دارد، پس در دورِ بعد
+        # همین دلتا را دوباره با wg set امتحان می‌کند. resync ِ پیش از این
+        # بازگشت، حالتِ «اعمال‌نشده» را «اعمال‌شده» ثبت می‌کرد و کرنل تا
+        # ری‌استارت با فایل ناهمخوان می‌ماند — همان الگوی rotate.
         return False, aerr("api.err.apply.edited", v=err)
+    WATCHER.resync()
     log_action("peer %s@%s -> %s" % (name, iface,
                                      "enabled" if enable else "disabled"))
     return True, ("api.ok.done" if live else "api.ok.saved.offline")
@@ -11596,7 +11797,9 @@ def set_peer_psk(iface, name, enable):
     aok, aerr_msg = True, ""
     if iface in live_interfaces() and blk["enabled"]:
         aok, aerr_msg = apply_preshared_key(iface, blk["public_key"], psk)  # psk="" ⇒ حذف
-    WATCHER.resync()
+    if aok:
+        # شکست → بدونِ resync تا ناظر دوباره اعمالش کند (مثلِ set_peer_enabled)
+        WATCHER.resync()
     regen_client_conf(iface, name)
     log_action("peer %s@%s psk %s (%s)"
                % (name, iface, "on" if enable else "off",
@@ -11934,6 +12137,39 @@ def _validate_restore_content(dest, data):
     return ""
 
 
+def _unlabeled_active_peers(lines):
+    """تعدادِ [Peer] ِ فعالی که داخلِ هیچ بلوکِ #!!!name نیست."""
+    blocks = _parse_user_blocks(lines)
+    return sum(1 for i, l in enumerate(lines)
+               if l.strip() == "[Peer]"
+               and not any(b["start"] <= i <= b["end"] for b in blocks))
+
+
+def _restore_live_problem(planned_data):
+    """خطای aerr اگر بازیابی نتواند روی اینترفیسِ زنده درست اعمال شود، وگرنه ''.
+
+    اعمالِ زنده (apply_conf_delta) فقط بلوک‌های برچسب‌دار را می‌شناسد. کانفیگی
+    با [Peer] ِ بی‌برچسب روی اینترفیسِ بالا یعنی: همه‌ی کاربرانِ برچسب‌دارِ
+    فعلی از کرنل برداشته می‌شوند و peerهای بی‌برچسبِ فایل اضافه نمی‌شوند —
+    تا ری‌استارتِ wg-quick، فایل و کرنل دو چیزِ کاملاً متفاوت‌اند. روی
+    اینترفیسِ پایین مشکلی نیست: wg-quick up کلِ فایل را می‌خواند.
+    هم dry-run و هم مسیرِ واقعی همین را صدا می‌زنند تا پیش‌نمایش چیزی را
+    تأیید نکند که بازیابی بعد رد می‌کند.
+    """
+    live = set(live_interfaces())
+    for dest, data in planned_data:
+        if not (os.path.dirname(dest) == WG_DIR and dest.endswith(".conf")):
+            continue
+        iface = os.path.basename(dest)[:-5]
+        if iface not in live:
+            continue
+        n = _unlabeled_active_peers(
+            data.decode("utf-8", "replace").splitlines())
+        if n:
+            return aerr("api.err.bk.unlabeled", v=iface, n=n)
+    return ""
+
+
 def _restore_plan(planned_data):
     """پیش‌نمایشِ بازیابی: به ازای هر اینترفیس، peerهایی که اضافه/حذف/تغییر
     می‌شوند (نام‌ها؛ کلید = PublicKey) + فهرستِ فایل‌ها."""
@@ -11957,14 +12193,18 @@ def _restore_plan(planned_data):
             new = {}
         added = sorted(new[k]["name"] for k in new if k not in cur)
         removed = sorted(cur[k]["name"] for k in cur if k not in new)
-        changed = sorted(new[k]["name"] for k in new if k in cur and (
-            new[k]["enabled"], new[k]["allowed_ips"].replace(" ", ""),
-            new[k]["psk"]) != (cur[k]["enabled"],
-                               cur[k]["allowed_ips"].replace(" ", ""),
-                               cur[k]["psk"]))
+        # همان چهار چیزی که مسیرِ واقعی (_peer_live_state → apply_conf_delta)
+        # مقایسه و اعمال می‌کند؛ keepalive پیش از این جا افتاده بود و
+        # پیش‌نمایش «بدونِ تغییر» می‌گفت در حالی که بازیابی wg set می‌زد.
+        def sig(b):
+            return (b["enabled"], b["allowed_ips"].replace(" ", ""),
+                    b["psk"], b["keepalive"])
+        changed = sorted(new[k]["name"] for k in new
+                         if k in cur and sig(new[k]) != sig(cur[k]))
         plan["ifaces"][iface] = {"add": added, "remove": removed,
                                  "change": changed,
-                                 "peers_now": len(cur), "peers_after": len(new)}
+                                 "peers_now": len(cur), "peers_after": len(new),
+                                 "live": iface in live_interfaces()}
     return plan
 
 
@@ -12020,6 +12260,9 @@ def restore_from_tar(raw, dry_run=False):
             if why:
                 return False, aerr("api.err.bk.invalid", v=mem.name, why=why)
             planned_data.append((dest, data))
+        why = _restore_live_problem(planned_data)
+        if why:
+            return False, why
         if dry_run:
             return True, _restore_plan(planned_data)
 
@@ -12152,6 +12395,9 @@ def restore_from_nightly_tar(raw, components, ok_key="api.ok.restore.parts"):
             if why:
                 return False, aerr("api.err.bk.invalid", v=mem.name, why=why)
             planned_data.append((dest, data))
+        why = _restore_live_problem(planned_data)
+        if why:
+            return False, why
         ok, snap_err = _write_pre_restore_snapshot()
         if not ok:
             return False, snap_err
@@ -14187,18 +14433,22 @@ class MetaDB:
             # نتایجِ تستِ سرعت: نگهداری ۶ ماه
             con.execute("DELETE FROM speedtest WHERE ts < ?",
                         (time.time() - 183 * 86400,))
-        # WAL بعد از هرسِ روزانه فشرده شود؛ وگرنه فایلِ -wal تا ری‌استارت
-        # رشد می‌کند (خارج از تراکنش، چون checkpoint داخلِ آن بی‌اثر است)
-        try:
-            con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-        except sqlite3.Error:
-            pass
             # موجودیِ IP سرویس‌ها: نگهداری ۳۰ روز
             con.execute("DELETE FROM svc_resolved WHERE last_seen < ?",
                         (time.time() - 30 * 86400,))
             # تاریخچه‌ی نمودار مسیر (mtr): نگهداری ۶ ماه (۱۸۳ روز)؛ از قدیمی‌ترین
             con.execute("DELETE FROM mtr_run WHERE ts < ?",
                         (time.time() - 183 * 86400,))
+        # WAL بعد از هرسِ روزانه فشرده شود؛ وگرنه فایلِ -wal تا ری‌استارت
+        # رشد می‌کند (خارج از تراکنش، چون checkpoint داخلِ آن بی‌اثر است).
+        #
+        # 🪤 این دو DELETE ِ بالا قبلاً اینجا، زیرِ `pass` ِ همین except
+        # بودند: تورفتگی‌شان آن‌ها را جزوِ شاخه‌ی خطا کرده بود و هرگز اجرا
+        # نمی‌شدند — svc_resolved و mtr_run بی‌کران رشد می‌کردند.
+        try:
+            con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        except sqlite3.Error:
+            pass
         con.close()
 
     # ---- تاریخچه‌ی تغییرات (audit)
@@ -15693,9 +15943,42 @@ def tg_iface_candidates(explicit=""):
 TG_MAX_MESSAGE = 4096
 
 
-def tg_chunks(text, limit=TG_MAX_MESSAGE - 96):
+_TG_TAG_RE = re.compile(r"<(/?)([a-zA-Z][\w-]*)[^>]*>")
+
+
+def _tg_safe_cut(line, limit, html):
+    """جای برشِ خطِ بلند در ≤ limit — در HTML نه وسطِ تگ یا &entity;."""
+    if not html:
+        return limit
+    cut = limit
+    lt, gt = line.rfind("<", 0, cut), line.rfind(">", 0, cut)
+    if lt > gt:                                  # وسطِ یک تگ
+        cut = lt
+    amp, semi = line.rfind("&", 0, cut), line.rfind(";", 0, cut)
+    if amp > semi and cut - amp <= 10:           # وسطِ &amp; و…
+        cut = amp
+    # تگِ بازِ چسبیده به انتها → تکه‌ای با <b></b> ِ خالی؛ به تکه‌ی بعد برود
+    while cut > 0:
+        mt = re.search(r"<[a-zA-Z][^<>]*>$", line[:cut])
+        if not mt:
+            break
+        cut = mt.start()
+    return cut if cut > 0 else limit
+
+
+def tg_chunks(text, limit=TG_MAX_MESSAGE - 96, html=False):
     """متنِ بلند را در مرزِ خط به تکه‌های ≤ limit می‌شکند (تلگرام ۴۰۹۶ حرف
-    می‌پذیرد و بلندتر را بی‌صدا رد می‌کند)."""
+    می‌پذیرد و بلندتر را بی‌صدا رد می‌کند).
+
+    html=True (parse_mode=HTML): هر تکه باید به‌تنهایی HTML ِ معتبر باشد.
+    برشِ کور وسطِ <pre>…</pre> (کانفیگِ وایرگارد، ممیزیِ نشت، فهرستِ
+    تونل‌ها) تکه‌ای با تگِ باز می‌ساخت؛ تلگرام «can't parse entities»
+    می‌داد و **کلِ** آن تکه — و در ربات همه‌ی تکه‌های بعدی — نمی‌رسید. حالا
+    تگ‌های باز در پایانِ هر تکه بسته و در آغازِ تکه‌ی بعد با همان صفت‌ها
+    دوباره باز می‌شوند، و خطِ غول‌پیکر وسطِ تگ یا &entity; بریده نمی‌شود.
+    سقفِ تلگرام روی متنِ **پس از** پارسِ تگ‌هاست، پس تگ‌های افزوده از
+    بودجه کم نمی‌کنند.
+    """
     text = text or ""
     if len(text) <= limit:
         return [text]
@@ -15705,8 +15988,9 @@ def tg_chunks(text, limit=TG_MAX_MESSAGE - 96):
             if cur:
                 out.append(cur)
                 cur = ""
-            out.append(line[:limit])
-            line = line[limit:]
+            cut = _tg_safe_cut(line, limit, html)
+            out.append(line[:cut])
+            line = line[cut:]
         cand = line if not cur else cur + "\n" + line
         if len(cand) > limit:
             out.append(cur)
@@ -15715,7 +15999,23 @@ def tg_chunks(text, limit=TG_MAX_MESSAGE - 96):
             cur = cand
     if cur:
         out.append(cur)
-    return out
+    if not html:
+        return out
+    balanced, stack = [], []                     # stack: [(name, opening)]
+    for part in out:
+        head = "".join(o for _n, o in stack)
+        for mt in _TG_TAG_RE.finditer(part):
+            name = mt.group(2).lower()
+            if not mt.group(1):
+                stack.append((name, mt.group(0)))
+            else:
+                for i in range(len(stack) - 1, -1, -1):
+                    if stack[i][0] == name:
+                        del stack[i:]
+                        break
+        tail = "".join("</%s>" % n for n, _o in reversed(stack))
+        balanced.append(head + part + tail)
+    return balanced
 
 
 def tg_api(token, method, params=None, photo=None, iface="", timeout=20,
@@ -15749,6 +16049,7 @@ def tg_api(token, method, params=None, photo=None, iface="", timeout=20,
                % (token, method, TG_HOST, len(payload))).encode() + payload
     last = "no attempt"
     for ifc in tg_iface_candidates(iface):
+        _heartbeat_progress()           # هر مسیر تا timeout طول می‌کشد
         try:
             st, data = _https_raw_over_iface(TG_HOST, 443, req, ifc, timeout)
             try:
@@ -15770,6 +16071,7 @@ def tg_api(token, method, params=None, photo=None, iface="", timeout=20,
                 except (TypeError, ValueError):
                     wait = 1
                 time.sleep(wait)
+                _heartbeat_progress()
                 st, data = _https_raw_over_iface(TG_HOST, 443, req, ifc, timeout)
                 try:
                     obj = json.loads(data.decode("utf-8", "replace"))
@@ -15805,6 +16107,7 @@ class AlertManager:
     def __init__(self):
         self.q = queue.Queue(maxsize=200)
         self.state = {}          # کلیدِ رویداد -> وضعیتِ آخر (برای لبه‌یابی)
+        self.seen = {}           # کلیدِ رویداد -> آخرین بارِ سنجش (هرس)
         self.lock = threading.Lock()
         self._started = False
 
@@ -15825,13 +16128,28 @@ class AlertManager:
         except (OSError, ValueError):
             return
         if isinstance(data, dict):
+            now = time.time()
             with self.lock:
                 for k, v in data.items():
                     if isinstance(k, str) and isinstance(v, bool):
                         self.state.setdefault(k, v)
+                        self.seen.setdefault(k, now)   # مهلتِ کامل پس از بوت
+
+    # کلیدی که این مدت سنجیده نشده (تونل/کاربرِ پروکسی/دامنه‌ی حذف‌شده)
+    # هرس می‌شود. کلیدها «pxquota:<user>»، «tun:<iface>»، «warp:stale:<dom>»
+    # و… از داده‌ی کاربر می‌آیند و پیش از این alert-edges.json را بی‌کران
+    # رشد می‌دادند. کلیدِ زنده هر ~۳۰ ثانیه سنجیده می‌شود؛ هفت روز یعنی حتی
+    # پنلی که هفته‌ها خاموش بوده چیزی را زودتر از موعد فراموش نمی‌کند (seen
+    # پس از بارگذاری از نو شروع می‌شود). بدترین پیامدِ هرسِ اشتباه: اولین
+    # مشاهده‌ی بعدی بی‌صداست.
+    EDGE_TTL = 7 * 86400
 
     def save_state(self):
+        cutoff = time.time() - self.EDGE_TTL
         with self.lock:
+            for k in [k for k, t in self.seen.items() if t < cutoff]:
+                self.seen.pop(k, None)
+                self.state.pop(k, None)
             data = {k: v for k, v in self.state.items() if isinstance(v, bool)}
         try:
             tmp = ALERT_EDGES_STATE + ".tmp"
@@ -15847,7 +16165,7 @@ class AlertManager:
         if not (c["bot_token"] and c["chat_id"]):
             return False, "api.err.tg.unset"
         ifc = c["iface"] if iface_override is None else (iface_override or "")
-        for part in tg_chunks(text):
+        for part in tg_chunks(text, html=html):
             p = {"chat_id": c["chat_id"], "text": part,
                  "disable_web_page_preview": True}
             if html:
@@ -15881,6 +16199,7 @@ class AlertManager:
         with self.lock:
             prev = self.state.get(key)
             self.state[key] = now_state
+            self.seen[key] = time.time()
         if prev != now_state:
             self.save_state()
         if prev is not None and prev != now_state:
@@ -19307,7 +19626,7 @@ class TelegramBot(threading.Thread):
             if isinstance(res, str) and "not modified" in res.lower():
                 return True, None
             # سایرِ خطاها (پیامِ قدیمی و…) → ارسالِ پیامِ جدید
-        parts = tg_chunks(text)
+        parts = tg_chunks(text, html=True)     # send همیشه parse_mode=HTML است
         if len(parts) == 1:
             return tg_api(self._token(), "sendMessage", p, iface=alert_cfg()["iface"])
         # پیامِ بلند (فهرستِ تونل‌ها، کانفیگ با AllowedIPs ِ طولانی، ممیزیِ
@@ -20625,6 +20944,11 @@ class TelegramBot(threading.Thread):
         return [i for i in ifs if i in allowed] if allowed else ifs
 
     def _start_wg_add(self, frm, chat):
+        # خروجیِ ویزارد کانفیگ با کلیدِ خصوصی است. بدونِ این گارد peer در
+        # گروه ساخته می‌شد و بعد _send_wg_conf تحویلش را رد می‌کرد: کاربری
+        # بی‌کانفیگ، و نام/سهمیه‌اش جلوی همه.
+        if self._refuse_in_group(chat):
+            return
         ifs = self._wg_add_ifaces()
         if not ifs:
             self.send(chat, self.T('bot.start_wg_add.1'), [self._back_row()])
@@ -20714,6 +21038,8 @@ class TelegramBot(threading.Thread):
 
     def _wg_add_cb(self, frm, chat, arg, p):
         """دکمه‌های ویزاردِ ساخت: wg:addw:<field>|<val> یا go/cancel."""
+        if self._refuse_in_group(chat):
+            return
         st = self.convo.get(frm)
         if not st or st.get("flow") != "wg_add":
             self.send(chat, self._rtl(self.T('bot.wg_add_cb.1')), [self._back_row()])
@@ -20834,6 +21160,9 @@ class TelegramBot(threading.Thread):
 
     # ---- گفت‌وگوی ساختِ کاربرِ پروکسی (ویزاردِ کامل مثلِ مودالِ وب)
     def _start_px_add(self, frm, chat):
+        # رمزِ پروکسی هم در مرحله‌ی تأیید و هم در پیامِ نهایی چاپ می‌شود.
+        if self._refuse_in_group(chat):
+            return
         self.convo[frm] = {"flow": "px_add", "step": "name", "name": "",
                            "noauth": False, "pw": "", "rate": None,
                            "quota": None, "proto": "both", "src": [],
@@ -20942,6 +21271,8 @@ class TelegramBot(threading.Thread):
 
     def _px_add_cb(self, frm, chat, arg, p):
         """دکمه‌های ویزاردِ ساختِ پروکسی: px:addw:<field>|<val> یا go/cancel."""
+        if self._refuse_in_group(chat):
+            return
         st = self.convo.get(frm)
         if not st or st.get("flow") != "px_add":
             self.send(chat, self._rtl(self.T('bot.px_add_cb.1')), [self._back_row()])
@@ -21118,6 +21449,12 @@ class TelegramBot(threading.Thread):
         if not st:
             return
         p = bot_perms(frm) or set()
+        # گفت‌وگو با frm کلید خورده نه با چت: ویزاردی که در خصوصی باز است،
+        # پیامِ بعدیِ همان کاربر در **گروه** را ورودیِ خودش می‌گرفت — رمزِ
+        # پروکسی از گروه، و پاسخِ مرحله (با رمز) به گروه. متنِ گروهی ورودیِ
+        # ویزارد نیست؛ بی‌صدا، تا گفت‌وگوی معمولیِ گروه پر از خطا نشود.
+        if st["flow"] in ("wg_add", "px_add") and not self._private():
+            return
         if st["flow"] == "wg_add":
             if "wg.add" not in p:
                 self.convo.pop(frm, None)
@@ -24959,8 +25296,8 @@ function paintSvcIps(key){
       '<span class="svc-ipaddr" data-ltr>' + esc(o.ip) + '</span>' +
       '<span class="svc-ipseen">' + _t('ui.js.paintSvcIps.2') + ' ' + fmtAgo(o.last_seen) + '</span>' +
       '<span class="svc-ipacts">' + (can('svc.edit') ?
-        '<button onclick="editSvcIp(\'' + esc(key) + '\',\'' + esc(o.ip) + '\')">' + _t('ui.js.paintSvcIps.3') + '</button>' +
-        '<button class="danger" onclick="deleteSvcIp(\'' + esc(key) + '\',\'' + esc(o.ip) + '\')">' + _t('ui.js.botAddRow.5') + '</button>' : '') +
+        '<button onclick="editSvcIp(' + jsArg(key) + ',' + jsArg(o.ip) + ')">' + _t('ui.js.paintSvcIps.3') + '</button>' +
+        '<button class="danger" onclick="deleteSvcIp(' + jsArg(key) + ',' + jsArg(o.ip) + ')">' + _t('ui.js.botAddRow.5') + '</button>' : '') +
       '</span></div>';
   }).join('') || '<div class="svc-mtr-msg">' + _t('ui.js.paintSvcIps.5') + '</div>';
   h.innerHTML = '<div class="svc-mtr"><div class="svc-mtr-msg">' +
@@ -25565,8 +25902,8 @@ function paintMtr(gk){
   if(c.err){
     holder.innerHTML = '<div class="svc-mtr"><div class="svc-mtr-msg err">⚠️ ' +
       esc(c.err) + '</div><div style="margin-top:6px"><button class="svc-mtrbtn" ' +
-      'onclick="fetchMtr(\'' + esc(parts[0]) + '\',\'' + esc(parts[1]) +
-      '\')">' + _t('ui.js.paintMtr.3') + '</button></div></div>';
+      'onclick="fetchMtr(' + jsArg(parts[0]) + ',' + jsArg(parts[1]) +
+      ')">' + _t('ui.js.paintMtr.3') + '</button></div></div>';
     return;
   }
   holder.innerHTML = mtrHtml(c.data, parts[0], parts[1]);
@@ -25747,10 +26084,10 @@ function mtrHtml(d, service, iface){
   return '<div class="svc-mtr">' +
     '<div class="svc-mtr-top">' +
       '<span>' + _t('ui.js.mtrHtml.20', {p0: faNum(d.cycles || 3)}) + esc(d.tool || 'traceroute') + '</span>' +
-      '<button class="svc-mtrbtn' + (trendOpen ? ' open' : '') + '" onclick="toggleTrend(\'' +
-        esc(service) + '\',\'' + esc(iface) + '\')">' + _t('ui.js.mtrHtml.21') + (trendOpen ? ' ▲' : ' ▼') + '</button>' +
-      '<button class="svc-mtrbtn" style="margin-inline-start:auto" onclick="fetchMtr(\'' +
-        esc(service) + '\',\'' + esc(iface) + '\')">' + _t('ui.js.mtrHtml.22') + '</button>' +
+      '<button class="svc-mtrbtn' + (trendOpen ? ' open' : '') + '" onclick="toggleTrend(' +
+        jsArg(service) + ',' + jsArg(iface) + ')">' + _t('ui.js.mtrHtml.21') + (trendOpen ? ' ▲' : ' ▼') + '</button>' +
+      '<button class="svc-mtrbtn" style="margin-inline-start:auto" onclick="fetchMtr(' +
+        jsArg(service) + ',' + jsArg(iface) + ')">' + _t('ui.js.mtrHtml.22') + '</button>' +
     '</div>' +
     qual + cmp +
     '<div class="svc-trend-holder" data-trend="' + esc(gk) + '"></div>' +
@@ -26783,7 +27120,7 @@ async function loadWarp(){
                        : warpChip(_t('ui.js.loadWarp.113'), 'hp-idle');
           if(e.lowVol) cls += warpChip(_t('ui.js.loadWarp.114'), 'hp-noreturn');
           var act = (!ai && h)
-            ? '<button style="padding:1px 10px;font-size:11px" onclick="addWarpSniHost(\'' + esc(h) + '\')">' + _t('ui.js.loadWarp.115') + '</button>'
+            ? '<button style="padding:1px 10px;font-size:11px" onclick="addWarpSniHost(' + jsArg(h) + ')">' + _t('ui.js.loadWarp.115') + '</button>'
             : '';
           return '<tr><td>' + name + '</td><td>' + cls + '</td>' +
             '<td>' + fmtBytes(b || 0) + '</td>' +
@@ -27395,8 +27732,8 @@ function shaLine(h){
     'title="' + esc(h) + '">sha256: ' + esc(h.slice(0, 16)) + '… ' +
     '<a href="#" style="font-size:10px;color:var(--fg);background:var(--btn);' +
     'border:1px solid var(--border);border-radius:6px;padding:1px 8px;' +
-    'text-decoration:none;display:inline-block" onclick="copySha(\'' + esc(h) +
-    '\');return false">' + _t('ui.js.shaLine.1') + '</a></div>';
+    'text-decoration:none;display:inline-block" onclick="copySha(' + jsArg(h) +
+    ');return false">' + _t('ui.js.shaLine.1') + '</a></div>';
 }
 function copySha(h){
   navigator.clipboard.writeText(h).then(
@@ -27707,8 +28044,8 @@ function graphBtn(kind, a, b){
   const k = gkey(kind, a, b);
   const on = openGraphs.has(k);
   return '<button class="gbtn' + (on ? ' open' : '') + '" ' +
-    'title="' + _t('ui.js.graphBtn.1') + '" onclick="toggleGraph(\'' + kind + '\',\'' +
-    esc(a) + '\',\'' + esc(b || '') + '\')">📈 <span class="gbtn-txt">(' +
+    'title="' + _t('ui.js.graphBtn.1') + '" onclick="toggleGraph(\'' + kind + '\',' +
+    jsArg(a) + ',' + jsArg(b || '') + ')">📈 <span class="gbtn-txt">(' +
     (on ? _t('ui.js.graphBtn.2') : _t('ui.js.graphBtn.3')) + ')</span></button>';
 }
 
@@ -27722,7 +28059,11 @@ function graphInner(k){
   // تک‌نقل‌قول به‌تنهایی، " را دست‌نخورده رد می‌کرد و صفت را می‌شکست.
   // اعتبارسنجیِ GKEY_RE در مرز، رفعِ اصلی است؛ این کمربندِ دوم است
   // برای روزی که کسی راهِ سومی برای پرکردنِ openGraphs اضافه کند.
-  const ke = esc(k).replace(/'/g, "\\'");
+  //
+  // 🪤 و خودِ این کمربند سوراخ بود: esc اول ' را به &#39; تبدیل می‌کرد و
+  // replace بعدی چیزی برای گرفتن نداشت؛ مرورگر &#39; را پیش از JS به '
+  // برمی‌گرداند. آرگومانِ handler با jsArg ساخته می‌شود (JSON، بعد esc).
+  const ka = jsArg(k);
   const kind0 = k.split('|')[0];
   const isMetric = kind0 === 'm' || kind0 === 'px';
   const isProxy = kind0 === 'px';
@@ -27735,39 +28076,39 @@ function graphInner(k){
   return '<div class="gwrap">' +
     '<div class="gtabs">' +
       tabs.map(t => '<button class="' + (st.range === t[0] ? 'active' : '') +
-        '" onclick="setGraphRange(\'' + ke + '\',\'' + t[0] + '\')">' +
+        '" onclick="setGraphRange(' + ka + ',\'' + t[0] + '\')">' +
         t[1] + '</button>').join('') +
       '<span class="gchips" id="' + id + '-chips"></span>' +
       '<span class="gactions">' +
         (isMetric ? '' : '<button class="' + (st.events === false ? '' : 'evon') +
-          '" onclick="toggleEvents(\'' + ke +
-          '\')" title="' + _t('ui.js.graphInner.11') + '">🚩</button>') +
+          '" onclick="toggleEvents(' + ka +
+          ')" title="' + _t('ui.js.graphInner.11') + '">🚩</button>') +
         (isMetric ? '' : '<button class="' + (st.heat ? 'heaton' : '') +
-          '" onclick="toggleHeat(\'' + ke +
-          '\')" title="' + _t('ui.js.graphInner.12') + ')">🌡</button>') +
+          '" onclick="toggleHeat(' + ka +
+          ')" title="' + _t('ui.js.graphInner.12') + ')">🌡</button>') +
         (isSec ? '<button class="' + (st.split ? 'spliton' : '') +
-          '" onclick="toggleSplit(\'' + ke +
-          '\')" title="' + _t('ui.js.graphInner.13') + '">👥</button>' : '') +
-        (isMetric ? '' : '<button class="' + (st.log ? 'logon' : '') + '" onclick="toggleLog(\'' +
-          ke + '\')" title="' + _t('ui.js.graphInner.14') + '">log</button>') +
+          '" onclick="toggleSplit(' + ka +
+          ')" title="' + _t('ui.js.graphInner.13') + '">👥</button>' : '') +
+        (isMetric ? '' : '<button class="' + (st.log ? 'logon' : '') + '" onclick="toggleLog(' +
+          ka + ')" title="' + _t('ui.js.graphInner.14') + '">log</button>') +
         (!isMetric && st.range === '6m'
-          ? '<button class="' + (st.wk ? 'logon' : '') + '" onclick="toggleWeekly(\'' +
-            ke + '\')" title="' + _t('ui.js.graphInner.15') + '">' + _t('ui.js.graphInner.16') + '</button>'
+          ? '<button class="' + (st.wk ? 'logon' : '') + '" onclick="toggleWeekly(' +
+            ka + ')" title="' + _t('ui.js.graphInner.15') + '">' + _t('ui.js.graphInner.16') + '</button>'
           : '') +
-        (st.zoom ? '<button onclick="resetZoom(\'' + ke +
-          '\')" title="' + _t('ui.js.graphInner.17') + '">' + _t('ui.js.graphInner.18') + '</button>' : '') +
-        (isMetric ? '' : '<button class="' + (inCmp ? 'cmpon' : '') + '" onclick="toggleCompare(\'' +
-          ke + '\')" title="' + _t('ui.js.graphInner.19') + '">' +
+        (st.zoom ? '<button onclick="resetZoom(' + ka +
+          ')" title="' + _t('ui.js.graphInner.17') + '">' + _t('ui.js.graphInner.18') + '</button>' : '') +
+        (isMetric ? '' : '<button class="' + (inCmp ? 'cmpon' : '') + '" onclick="toggleCompare(' +
+          ka + ')" title="' + _t('ui.js.graphInner.19') + '">' +
           (inCmp ? _t('ui.js.graphInner.20') : _t('ui.js.graphInner.21')) + '</button>') +
-        '<button onclick="fullscreenGraph(\'' + ke + '\')" title="' + _t('ui.js.graphInner.22') + '">' + _t('ui.js.graphInner.23') + '</button>' +
-        '<button onclick="copyGraphLink(\'' + ke +
-          '\')" title="' + _t('ui.js.graphInner.24') + '">🔗</button>' +
-        '<button onclick="exportPng(\'' + ke + '\')" title="' + _t('ui.js.graphInner.25') + '">PNG</button>' +
-        '<button onclick="exportCsv(\'' + ke + '\')" title="' + _t('ui.js.graphInner.26') + '">CSV</button>' +
+        '<button onclick="fullscreenGraph(' + ka + ')" title="' + _t('ui.js.graphInner.22') + '">' + _t('ui.js.graphInner.23') + '</button>' +
+        '<button onclick="copyGraphLink(' + ka +
+          ')" title="' + _t('ui.js.graphInner.24') + '">🔗</button>' +
+        '<button onclick="exportPng(' + ka + ')" title="' + _t('ui.js.graphInner.25') + '">PNG</button>' +
+        '<button onclick="exportCsv(' + ka + ')" title="' + _t('ui.js.graphInner.26') + '">CSV</button>' +
       '</span>' +
     '</div>' +
     '<canvas class="bigchart" id="' + id + '-cv"></canvas>' +
-    '<div id="' + id + '-lg" data-mode="norm">' + legendHtml(ke, st) + '</div>' +
+    '<div id="' + id + '-lg" data-mode="norm">' + legendHtml(k, st) + '</div>' +
     '</div>';
 }
 function graphRowHtml(k, colspan){
@@ -27785,10 +28126,10 @@ function chNum(ch, v){
 }
 
 // لجندِ تعاملی: کلیک برای پنهان/نمایش هر سری
-function legendHtml(ke, st){
-  const isMetric = ke.split('|')[0] === 'm';
+function legendHtml(k, st){
+  const isMetric = k.split('|')[0] === 'm';
   if(isMetric){
-    const m = gaugeMeta(ke.split('|')[1]);
+    const m = gaugeMeta(k.split('|')[1]);
     return '<div class="glegend">' +
       '<span class="lgi"><span class="lgsw sq" style="background:var(--rx)"></span>' +
       (m ? esc(m.label) : _t('ui.js.legendHtml.1')) + '</span>' +
@@ -27796,9 +28137,10 @@ function legendHtml(ke, st){
       '</div>';
   }
   const h = (st && st.hidden) || {};
+  const ka = jsArg(k);
   const it = (key, cls, color, label) =>
-    '<span class="lgi ' + (h[key] ? 'off' : '') + '" onclick="toggleSeries(\'' +
-    ke + '\',\'' + key + '\')"><span class="lgsw ' + cls +
+    '<span class="lgi ' + (h[key] ? 'off' : '') + '" onclick="toggleSeries(' +
+    ka + ',\'' + key + '\')"><span class="lgsw ' + cls +
     '" style="background:' + color + '"></span>' + label + '</span>';
   return '<div class="glegend">' +
     it('rx', 'sq', 'var(--rx)', _t('ui.js.fullscreenGraph.7') + ')') +
@@ -28012,7 +28354,7 @@ function restoreLegend(k, st){
   const w = el(gid(k) + '-lg'); if(!w) return;
   if(w.dataset.mode && w.dataset.mode !== 'norm'){
     w.dataset.mode = 'norm'; w.dataset.sig = '';
-    w.innerHTML = legendHtml(esc(k).replace(/'/g, "\\'"), st);   // ← همان دلیلِ graphInner
+    w.innerHTML = legendHtml(k, st);
   }
 }
 
@@ -29432,7 +29774,7 @@ function rerender(){
 function monthCell(u){
   const total = (u.month_rx || 0) + (u.month_tx || 0);
   let s = '<span class="total" style="cursor:pointer" title="' + _t('ui.js.monthCell.1') + '" ' +
-    'onclick="showUsage(\'' + esc(u.iface) + '\',\'' + esc(u.name) + '\')">' +
+    'onclick="showUsage(' + jsArg(u.iface) + ',' + jsArg(u.name) + ')">' +
     fmtBytes(total);
   if(u.quota_gb){
     const over = total >= u.quota_gb * 1073741824;
@@ -29453,7 +29795,7 @@ function userRow(u){
     (u.share_active ? '<span class="share-badge" title="' + _t('ui.js.userRow.6') + '">🔗</span>' : '');
   const note = u.note ? '<div class="notetxt" title="' + esc(u.note) + '">' +
     esc(u.note) + '</div>' : '';
-  const args = '\'' + esc(u.iface) + '\',\'' + esc(u.name) + '\'';
+  const args = jsArg(u.iface) + ',' + jsArg(u.name);
   return '<tr>' +
     '<td><span class="dot ' + dot + '" title="' + title + '"></span></td>' +
     '<td><b>' + esc(u.name) + '</b>' + badge + note + '</td>' +
@@ -29491,8 +29833,8 @@ function sectionRow(sec){
     ' ' + _t('ui.js.sectionRow.4') + ' <span data-ltr>' + esc(sec.subnet || '—') + '</span>' +
     ' · ' + sec.count + ' ' + _t('ui.js.sectionRow.5') + ' ' + st + ' ' +
     (can('tun.toggle') ?
-    '<button style="margin-inline-start:10px" onclick="toggleTunnel(\'' +
-    esc(sec.iface) + '\',' + (!sec.active) + ', this, true)">' +
+    '<button style="margin-inline-start:10px" onclick="toggleTunnel(' +
+    jsArg(sec.iface) + ',' + (!sec.active) + ', this, true)">' +
     (sec.active ? _t('ui.js.sectionRow.6') : _t('ui.js.sectionRow.7')) +
     '</button>' : '') + '</td></tr>';
 }
@@ -29586,7 +29928,7 @@ function renderTunnels(tunnels){
       '<td>' + boot + '</td>' +
       '<td class="mut">' + esc(t.systemd) + '</td>' +
       '<td>' + (can('tun.toggle') ?
-        '<button onclick="toggleTunnel(\'' + esc(t.iface) + '\',' + (!t.active) + ', this)">' +
+        '<button onclick="toggleTunnel(' + jsArg(t.iface) + ',' + (!t.active) + ', this)">' +
         (t.active ? _t('ui.js.ecmpBadge.3') : _t('ui.js.loadLeakAudit.41')) + '</button>' : '') + '</td>' +
       '</tr>' +
       (openGraphs.has(gkey('t', t.iface)) ?
@@ -30099,10 +30441,10 @@ async function showUsage(iface, name, range){
     (range === '24h' ? _t('ui.js.showUsage.2') + ')' : _t('ui.js.showUsage.3') + ')');
   el('modal-body').innerHTML =
     '<div class="mrow" style="margin:0 0 10px">' +
-      '<button onclick="showUsage(\'' + esc(iface) + '\',\'' + esc(name) +
-        '\',\'24h\')">' + _t('ui.js.auditDebounced.1') + '</button>' +
-      '<button onclick="showUsage(\'' + esc(iface) + '\',\'' + esc(name) +
-        '\',\'30d\')">' + _t('ui.js.auditDebounced.3') + '</button>' +
+      '<button onclick="showUsage(' + jsArg(iface) + ',' + jsArg(name) +
+        ',\'24h\')">' + _t('ui.js.auditDebounced.1') + '</button>' +
+      '<button onclick="showUsage(' + jsArg(iface) + ',' + jsArg(name) +
+        ',\'30d\')">' + _t('ui.js.auditDebounced.3') + '</button>' +
     '</div>' +
     '<canvas id="usage-cv" width="520" height="190" style="width:100%"></canvas>' +
     '<div class="sub" style="margin-top:6px">' +
@@ -30881,9 +31223,19 @@ async function confirmTotp(){
       codes.map(esc).join('\n') + '</pre>' +
     '<div class="mrow"><button onclick="navigator.clipboard.writeText(' +
       'el(\'t-recovery\').textContent).then(()=>toast(\'' + _t('ui.js.showShareResult.7') + '\',true))">' +
-      _t('ui.js.showShareResult.8') + '</button> ' +
+      _t('ui.js.confirmTotp.5') + '</button> ' +
     '<button class="primary" onclick="el(\'modal-bg\').classList.add(\'hidden\')">' +
       _t('ui.js.confirmTotp.4') + '</button></div>';
+  // مودال با hidden بسته می‌شود نه با پاک‌شدن؛ کدها تا مودالِ بعدی در DOM
+  // می‌ماندند — هر اسکریپت/افزونه یا نگاهی به DevTools همان‌جا پیدایشان
+  // می‌کرد. هر راهِ بستن (دکمه، Esc، پس‌زمینه) با همین ناظر پاکشان می‌کند.
+  const bg = el('modal-bg');
+  const mo = new MutationObserver(() => {
+    if(!bg.classList.contains('hidden')) return;
+    if(el('t-recovery')) el('modal-body').innerHTML = '';
+    mo.disconnect();
+  });
+  mo.observe(bg, {attributes: true, attributeFilter: ['class']});
 }
 async function disableTotp(){
   const r = await api('/api/totp/disable', {password: el('t-pw').value});
@@ -31677,6 +32029,12 @@ class Handler(BaseHTTPRequestHandler):
             n = int(self.headers.get("Content-Length", 0))
         except ValueError:
             return None
+        if n < 0:
+            # rfile.read(-1) یعنی «تا EOF»: نخِ درخواست تا وقتی کلاینت اتصال
+            # را باز نگه دارد گیر می‌ماند — یک هدر، یک نخِ قفل‌شده. طولِ
+            # منفی بدنه‌ای ندارد که بشود تخلیه کرد؛ اتصال بسته می‌شود.
+            self.close_connection = True
+            return None
         if n > 65536:
             if not self._drain_body(n):
                 self.close_connection = True
@@ -31702,9 +32060,29 @@ class Handler(BaseHTTPRequestHandler):
         """
         return client_ip_from(self.client_address[0], self.headers)
 
+    def _is_https(self):
+        return request_is_https(self.client_address[0], self.headers)
+
+    def _pw_confirm(self, user, pw):
+        """تأییدِ رمزِ کاربرِ واردشده، زیرِ همان بودجه‌ی per-account ِ ورود.
+
+        True/False، یا None اگر بودجه تمام است (فراخوان ۴۲۹ می‌دهد).
+        /api/totp/setup، /api/totp/disable، /api/password و رمزِ تأییدِ هر
+        دو مسیرِ بازیابی رمز را بی‌هیچ سقفی می‌سنجیدند:
+        کسی با کوکیِ دزدیده یا مرورگرِ رهاشده می‌توانست رمز را بی‌نهایت حدس
+        بزند — دقیقاً چیزی که محدودیتِ ورود جلویش را گرفته بود. بودجه با
+        ورود مشترک است: حدس از هر در از همان سهم کم می‌کند.
+        """
+        u = user["username"]
+        if not login_user_allowed(u):
+            return None
+        ok = check_user_password(user, pw)
+        (login_user_succeeded if ok else login_user_failed)(u)
+        return ok
+
     def _session_cookie_header(self, user):
         cookie = make_session_cookie(user)
-        secure = "; Secure" if CONFIG.get("tls_cert") else ""
+        secure = "; Secure" if self._is_https() else ""
         return ("wgs=%s; HttpOnly; SameSite=Strict; Path=/; Max-Age=%d%s"
                 % (cookie, SESSION_TTL, secure))
 
@@ -31799,7 +32177,9 @@ class Handler(BaseHTTPRequestHandler):
                 if self._perm_denied(path):
                     return
             rep_ = health_report()
-            self._json(dict(rep_, ok=True, healthy=rep_["ok"]),
+            # ok همان healthy است: ۵۰۳ با ok:true به کلاینت‌هایی که فقط
+            # بدنه را می‌خوانند (قاعده‌ی بقیه‌ی API) «سالم» می‌گفت.
+            self._json(dict(rep_, healthy=rep_["ok"]),
                        200 if rep_["ok"] else 503)
             return
         if path == "/metrics":
@@ -32548,7 +32928,15 @@ class Handler(BaseHTTPRequestHandler):
                 return
             me = find_user(sess["u"])
             pw = self.headers.get("X-Confirm-Password", "")
-            if not me or not check_user_password(me, pw):
+            pw_ok = self._pw_confirm(me, pw) if me else False
+            if not pw_ok:
+                # بدنه (تا ۵۰MB) خوانده نشده؛ اتصال باید بسته شود وگرنه
+                # بایت‌هایش درخواستِ بعدیِ همین اتصال را ناهم‌گام می‌کنند.
+                self.close_connection = True
+                if pw_ok is None:
+                    self._json({"ok": False, "error": "api.err.auth.rate"},
+                               429)
+                    return
                 self._audit("settings", "bk.restore", "*",
                             adet("ui.audit.det.badconfirmpw"), ok=False)
                 self._json({"ok": False, "error": "api.err.auth.totp_bad"}, 403)
@@ -32663,9 +33051,16 @@ class Handler(BaseHTTPRequestHandler):
                     # totp_consume بعد از verify: کد باید هم درست باشد
                     # هم **تازه**. بدونش، کدِ دیده‌شده تا ۹۰ ثانیه
                     # دوباره کار می‌کند و عاملِ دوم عاملِ دوم نیست.
+                    #
+                    # نتیجه یک بار حساب و نگه داشته می‌شود. شاخه‌ی ردِ پایین
+                    # قبلاً دوباره فقط totp_verify را می‌پرسید؛ کدِ تکراری
+                    # verify را پاس می‌کند و consume را نه، پس از هر دو
+                    # شاخه رد می‌شد و ورود **موفق** بود — یعنی همان replay
+                    # که consume برای بستنش آمده بود.
+                    totp_ok = (totp_verify(user["totp"], code)
+                               and totp_consume(user["username"], code))
                     used_recovery = False
-                    if not (totp_verify(user["totp"], code)
-                            and totp_consume(user["username"], code)):
+                    if not totp_ok:
                         # کدِ بازیابیِ یک‌بارمصرف به‌جای TOTP
                         with config_txn():
                             used_recovery = totp_recovery_consume(user, code)
@@ -32680,7 +33075,7 @@ class Handler(BaseHTTPRequestHandler):
                         ALERTS.event("login", A('alert.totp.recovery',
                                                 p0=user["username"], p1=ip,
                                                 p2=left))
-                    elif not totp_verify(user["totp"], code):
+                    elif not totp_ok:
                         login_failed(ip)
                         login_user_failed(user["username"])
                         log_action("login FAILED (totp) user=%s from %s"
@@ -32738,8 +33133,13 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/password":
-            if not me or not check_user_password(
-                    me, str(body.get("current", ""))):
+            # همان بودجه‌ی per-account ِ ورود (رجوع به _pw_confirm)
+            pw_ok = self._pw_confirm(me, str(body.get("current", ""))) \
+                if me else False
+            if pw_ok is None:
+                self._json({"ok": False, "error": "api.err.auth.rate"}, 429)
+                return
+            if not pw_ok:
                 log_action("password change FAILED user=%s from %s"
                            % (sess["u"], self._client_ip()))
                 self._json({"ok": False, "error": "api.err.auth.cur_pw_bad"})
@@ -33058,10 +33458,15 @@ class Handler(BaseHTTPRequestHandler):
             # 🪤 تعویضِ عاملِ دوم با یک کوکیِ سرقتی/مرورگرِ رهاشده: وقتی TOTP
             # از قبل فعال است، شروعِ ثبتِ تازه رمزِ فعلی می‌خواهد — همان
             # قاعده‌ای که /api/totp/disable از اول داشت.
-            if me and me.get("totp") and not check_user_password(
-                    me, str(body.get("password", ""))):
-                self._json({"ok": False, "error": "api.err.auth.pw_bad"}, 403)
-                return
+            if me and me.get("totp"):
+                pw_ok = self._pw_confirm(me, str(body.get("password", "")))
+                if pw_ok is None:
+                    self._json({"ok": False, "error": "api.err.auth.rate"}, 429)
+                    return
+                if not pw_ok:
+                    self._json({"ok": False, "error": "api.err.auth.pw_bad"},
+                               403)
+                    return
             secret = base64.b32encode(secrets.token_bytes(20)).decode().rstrip("=")
             _totp_pending[sess["u"]] = (secret, time.time() + _TOTP_PENDING_TTL)
             uri = ("otpauth://totp/wg-panel:%s?secret=%s&issuer=wg-panel"
@@ -33100,8 +33505,12 @@ class Handler(BaseHTTPRequestHandler):
                        extra_headers={
                            "Set-Cookie": self._session_cookie_header(me)})
         elif path == "/api/totp/disable":
-            if not me or not check_user_password(
-                    me, str(body.get("password", ""))):
+            pw_ok = self._pw_confirm(me, str(body.get("password", ""))) \
+                if me else False
+            if pw_ok is None:
+                self._json({"ok": False, "error": "api.err.auth.rate"}, 429)
+                return
+            if not pw_ok:
                 self._json({"ok": False, "error": "api.err.auth.pw_bad"})
                 return
             with config_txn():
@@ -33366,7 +33775,11 @@ class Handler(BaseHTTPRequestHandler):
                 return
             me = find_user(sess["u"])
             pw = str(body.get("password", ""))
-            if not me or not check_user_password(me, pw):
+            pw_ok = self._pw_confirm(me, pw) if me else False
+            if pw_ok is None:
+                self._json({"ok": False, "error": "api.err.auth.rate"}, 429)
+                return
+            if not pw_ok:
                 self._audit("settings", "bk.restore.cloud", "",
                             adet("ui.audit.det.badconfirmpw"), ok=False)
                 self._json({"ok": False, "error": "api.err.auth.totp_bad"}, 403)
@@ -33518,7 +33931,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._audit("auth", "auth.logout", "", "", ok=True)
             # کوکیِ پاک‌کننده باید همان صفت‌های کوکیِ واقعی را داشته باشد؛
             # بعضی مرورگرها بدونِ تطابقِ صفت‌ها اصلاً بازنویسی‌اش نمی‌کنند.
-            secure = "; Secure" if CONFIG.get("tls_cert") else ""
+            secure = "; Secure" if self._is_https() else ""
             self._json({"ok": True}, extra_headers={
                 "Set-Cookie": "wgs=; HttpOnly; SameSite=Strict; Path=/; "
                               "Max-Age=0" + secure})
@@ -33657,9 +34070,10 @@ class Handler(BaseHTTPRequestHandler):
                     self._json({"ok": False, "error": err})
                 else:
                     host = self.headers.get("Host", "")
-                    # همان schemeی که پنل واقعاً سرو می‌کند؛ لینکِ https برای
-                    # پنلِ بدونِ TLS (docker با WG_TLS_ENABLED=false) کار نمی‌کرد.
-                    scheme = "https" if CONFIG.get("tls_cert") else "http"
+                    # همان schemeی که مرورگر می‌بیند؛ لینکِ https برای پنلِ
+                    # بدونِ TLS (docker با WG_TLS_ENABLED=false) کار نمی‌کرد و
+                    # لینکِ http پشتِ proxy ِ TLS‌دار هم (request_is_https).
+                    scheme = "https" if self._is_https() else "http"
                     url = "%s://%s/s/%s" % (scheme, host, token)
                     self._audit("peer", "peer.share.new",
                                 "%s @ %s" % (name, iface),
@@ -33926,6 +34340,9 @@ def main():
         for f in fatal:
             log_action("config error: %s" % f)
         raise SystemExit("config.json is invalid:\n  - " + "\n  - ".join(fatal))
+    for i, name, errs in quarantine_invalid_users():
+        log_action("config: user %s (users[%d]) disabled until fixed: %s"
+                   % (name or "?", i, "; ".join(errs)))
     migrate_config()
     if CONFIG.get("trusted_proxies"):
         log_action("trusted proxies: %s (client IP from X-Forwarded-For)"

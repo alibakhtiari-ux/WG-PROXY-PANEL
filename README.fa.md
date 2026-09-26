@@ -437,7 +437,8 @@ sha256sum -c SHA256SUMS
 
 ```bash
 sudo install -D -m600 -o root -g root wg_panel.py /opt/wg-panel/wg_panel.py
-sudo install -m644 -t /opt/wg-panel qr.js three.module.min.js.gz three.core.min.js.gz
+sudo install -m644 -t /opt/wg-panel qr.js three.module.min.js.gz three.core.min.js.gz \
+     three.LICENSE.txt
 sudo install -m644 wg-panel.service /etc/systemd/system/
 ```
 
@@ -527,7 +528,7 @@ docker compose up -d --build
 | `client_dns` · `client_mtu` · `client_allowed` | مقادیرِ پیش‌فرضِ کانفیگِ کاربران (`1.1.1.1, 8.8.8.8` · `1420` · `0.0.0.0/0, ::/0`) |
 | `allow_ips` | فهرستِ مجازِ IP، اختیاری (`127.0.0.1` همیشه مجاز است) |
 | `metrics_token` | توکن Bearer برای `/metrics` و `/api/health` |
-| `trusted_proxies` | IP/CIDR ِ reverse proxy ِ جلوی پنل؛ فقط در این حالت IP کلاینت از `X-Forwarded-For` خوانده می‌شود |
+| `trusted_proxies` | IP/CIDR ِ reverse proxy ِ جلوی پنل؛ فقط در این حالت IP کلاینت از `X-Forwarded-For` / `X-Real-IP` خوانده و `X-Forwarded-Proto: https` پذیرفته می‌شود (لینکِ اشتراکِ https و کوکیِ `Secure`) |
 | `session_idle_min` | خروجِ خودکار پس از این‌قدر دقیقه بی‌کاری (`0`/نبود = فقط سقفِ مطلقِ ۱۲ ساعت) |
 | `secret` | کلیدی که کوکیِ نشست را امضا می‌کند؛ در اولین اجرا ساخته می‌شود. تغییرش همه را از پنل بیرون می‌کند |
 | `bot` | روشن یا خاموش بودنِ رباتِ تلگرام، کاربرانِ مجاز و نقش‌هایشان |

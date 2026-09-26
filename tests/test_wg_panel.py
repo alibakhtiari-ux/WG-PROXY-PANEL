@@ -1248,9 +1248,34 @@ class PanelTestCase(unittest.TestCase):
         m.run = lambda cmd, timeout=20: ((1, "", "Invalid length key")
                                         if "preshared-key" in cmd
                                         else orig(cmd, timeout))
+        resynced = []
+        m.WATCHER = types.SimpleNamespace(resync=lambda: resynced.append(1))
         ok, msg = m.set_peer_psk("wgtest", "rmf", False)
         self.assertFalse(ok)
         self.assertIn("Invalid length key", m.api_text(msg, "en"))
+        # بدونِ resync: ناظر باید همین دلتا را دوباره امتحان کند
+        self.assertEqual(resynced, [])
+
+    def test_a_failed_live_enable_toggle_leaves_the_watcher_to_retry(self):
+        """شکستِ wg set نباید حالتِ ناظر را «اعمال‌شده» ثبت کند.
+
+        resync پیش از بازگشتِ خطا، snapshot ِ فایلِ تازه را به ناظر می‌داد؛
+        ناظر دیگر تفاوتی نمی‌دید و کرنل تا ری‌استارت ناهمخوان می‌ماند.
+        """
+        m = self.m
+        m.add_peer("wgtest", "tgf", use_psk=False)
+        resynced = []
+        m.WATCHER = types.SimpleNamespace(resync=lambda: resynced.append(1))
+        orig = m.run
+        m.run = lambda cmd, timeout=20: ((1, "", "boom") if "remove" in cmd
+                                        else orig(cmd, timeout))
+        ok, _msg = m.set_peer_enabled("wgtest", "tgf", False)
+        self.assertFalse(ok)
+        self.assertEqual(resynced, [])
+        m.run = orig
+        ok, _msg = m.set_peer_enabled("wgtest", "tgf", True)
+        self.assertTrue(ok)
+        self.assertEqual(resynced, [1])
 
     def test_rotate_applies_psk_and_keepalive_with_new_key(self):
         m = self.m
@@ -1290,7 +1315,7 @@ class PanelTestCase(unittest.TestCase):
         self.assertEqual(b[b.index("allowed-ips") + 1], "10.0.0.9/32")
         d = self._set_calls_for("D")[0]
         self.assertIn("preshared-key", d)
-        self.assertNotIn("persistent-keepalive", d)
+        self.assertEqual(d[d.index("persistent-keepalive") + 1], "0")
         self.assertEqual(self._set_calls_for("C"), [["wg", "set", "wgtest",
                                                      "peer", "C", "remove"]])
         self.assertEqual(seen, [b"P2\n", b"P4\n"])
@@ -1299,6 +1324,27 @@ class PanelTestCase(unittest.TestCase):
         del m._run_calls[:]
         self.assertEqual(m.apply_conf_delta("wgtest", old, new), 0)
         self.assertEqual(m._run_calls, [])
+
+    def test_apply_conf_delta_clears_keepalive_and_allowed_ips(self):
+        """حذفِ PersistentKeepalive یا خالی‌کردنِ AllowedIPs باید به کرنل برسد.
+
+        `if keepalive:` و `if allowed:` مقدارِ خالی را دور می‌انداختند و
+        کرنل مقدارِ کهنه را تا ری‌استارتِ wg-quick نگه می‌داشت.
+        """
+        m = self.m
+        old = {"A": ("10.0.0.2/32", "", 25)}
+        new = {"A": ("", "", 0)}
+        del m._run_calls[:]
+        m.apply_conf_delta("wgtest", old, new)
+        a = self._set_calls_for("A")[0]
+        self.assertEqual(a[a.index("persistent-keepalive") + 1], "0")
+        self.assertEqual(a[a.index("allowed-ips") + 1], "")
+        # None یعنی دست نزن
+        del m._run_calls[:]
+        m._wg_set_peer("wgtest", "Z", psk="")
+        z = self._set_calls_for("Z")[0]
+        self.assertNotIn("allowed-ips", z)
+        self.assertNotIn("persistent-keepalive", z)
 
     def test_parse_client_overrides_validation(self):
         f = self.m.parse_client_overrides
@@ -10669,6 +10715,27 @@ class InlineHandlerArgTests(unittest.TestCase):
         self.assertIn("function jsArg(v)", js)
         return js
 
+    def test_no_handler_wraps_esc_in_single_quotes(self):
+        """خانواده‌ی کامل: هیچ onclick ای داده را با esc در '…' نگذارد.
+
+        پس از کارتِ سرویس‌ها ۱۷ handler ِ دیگر (IPهای سرویس، mtr، روند،
+        SNI ِ WARP، sha، نمودار، مصرف، ردیفِ کاربر، تونل‌ها) و کلیدِ
+        نمودار (`esc(k).replace(/'/g, "\\'")` — که بعد از esc چیزی برای
+        جایگزینی نمی‌یافت) همان الگو را داشتند. تستِ تک‌موردی فقط همان یک
+        مورد را می‌پایید.
+        """
+        src = pathlib.Path(PANEL).read_text(encoding="utf-8")
+        bad = [src.count("\n", 0, mt.start()) + 1
+               for mt in re.finditer(r"\\''\s*\+\s*esc\(", src)]
+        self.assertEqual(bad, [], "esc در کوتیشنِ تکیِ handler؛ jsArg بگیر")
+        self.assertNotRegex(src, r"esc\([^)]*\)\.replace\(/'/g",
+                            "esc(...).replace(/'/g …) بی‌اثر است؛ jsArg بگیر")
+        # check_js فقط نحو را می‌سنجد؛ متغیرِ حذف‌شده‌ی ke در legendHtml
+        # تنها با بازکردنِ نمودار در مرورگر ReferenceError می‌داد.
+        seg = src[src.index("function graphInner(k){"):]
+        seg = seg[:seg.index("\n}\n", seg.index("function legendHtml("))]
+        self.assertNotRegex(seg, r"\bke\b")
+
     def test_svc_card_handlers_do_not_embed_raw_data(self):
         """کارتِ سرویس‌ها باید از jsArg استفاده کند، نه esc در کوتیشنِ تکی."""
         src = pathlib.Path(PANEL).read_text(encoding="utf-8")
@@ -10909,7 +10976,114 @@ class RequestHardeningTests(unittest.TestCase):
             self.assertTrue(obj.get("totp_required"), obj)
         self.assertEqual(m._login_attempts.get("127.0.0.1", []), [])
 
+    def test_a_negative_content_length_does_not_read_to_eof(self):
+        """rfile.read(-1) تا EOF می‌خواند: یک هدر، یک نخِ قفل‌شده."""
+        h = make_fake_handler(self.m, path="/api/login", method="POST",
+                              body=b'{"username": "admin"}',
+                              headers={"Content-Length": "-5"})
+        reads = []
+        orig = h.rfile.read
+        h.rfile.read = lambda n=-1: (reads.append(n), orig(n))[1]
+        h.do_POST()
+        self.assertEqual(dict(h.sent).get("__code__"), 400)
+        self.assertTrue(h.close_connection)
+        self.assertNotIn(-5, reads)
+        self.assertNotIn(-1, reads)
+
+    def test_the_login_sweep_drops_stale_reservations(self):
+        """رزروِ بازِ درخواستی که وسطِ ورود به ۵۰۰ خورد نباید بماند —
+        وگرنه اولین شکستِ بعدیِ همان IP ثبت نمی‌شد."""
+        m = self.m
+        m._login_attempts.clear(); m._login_pending.clear()
+        m._login_attempts_user.clear(); m._login_pending_user.clear()
+        old = time.time() - 7200
+        for i in range(4100):
+            m._login_attempts["10.%d.%d.1" % (i // 256, i % 256)] = [old]
+        m._login_pending["10.0.0.1"] = 1                 # رزروِ یتیم
+        m._login_attempts_user.update({"u%d" % i: [old] for i in range(4100)})
+        m._login_pending_user["u0"] = 1
+        m.login_failed("198.51.100.1")
+        m.login_user_failed("someone")
+        self.assertNotIn("10.0.0.1", m._login_pending)
+        self.assertNotIn("u0", m._login_pending_user)
+        # و شکستِ بعدیِ همان IP حالا واقعاً ثبت می‌شود
+        m.login_failed("10.0.0.1")
+        self.assertEqual(len(m._login_attempts["10.0.0.1"]), 1)
+
+    def test_totp_password_checks_share_the_login_budget(self):
+        """/api/totp/setup و /api/totp/disable رمز را بی‌سقف می‌سنجیدند."""
+        m = self.m
+        m._login_attempts_user.clear(); m._login_pending_user.clear()
+        m.CONFIG["users"][0]["totp"] = "JBSWY3DPEHPK3PXP"
+        for _ in range(m._LOGIN_USER_MAX):
+            code, obj, _h = self._post("/api/totp/disable", {"password": "no"})
+            self.assertFalse(obj["ok"])
+        code, obj, _h = self._post("/api/totp/disable", {"password": "secret-pw"})
+        self.assertEqual(code, 429)
+        code, obj, _h = self._post("/api/totp/setup", {"password": "secret-pw"})
+        self.assertEqual(code, 429)
+        self.assertEqual(m.CONFIG["users"][0]["totp"], "JBSWY3DPEHPK3PXP")
+        # بعد از باز شدنِ بودجه، رمزِ درست کار می‌کند و سهم را پس می‌دهد
+        m._login_attempts_user.clear()
+        code, obj, _h = self._post("/api/totp/disable", {"password": "secret-pw"})
+        self.assertTrue(obj["ok"], obj)
+        self.assertEqual(m._login_attempts_user.get("admin", []), [])
+
+    def test_every_password_confirmation_shares_the_login_budget(self):
+        """/api/password و رمزِ تأییدِ دو مسیرِ بازیابی هم بی‌سقف بودند."""
+        m = self.m
+        self.assertTrue(m.is_protected_admin("admin"))
+        cases = (
+            ("/api/password", lambda pw: self._post(
+                "/api/password", {"current": pw, "new": "another-pw-1"})),
+            ("/api/restore", lambda pw: self._post(
+                "/api/restore", raw=b"x",
+                headers={"X-Confirm-Password": pw, "Content-Length": "1"})),
+            ("/api/backup/cloud-restore", lambda pw: self._post(
+                "/api/backup/cloud-restore",
+                {"password": pw, "object": "none", "components": []})),
+        )
+        for path, call in cases:
+            with self.subTest(path=path):
+                m._login_attempts_user.clear(); m._login_pending_user.clear()
+                for _ in range(m._LOGIN_USER_MAX):
+                    code, obj, _h = call("wrong")
+                    self.assertFalse(obj["ok"])
+                    self.assertNotEqual(code, 429)
+                code, obj, h = call("secret-pw")
+                self.assertEqual(code, 429, obj)
+                if path == "/api/restore":
+                    # بدنه خوانده نشده؛ اتصال باید بسته شود
+                    self.assertTrue(h.close_connection)
+        # رمزِ درست سهم را پس می‌دهد
+        m._login_attempts_user.clear(); m._login_pending_user.clear()
+        code, obj, _h = self._post("/api/password", {"current": "secret-pw",
+                                                     "new": "another-pw-1"})
+        self.assertTrue(obj["ok"], obj)
+        self.assertEqual(m._login_attempts_user.get("admin", []), [])
+
     # ---- TOTP ---------------------------------------------------------------
+    def test_a_replayed_totp_code_does_not_log_in(self):
+        """کدِ TOTP ِ تکراری در مسیرِ ورود باید رد شود.
+
+        شاخه‌ی ردِ ورود فقط totp_verify را دوباره می‌پرسید؛ کدِ تکراری
+        verify را پاس می‌کند و consume را نه، پس از هر دو شاخه رد می‌شد
+        و ورود موفق بود.
+        """
+        m = self.m
+        m._login_attempts.clear(); m._login_attempts_user.clear()
+        m._totp_used.clear()
+        secret = "JBSWY3DPEHPK3PXP"
+        m.CONFIG["users"][0]["totp"] = secret
+        code_now = m.totp_code(secret)
+        body = {"username": "admin", "password": "secret-pw",
+                "totp": code_now}
+        code, obj, _h = self._post("/api/login", body, session=None)
+        self.assertEqual((code, obj.get("ok")), (200, True), obj)
+        code, obj, _h = self._post("/api/login", body, session=None)
+        self.assertFalse(obj.get("ok"), "کدِ تکراری وارد شد")
+        self.assertEqual(code, 401)
+
     def test_replacing_an_existing_totp_needs_the_password(self):
         m = self.m
         m.CONFIG["users"][0]["totp"] = "JBSWY3DPEHPK3PXP"
@@ -11050,12 +11224,80 @@ class ProductAuthTests(unittest.TestCase):
         # peer ِ نامعتمد با هدرِ جعلی → همان peer
         self.assertEqual(f("198.51.100.1", {"X-Forwarded-For": "127.0.0.1"}),
                          "198.51.100.1")
-        # هدرِ خراب → peer (نه crash، نه اعتماد)
+        # هدرِ خراب → نامعلوم (نه crash، نه اعتماد، نه loopback ِ peer)
         self.assertEqual(f("127.0.0.1", {"X-Forwarded-For": "not-an-ip"}),
-                         "127.0.0.1")
-        # فقط proxyها در زنجیره → peer
+                         m.UNKNOWN_CLIENT_IP)
+        # فقط proxyها در زنجیره → چپ‌ترین، نه peer
         self.assertEqual(f("127.0.0.1", {"X-Forwarded-For": "10.9.9.9"}),
-                         "127.0.0.1")
+                         "10.9.9.9")
+        # بدونِ هیچ هدری → peer (SSH port-forward ِ مستقیم)
+        self.assertEqual(f("127.0.0.1", {}), "127.0.0.1")
+
+    def test_forwarded_headers_cannot_forge_loopback_or_another_client(self):
+        """جعلِ X-Forwarded-For پشتِ proxy ِ معتمد.
+
+        nginx با فقط `proxy_set_header X-Real-IP $remote_addr` هدرِ XFF ِ
+        کلاینت را دست‌نخورده رد می‌کند. XFF بر X-Real-IP مقدم بود و
+        مقدارِ خراب یا «فقط-معتمد» به peer (127.0.0.1) برمی‌گشت — یعنی
+        دور زدنِ allowlist و تأییدِ تلگرام.
+        """
+        m = self.m
+        m.CONFIG["trusted_proxies"] = ["127.0.0.1", "10.0.0.0/8"]
+        f = m.client_ip_from
+        attacker = "198.51.100.7"
+        for forged in ("127.0.0.1", "not-an-ip", "203.0.113.9", "::1"):
+            with self.subTest(forged=forged):
+                got = f("127.0.0.1", {"X-Forwarded-For": forged,
+                                      "X-Real-IP": attacker})
+                self.assertNotIn(got, ("127.0.0.1", "::1", "203.0.113.9"))
+        # nginx ِ رایج: هر دو از $remote_addr → هم‌خوان
+        self.assertEqual(f("127.0.0.1", {"X-Forwarded-For": "1.1.1.1, " + attacker,
+                                         "X-Real-IP": attacker}), attacker)
+        # X-Real-IP ِ معتمد (proxy ِ داخلی) با XFF تعارض حساب نمی‌شود
+        self.assertEqual(f("127.0.0.1", {"X-Forwarded-For": attacker + ", 10.1.1.1",
+                                         "X-Real-IP": "10.1.1.1"}), attacker)
+        # loopback ِ آمده از هدر هیچ‌وقت کلاینت نیست
+        self.assertEqual(f("127.0.0.1", {"X-Real-IP": "127.0.0.1"}),
+                         m.UNKNOWN_CLIENT_IP)
+
+    def test_forwarded_proto_makes_https_links_and_secure_cookies(self):
+        """پشتِ proxy ِ TLS‌دار لینکِ اشتراک https و کوکی Secure باشد —
+        ولی X-Forwarded-Proto فقط از proxy ِ معتمد."""
+        m = self.m
+        m.CONFIG.pop("tls_cert", None)
+        m.CONFIG["trusted_proxies"] = ["127.0.0.1"]
+        f = m.request_is_https
+        self.assertTrue(f("127.0.0.1", {"X-Forwarded-Proto": "https"}))
+        self.assertTrue(f("127.0.0.1", {"X-Forwarded-Proto": "HTTPS, http"}))
+        self.assertFalse(f("127.0.0.1", {"X-Forwarded-Proto": "http"}))
+        self.assertFalse(f("127.0.0.1", {}))
+        self.assertFalse(f("198.51.100.1", {"X-Forwarded-Proto": "https"}))
+        m.CONFIG.pop("trusted_proxies")
+        self.assertFalse(f("127.0.0.1", {"X-Forwarded-Proto": "https"}))
+        m.CONFIG["trusted_proxies"] = ["127.0.0.1"]
+        m.add_peer("wgtest", "shr", use_psk=False)
+        hdr = {"X-Forwarded-Proto": "https", "Host": "panel.example",
+               "X-Forwarded-For": "203.0.113.9"}
+        code, obj, _h = self._post("/api/peer/share",
+                                   {"iface": "wgtest", "name": "shr"},
+                                   headers=hdr)
+        self.assertTrue(obj["url"].startswith("https://panel.example/s/"), obj)
+        h = make_fake_handler(m, path="/api/logout", method="POST",
+                              headers=hdr, session={"u": "admin", "r": "admin"})
+        h.do_POST()
+        self.assertIn("Secure", dict(h.sent).get("Set-Cookie", ""))
+        u = m.CONFIG["users"][0]
+        self.assertIn("Secure", h._session_cookie_header(u))
+
+    def test_every_forwarded_for_line_is_read(self):
+        """HAProxy XFF را سطرِ جدا اضافه می‌کند؛ سطرِ اول مالِ مهاجم است."""
+        import email.message
+        m = self.m
+        m.CONFIG["trusted_proxies"] = ["127.0.0.1"]
+        hdr = email.message.Message()
+        hdr["X-Forwarded-For"] = "203.0.113.9"        # از کلاینت
+        hdr["X-Forwarded-For"] = "198.51.100.7"       # از proxy
+        self.assertEqual(m.client_ip_from("127.0.0.1", hdr), "198.51.100.7")
 
     def test_handler_uses_the_forwarded_ip_for_allowlist_and_audit(self):
         m = self.m
@@ -11125,13 +11367,6 @@ class ProductAuthTests(unittest.TestCase):
         base = json.loads(json.dumps(m.CONFIG))
         cases = {
             "users not a list": dict(base, users={"a": 1}),
-            "user not an object": dict(base, users=["admin"]),
-            "bad username": dict(base, users=[dict(base["users"][0], username="a b")]),
-            "duplicate": dict(base, users=base["users"] * 2),
-            "missing role": dict(base, users=[{k: v for k, v in base["users"][0].items()
-                                               if k != "role"}]),
-            "non-hex salt": dict(base, users=[dict(base["users"][0], salt="xyz")]),
-            "bad expires": dict(base, users=[dict(base["users"][0], expires="tomorrow")]),
             "bad port": dict(base, port="8787"),
             "tls half": dict(base, tls_cert="/x.pem"),
             "tls missing file": dict(base, tls_cert="/nope.pem", tls_key="/nope.key"),
@@ -11149,6 +11384,50 @@ class ProductAuthTests(unittest.TestCase):
         fatal, warn = m.validate_config(dict(base, users=[]))
         self.assertEqual(fatal, [])
         self.assertTrue(warn)
+
+    def test_one_broken_user_does_not_stop_the_panel(self):
+        """خرابیِ یک رکوردِ کاربر هشدار است، نه fatal؛ همان کاربر کنار
+        می‌رود و بقیه کار می‌کنند.
+
+        پیش از این یک salt ِ غلط در رکوردِ یک اپراتورِ فرعی کلِ پنل را —
+        با اعمالِ سهمیه و انقضا و ربات — بعد از ری‌استارت از کار می‌انداخت.
+        """
+        m = self.m
+        base = json.loads(json.dumps(m.CONFIG))
+        good = base["users"][0]
+        bad = {
+            "user not an object": "admin2",
+            "bad username": dict(good, username="a b"),
+            "duplicate": dict(good),
+            "missing role": {k: v for k, v in dict(good, username="nr").items()
+                             if k != "role"},
+            "non-hex salt": dict(good, username="hx", salt="xyz"),
+            "bad expires": dict(good, username="ex", expires="tomorrow"),
+        }
+        for label, rec in bad.items():
+            with self.subTest(case=label):
+                cfg = dict(base, users=[good, rec])
+                fatal, warn = m.validate_config(cfg)
+                self.assertEqual(fatal, [], label)
+                self.assertTrue(any("users[1] is ignored" in w for w in warn),
+                                warn)
+                self.assertEqual([i for i, _n, _e in m.invalid_users(cfg)], [1])
+        # قرنطینه: از حافظه بیرون، ولی در ذخیره‌ی بعدی دست‌نخورده برمی‌گردد
+        # (ماژولِ تازه، چون setUp ِ این کلاس save_config را خنثی کرده است)
+        m2 = load_module(self.tmp)
+        rec = bad["non-hex salt"]
+        m2.CONFIG["users"] = [good, rec]
+        got = m2.quarantine_invalid_users()
+        self.assertEqual([(i, n) for i, n, _e in got], [(1, "hx")])
+        self.assertIsNone(m2.find_user("hx"))
+        self.assertIsNotNone(m2.find_user("admin"))
+        m2.save_config()
+        with open(m2.CONFIG_PATH, encoding="utf-8") as f:
+            on_disk = json.load(f)
+        self.assertEqual([u["username"] for u in on_disk["users"]],
+                         ["admin", "hx"])
+        self.assertEqual(on_disk["users"][1]["salt"], "xyz")
+        self.assertEqual(len(m2.CONFIG["users"]), 1)
 
     # ---- TOTP recovery codes --------------------------------------------------
     def _enable_totp(self):
@@ -11202,12 +11481,35 @@ class ProductAuthTests(unittest.TestCase):
                                                  "password": "secret-pw",
                                                  "totp": codes[0]}, session=False)
         self.assertEqual(code, 401)
-        # کدِ TOTP ِ واقعی همچنان کار می‌کند
+        # کدِ TOTP ِ واقعی همچنان کار می‌کند — کدِ گامِ بعد، چون کدِ همین
+        # گام در /api/totp/confirm مصرف شد و تکرارش (درست) رد می‌شود
         code, obj, _h = self._post("/api/login", {"username": "admin",
                                                  "password": "secret-pw",
-                                                 "totp": m.totp_code(secret)},
+                                                 "totp": m.totp_code(
+                                                     secret, time.time() + 30)},
                                    session=False)
         self.assertTrue(obj.get("ok"), obj)
+
+    def test_a_recovery_code_is_accepted_without_its_dash(self):
+        """از روی کاغذ خط‌تیره جا می‌افتد یا خطِ تیره‌ی دیگری چسبانده می‌شود."""
+        m = self.m
+        u = {"username": "admin"}
+        codes = m.totp_recovery_codes(u)
+        self.assertTrue(m.totp_recovery_consume(u, codes[0].replace("-", "")))
+        self.assertTrue(m.totp_recovery_consume(u, codes[1].replace("-", "\u2013").upper()))
+        self.assertFalse(m.totp_recovery_consume(u, codes[0].replace("-", "")))
+        self.assertFalse(m.totp_recovery_consume(u, codes[2][:9]))
+        self.assertEqual(len(u["totp_recovery"]), m.TOTP_RECOVERY_COUNT - 2)
+
+    def test_recovery_codes_leave_the_dom_and_have_their_own_copy_label(self):
+        src = _read_panel_source()
+        seg = src[src.index("async function confirmTotp(){"):]
+        seg = seg[:seg.index("async function disableTotp(){")]
+        self.assertIn("ui.js.confirmTotp.5", seg)
+        self.assertNotIn("ui.js.showShareResult.8", seg,
+                         "دکمه‌ی کپیِ کدها برچسبِ «کپی لینک» دارد")
+        self.assertIn("MutationObserver", seg)
+        self.assertIn("el('modal-body').innerHTML = ''", seg)
 
     def test_disabling_totp_drops_the_recovery_codes(self):
         m = self.m
@@ -11394,6 +11696,53 @@ class ProductWireGuardTests(unittest.TestCase):
         self.assertEqual([c for c in m._run_calls if c[:2] == ["wg", "set"]], [])
         self.assertFalse(os.path.exists(os.path.join(self.tmp, "restore-backups")))
 
+    def test_restore_dry_run_counts_a_keepalive_change_like_the_real_path(self):
+        """پیش‌نمایش همان چهار چیزی را می‌سنجد که بازیابی اعمال می‌کند."""
+        m = self.m
+        new_conf = FIXTURE_CONF.replace(
+            "AllowedIPs = 192.168.188.20/32,149.154.166.110\n",
+            "AllowedIPs = 192.168.188.20/32,149.154.166.110\n"
+            "PersistentKeepalive = 25\n")
+        raw = self._tar({"wgtest.conf": new_conf.encode()})
+        ok, plan = m.restore_from_tar(raw, dry_run=True)
+        self.assertTrue(ok, plan)
+        self.assertEqual(plan["ifaces"]["wgtest"]["change"], ["user02"])
+        self.assertTrue(plan["ifaces"]["wgtest"]["live"])
+        del m._run_calls[:]
+        ok, _msg = m.restore_from_tar(raw)
+        self.assertTrue(ok)
+        sets = [c for c in m._run_calls if c[:2] == ["wg", "set"]]
+        self.assertEqual(len(sets), 1, sets)          # یک تغییر، همان که گفت
+
+    def test_restore_refuses_unlabelled_peers_on_a_live_interface(self):
+        """کانفیگِ بی‌برچسب روی اینترفیسِ بالا: همه‌ی کاربرانِ فعلی از کرنل
+        برداشته می‌شدند و peerهای تازه اضافه نمی‌شدند. dry-run و مسیرِ
+        واقعی هر دو رد می‌کنند؛ روی اینترفیسِ پایین فقط فایل نوشته می‌شود."""
+        m = self.m
+        stock = (b"[Interface]\nPrivateKey = K\nListenPort = 51820\n\n"
+                 b"[Peer]\nPublicKey = X\nAllowedIPs = 10.0.0.2/32\n\n"
+                 b"[Peer]\nPublicKey = Y\nAllowedIPs = 10.0.0.3/32\n")
+        raw = self._tar({"wgtest.conf": stock})
+        before = pathlib.Path(self.tmp, "wgtest.conf").read_text()
+        for dry in (True, False):
+            with self.subTest(dry_run=dry):
+                del m._run_calls[:]
+                ok, msg = m.restore_from_tar(raw, dry_run=dry)
+                self.assertFalse(ok)
+                txt = m.api_text(msg, "en")
+                self.assertIn("wgtest", txt)
+                self.assertIn("2 active [Peer]", txt)
+                self.assertEqual([c for c in m._run_calls if c[:2] == ["wg", "set"]], [])
+                self.assertEqual(pathlib.Path(self.tmp, "wgtest.conf").read_text(),
+                                 before)
+        self.assertEqual(m._unlabeled_active_peers(FIXTURE_CONF.splitlines()), 0)
+        m.live_interfaces = lambda: []
+        ok, _plan = m.restore_from_tar(raw, dry_run=True)
+        self.assertTrue(ok)
+        ok, _msg = m.restore_from_tar(raw)
+        self.assertTrue(ok)
+        self.assertEqual(pathlib.Path(self.tmp, "wgtest.conf").read_bytes(), stock)
+
     def test_restore_route_honours_the_dry_run_header(self):
         m = self.m
         salt = "a" * 32
@@ -11464,6 +11813,46 @@ class ProductMonitoringTests(unittest.TestCase):
         m._STARTED_AT = time.time()
         self.assertTrue(m.health_report()["threads"]["bot"]["ok"])
 
+    def test_a_long_failing_telegram_cycle_keeps_the_bot_alive(self):
+        """دورِ خرابی (تلگرامِ فیلتر روی چند مسیر) نباید نخ را «مرده» کند.
+
+        هر مسیرِ نامزد تا timeout طول می‌کشد؛ با چند تونل یک دورِ getUpdates
+        از سقفِ ۱۸۰ ثانیه می‌گذشت. هر تلاش باید پیشرفت را ثبت کند — و فقط
+        برای نخی که خودش ضربان می‌زند.
+        """
+        m = self.m
+        m._HEARTBEAT.clear()
+        m._STARTED_AT = time.time() - 3600
+        m.tg_iface_candidates = lambda explicit="": ["", "wg21", "wg22", "wg23"]
+        tried = []
+
+        def down(host, port, req, iface, timeout):
+            # هر تلاش «۶۰ ثانیه» طول می‌کشد: ضربانِ قبلی را عقب می‌بریم
+            with m._HEARTBEAT_LOCK:
+                m._HEARTBEAT["bot"] -= 60
+            tried.append(iface)
+            raise OSError("timed out")
+        m._https_raw_over_iface = down
+
+        def bot_loop():
+            m._heartbeat("bot")
+            m.tg_api("T", "getUpdates", {"timeout": 30}, timeout=45)
+        t = threading.Thread(target=bot_loop)
+        t.start(); t.join()
+        self.assertEqual(len(tried), 4)
+        self.assertTrue(m.health_report()["threads"]["bot"]["ok"],
+                        m.health_report()["threads"]["bot"])
+        # نخِ بی‌نام (مثلاً درخواستِ وب) ضربانِ کسی را نمی‌زند
+        with m._HEARTBEAT_LOCK:
+            m._HEARTBEAT["bot"] = time.time() - 999
+        t = threading.Thread(target=lambda: m.tg_api("T", "getMe"))
+        t.start(); t.join()
+        self.assertFalse(m.health_report()["threads"]["bot"]["ok"])
+        # run() هم پیشرفت ثبت می‌کند (همان تابعی که alertmon صدا می‌زند)
+        src = _read_panel_source()
+        seg = src[src.index("def run(cmd, timeout=20):"):][:300]
+        self.assertIn("_heartbeat_progress()", seg)
+
     def test_every_background_loop_beats(self):
         """هر نخی که health می‌سنجد باید در سورس ضربان بزند — وگرنه health
         همیشه آن را مرده می‌بیند (یا برعکس، نخی بی‌ناظر می‌ماند)."""
@@ -11503,7 +11892,10 @@ class ProductMonitoringTests(unittest.TestCase):
                               session=None)
         h.do_GET()
         self.assertEqual(dict(h.sent)["__code__"], 503)
-        self.assertFalse(json.loads(b"".join(h.body).decode())["healthy"])
+        obj = json.loads(b"".join(h.body).decode())
+        self.assertFalse(obj["healthy"])
+        # ok همان healthy است؛ ۵۰۳ با ok:true «سالم» می‌خواند
+        self.assertFalse(obj["ok"])
 
     # ---- persisted edges ----------------------------------------------------------
     def test_edge_state_survives_a_restart(self):
@@ -11526,6 +11918,27 @@ class ProductMonitoringTests(unittest.TestCase):
         with open(m.ALERT_EDGES_STATE, "w") as f:
             f.write("{not json")
         m.AlertManager().load_state()
+
+    def test_edge_state_prunes_keys_that_are_no_longer_checked(self):
+        """کلیدهای لبه از داده‌ی کاربر می‌آیند (pxquota:<user>، tun:<iface>)؛
+        بدونِ هرس alert-edges.json با هر کاربر/تونلِ حذف‌شده بزرگ‌تر می‌شد."""
+        m = self.m
+        m.CONFIG["alerts"] = {"enabled": True}
+        m.ALERTS.emit = lambda t, html=False: None
+        m.ALERTS.state.clear(); m.ALERTS.seen.clear()
+        m.ALERTS.edge("pxquota:gone", True, "x")
+        m.ALERTS.edge("tun:wg9", True, "x")
+        m.ALERTS.seen["pxquota:gone"] -= m.ALERTS.EDGE_TTL + 1
+        m.ALERTS.edge("tun:wg9", False, "down")          # تغییر → ذخیره + هرس
+        with open(m.ALERT_EDGES_STATE, encoding="utf-8") as f:
+            self.assertEqual(json.load(f), {"tun:wg9": False})
+        self.assertNotIn("pxquota:gone", m.ALERTS.state)
+        # کلیدِ بارگذاری‌شده از دیسک مهلتِ کامل می‌گیرد
+        fresh = m.AlertManager()
+        fresh.load_state()
+        self.assertIn("tun:wg9", fresh.seen)
+        fresh.save_state()
+        self.assertIn("tun:wg9", fresh.state)
 
     # ---- throttle ------------------------------------------------------------------
     def test_expensive_warp_checks_are_throttled(self):
@@ -11575,6 +11988,47 @@ class ProductMonitoringTests(unittest.TestCase):
         # خطِ تکیِ غول‌پیکر هم شکسته می‌شود
         parts = m.tg_chunks("y" * 9000, limit=4000)
         self.assertEqual([len(p) for p in parts], [4000, 4000, 1000])
+
+    def test_tg_chunks_keeps_every_html_chunk_balanced(self):
+        """برش وسطِ <pre> تکه‌ای با تگِ باز می‌ساخت و تلگرام کلِ آن را
+        با «can't parse entities» رد می‌کرد."""
+        import html.parser
+        m = self.m
+        body = "\n".join("AllowedIPs = 10.0.%d.0/24 &amp; x" % i
+                         for i in range(400))
+        text = "<b>Config</b>\n<pre><code class=\"language-ini\">" + body \
+            + "</code></pre>\n<i>end</i>"
+        parts = m.tg_chunks(text, html=True)
+        self.assertGreater(len(parts), 2)
+
+        class Bal(html.parser.HTMLParser):
+            def __init__(self):
+                super().__init__(); self.stack = []
+
+            def handle_starttag(self, tag, attrs):
+                self.stack.append(tag)
+
+            def handle_endtag(self, tag):
+                assert self.stack and self.stack[-1] == tag, (tag, self.stack)
+                self.stack.pop()
+        for part in parts:
+            b = Bal(); b.feed(part); b.close()
+            self.assertEqual(b.stack, [], part[:80])
+        self.assertTrue(parts[1].startswith('<pre><code class="language-ini">'))
+        # متن (بدونِ تگ‌های افزوده) کامل و به ترتیب رسید
+        strip = lambda x: re.sub(r"<[^>]+>", "", x)
+        self.assertEqual("\n".join(strip(p) for p in parts), strip(text))
+        # خطِ غول‌پیکر وسطِ تگ یا &entity; بریده نمی‌شود
+        long_line = ("ab&amp;" * 3000)
+        for part in m.tg_chunks(long_line, limit=4000, html=True):
+            self.assertFalse(re.search(r"&[a-z]*$", part), part[-10:])
+        long_tag = "x" * 3997 + "<b>bold</b>" + "y" * 100   # برشِ ۴۰۰۰ وسطِ <b>
+        parts = m.tg_chunks(long_tag, limit=4000, html=True)
+        self.assertEqual(parts[0], "x" * 3997)
+        self.assertTrue(parts[1].startswith("<b>bold</b>"))
+        # بدونِ html، رفتارِ قبلی
+        self.assertEqual(m.tg_chunks("y" * 9000, limit=4000),
+                         ["y" * 4000, "y" * 4000, "y" * 1000])
 
     def _fake_https(self, script):
         """_https_raw_over_iface ِ ساختگی: script = {iface: [(status, json), …]}."""
@@ -11734,6 +12188,30 @@ class ProductDataTests(unittest.TestCase):
         m.META.prune()
         self.assertTrue(m.META.audit_list())
 
+    def test_prune_expires_service_ips_and_mtr_history(self):
+        """هرسِ روزانه باید svc_resolved و mtr_run را هم کران‌دار کند.
+
+        این دو DELETE زیرِ `pass` ِ except ِ checkpoint افتاده بودند و
+        هرگز اجرا نمی‌شدند.
+        """
+        m = self.m
+        old = time.time() - 400 * 86400
+        m.META.svc_resolved_upsert("svc", ["198.51.100.1"])
+        m.META.mtr_add("svc", "wgtest", "198.51.100.1", 10, 1, 0, 4.4,
+                       True, 3, "[]")
+        con = m.META._connect()
+        with con:
+            con.execute("UPDATE svc_resolved SET first_seen=?, last_seen=?",
+                        (old, old))
+            con.execute("UPDATE mtr_run SET ts=?", (old,))
+        con.close()
+        m.META.prune()
+        con = m.META._connect()
+        left = (con.execute("SELECT COUNT(*) FROM svc_resolved").fetchone()[0],
+                con.execute("SELECT COUNT(*) FROM mtr_run").fetchone()[0])
+        con.close()
+        self.assertEqual(left, (0, 0))
+
     def test_warp_rank_pings_the_pool_in_parallel_with_one_packet(self):
         m = self.m
         seen = []
@@ -11828,6 +12306,42 @@ class ProductUxI18nTests(unittest.TestCase):
         b._chat_type = "private"
         b._px_conf(7, "pxu")
         self.assertIn("secret-pw", json.dumps([p for _m, p in sent], ensure_ascii=False))
+
+    def test_creation_wizards_are_refused_in_a_group(self):
+        """ویزاردهای ساختِ وایرگارد/پروکسی فقط در چتِ خصوصی.
+
+        ویزاردِ وایرگارد در گروه peer را می‌ساخت و بعد تحویلِ کانفیگ رد
+        می‌شد؛ ویزاردِ پروکسی رمز را در تأیید و پیامِ نهایی چاپ می‌کرد.
+        """
+        m = self.m
+        b, sent = self._bot()
+        m.CONFIG["bot"] = {"enabled": True, "users": [{"id": "1", "role": "admin",
+                                                        "lang": "en"}]}
+        b._chat_type = "supergroup"
+        b._start_wg_add(1, -5)
+        b._start_px_add(1, -5)
+        b._wg_add_cb(1, -5, "go", set())
+        b._px_add_cb(1, -5, "go", set())
+        self.assertEqual(b.convo, {})
+        self.assertEqual(len(sent), 4)
+        self.assertTrue(all("private chat" in p["text"] for _mth, p in sent))
+
+    def test_group_text_is_not_input_to_a_private_wizard(self):
+        """گفت‌وگو با کاربر کلید خورده، نه با چت: متنِ گروهی نباید مرحله‌ی
+        رمزِ ویزاردِ خصوصی را پر کند."""
+        m = self.m
+        b, sent = self._bot()
+        m.CONFIG["bot"] = {"enabled": True, "users": [{"id": "1", "role": "admin",
+                                                        "lang": "en"}]}
+        b._chat_type = "private"
+        b._start_px_add(1, 1)
+        b.convo[1]["step"] = "pass"
+        sent.clear()
+        b._chat_type = "supergroup"
+        b._convo_step(1, -5, "group-typed-secret")
+        self.assertEqual(sent, [])
+        self.assertEqual(b.convo[1]["pw"], "")
+        self.assertEqual(b.convo[1]["step"], "pass")
 
     def test_bot_stays_silent_for_strangers_in_groups(self):
         m = self.m

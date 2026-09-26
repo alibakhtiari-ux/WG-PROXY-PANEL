@@ -399,7 +399,8 @@ sha256sum -c SHA256SUMS
 
 ```bash
 sudo install -D -m600 -o root -g root wg_panel.py /opt/wg-panel/wg_panel.py
-sudo install -m644 -t /opt/wg-panel qr.js three.module.min.js.gz three.core.min.js.gz
+sudo install -m644 -t /opt/wg-panel qr.js three.module.min.js.gz three.core.min.js.gz \
+     three.LICENSE.txt
 sudo install -m644 wg-panel.service /etc/systemd/system/
 ```
 
@@ -485,7 +486,7 @@ docker compose up -d --build
 | `client_dns` · `client_mtu` · `client_allowed` | 生成客户端配置时的默认值（`1.1.1.1, 8.8.8.8` · `1420` · `0.0.0.0/0, ::/0`） |
 | `allow_ips` | 可选的 IP 白名单（`127.0.0.1` 始终允许） |
 | `metrics_token` | `/metrics` 与 `/api/health` 的 Bearer 令牌 |
-| `trusted_proxies` | 面板前置反向代理的 IP/CIDR；仅此时才从 `X-Forwarded-For` 读取客户端 IP |
+| `trusted_proxies` | 面板前置反向代理的 IP/CIDR；仅此时才从 `X-Forwarded-For` / `X-Real-IP` 读取客户端 IP，并采纳 `X-Forwarded-Proto: https`（https 分享链接、`Secure` Cookie） |
 | `session_idle_min` | 空闲多少分钟后自动登出（`0`/未设置 = 仅 12 小时绝对上限） |
 | `secret` | 为会话 Cookie 签名的密钥；首次启动时创建。更改它会让所有人登出 |
 | `bot` | Telegram 机器人是否启用、其授权用户及其角色 |

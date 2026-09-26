@@ -457,7 +457,8 @@ sha256sum -c SHA256SUMS
 
 ```bash
 sudo install -D -m600 -o root -g root wg_panel.py /opt/wg-panel/wg_panel.py
-sudo install -m644 -t /opt/wg-panel qr.js three.module.min.js.gz three.core.min.js.gz
+sudo install -m644 -t /opt/wg-panel qr.js three.module.min.js.gz three.core.min.js.gz \
+     three.LICENSE.txt
 sudo install -m644 wg-panel.service /etc/systemd/system/
 ```
 
@@ -549,7 +550,7 @@ docker compose up -d --build
 | `client_dns` · `client_mtu` · `client_allowed` | Значения по умолчанию для конфигураций клиентов (`1.1.1.1, 8.8.8.8` · `1420` · `0.0.0.0/0, ::/0`) |
 | `allow_ips` | Необязательный список разрешённых IP (`127.0.0.1` разрешён всегда) |
 | `metrics_token` | Bearer-токен для `/metrics` и `/api/health` |
-| `trusted_proxies` | IP/CIDR обратного прокси перед панелью; только тогда IP клиента берётся из `X-Forwarded-For` |
+| `trusted_proxies` | IP/CIDR обратного прокси перед панелью; только тогда IP клиента берётся из `X-Forwarded-For` / `X-Real-IP` и учитывается `X-Forwarded-Proto: https` (https-ссылки для раздачи, cookie с `Secure`) |
 | `session_idle_min` | Выход из сессии после стольких минут бездействия (`0`/нет = только абсолютный лимит 12 ч) |
 | `secret` | Ключ, которым подписываются cookie сеанса; создаётся при первом запуске. Его смена завершает все сеансы |
 | `bot` | Включён ли Telegram-бот, его разрешённые пользователи и их роли |
