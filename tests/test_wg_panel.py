@@ -2911,6 +2911,10 @@ class BotTests(unittest.TestCase):
         self.assertIn("تداخل", sent[-1][0])
         bot._px_add_cb(1, 1, "cancel", p)
         self.assertIsNone(m.META.proxy_user_get("pxnoauth2"))
+        # هیچ پیامی از ویزارد (پیش‌نمایش، ساخت، خطا) کلیدِ خامِ i18n نشان ندهد
+        for text, _kb in sent:
+            self.assertIsNone(re.search(r"\bbot\.[a-z_]+\.[a-z_0-9]+", text),
+                              text)
 
     def test_fa_digits_en(self):
         m = self.m
