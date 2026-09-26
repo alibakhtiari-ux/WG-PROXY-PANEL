@@ -1,0 +1,10 @@
+[Unit]
+Description=Upload latest wg-panel backup to MEGA S4 (rclone)
+After=wg-panel-backup.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/wg-panel-s4-upload.sh
+Nice=10
+IOSchedulingClass=idle

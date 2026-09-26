@@ -1,0 +1,115 @@
+# wg-panel — اجرای پنل + WireGuard داخلِ یک کانتینر، برای نصب روی اوبونتوی دیگر.
+#
+# نصب:  (۱) sudo bash host-setup.sh   (۲) cp .env.example .env و ویرایش
+#       (۳) docker compose up -d --build          ← جزئیات در docker/README.md
+#
+# context بیلد ریشه‌ی مخزن است تا wg_panel.py مستقیم از منبعِ کانونی بیاید و
+# هیچ کپیِ دومی (مستعدِ کهنگی) داخلِ docker/ نگه‌داری نشود.
+
+name: wg-panel
+
+services:
+  wg-panel:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: wg-panel:local
+    container_name: wg-panel
+    hostname: ${WG_HOSTNAME:-wg-panel}
+    restart: unless-stopped
+    # tini به‌عنوانِ PID 1: هم سیگنالِ خاموشی را به پنل می‌رساند و هم
+    # پروسه‌های دیمن‌شده (squid/fail2ban) را درو می‌کند تا زامبی نماند.
+    init: true
+    stop_grace_period: 20s
+
+    # حداقلِ لازم برای wg-quick/iptables/tc داخلِ netns خودِ کانتینر —
+    # privileged لازم نیست و عمداً داده نشده.
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv4.conf.all.src_valid_mark=1
+
+    ports:
+      # وایرگاردِ کاربران (UDP) — دو طرف باید یکی باشند چون ListenPort همین است
+      - "${WG_PORT:-51820}:${WG_PORT:-51820}/udp"
+      # پنلِ وب — دو طرف یکی، چون جیلِ fail2ban و لینک‌های تولیدیِ پنل به همین پورت‌اند
+      - "${WG_PANEL_PORT:-8787}:${WG_PANEL_PORT:-8787}/tcp"
+      # پروکسیِ squid — در پنل روی ۱۸۰۸۰ ثابت است (PROXY_PORT)؛ تا کاربرِ
+      # پروکسی نسازید، squid خاموش می‌ماند و این پورت connection refused است
+      - "18080:18080/tcp"
+      # برای محدودکردنِ پنل به دسترسیِ محلی/تونلی، به‌جای خطِ بالا:
+      #   - "127.0.0.1:${WG_PANEL_PORT:-8787}:${WG_PANEL_PORT:-8787}/tcp"
+
+    environment:
+      WG_SERVER_HOST: ${WG_SERVER_HOST:-}
+      WG_SERVER_LABEL: ${WG_SERVER_LABEL:-}
+      WG_PANEL_PORT: ${WG_PANEL_PORT:-8787}
+      WG_PANEL_ADMIN_USER: ${WG_PANEL_ADMIN_USER:-admin}
+      WG_PANEL_ALLOW_IPS: ${WG_PANEL_ALLOW_IPS:-}
+      WG_TLS_ENABLED: ${WG_TLS_ENABLED:-true}
+      WG_IFACE: ${WG_IFACE:-wg1udp}
+      WG_PORT: ${WG_PORT:-51820}
+      WG_SUBNET: ${WG_SUBNET:-10.66.66.0/24}
+      WG_GATEWAY_IP: ${WG_GATEWAY_IP:-10.66.66.1}
+      WG_CLIENT_DNS: ${WG_CLIENT_DNS:-1.1.1.1, 8.8.8.8}
+      WG_WAN_IFACE: ${WG_WAN_IFACE:-eth0}
+      WG_F2B_ENABLED: ${WG_F2B_ENABLED:-true}
+      # بکاپِ خودکار — جانشینِ wg-panel-backup.timer که کانتینر ندارد.
+      WG_BACKUP_ENABLED: ${WG_BACKUP_ENABLED:-true}
+      WG_BACKUP_AT: ${WG_BACKUP_AT:-04:30}
+      WG_S4_UPLOAD_AT: ${WG_S4_UPLOAD_AT:-04:55}
+      WG_DOCKER_SUBNET: ${WG_DOCKER_SUBNET:-172.29.101.0/24}
+      WG_BOT_TOKEN: ${WG_BOT_TOKEN:-}
+      WG_BOT_CHAT_ID: ${WG_BOT_CHAT_ID:-}
+      WG_BOT_OWNER_ID: ${WG_BOT_OWNER_ID:-}
+      # پیش‌فرض‌های خنثی — پنل این دو را از env می‌خواند و اگر خالی باشند
+      # رفتارِ «نصبِ تازه» می‌گیرد (بدونِ بکاپِ کاملِ سرور، بدونِ استخرِ VPN).
+      WG_FULL_BACKUP_NAME: ${WG_FULL_BACKUP_NAME:-wg-panel-full}
+      WG_VPN_POOL: ${WG_VPN_POOL:-}
+      TZ: ${TZ:-Asia/Tehran}
+
+    volumes:
+      # داده‌ی پنل: config.json، traffic.db، کلاینت‌ها، TLS، actions.log
+      - ./data/panel:/opt/wg-panel
+      # کانفیگ‌ها و کلیدهای وایرگارد + بکاپ‌های خودکارِ پیش از هر تغییر
+      - ./data/wireguard:/etc/wireguard
+      # خروجیِ دکمه‌ی «پشتیبان‌گیریِ دستی» پنل و بکاپ‌های wg-panel-backup.sh
+      - ./data/backups:/var/backups/wg-panel
+      # --- اختیاری: آپلودِ ابریِ بکاپ (MEGA S4) — هر دو فایل را بسازید و از کامنت درآورید
+      # - ./secrets/wg-panel-s4.env:/etc/wg-panel-s4.env:ro
+      # - ./secrets/wg-panel-rclone.conf:/etc/wg-panel-rclone.conf:ro
+      # --- اختیاری: AmneziaWG (باینری‌ها در مخزن نیستند؛ اگر دارید mount کنید)
+      # - ./bin/awg:/usr/local/bin/awg:ro
+      # - ./bin/awg-quick:/usr/local/bin/awg-quick:ro
+      # - ./bin/amneziawg-go:/usr/local/bin/amneziawg-go:ro
+      # - ./data/amnezia:/etc/amnezia/amneziawg
+      # --- اختیاری: CLI ِ رسمیِ Ookla برای صفحه‌ی «تستِ سرعت».
+      # در ایمیج نیست چون در مخزنِ اوبونتو نیست و افزودنِ مخزنِ شخصِ ثالث به
+      # ایمیجی که دستِ دیگران می‌رسد بهایی است که ارزشش را ندارد. بی آن، آن
+      # صفحه به‌جای عدد خطا نشان می‌دهد (بقیه‌ی پنل دست‌نخورده است).
+      # باینری را از speedtest.net/apps/cli بگیرید و اینجا mount کنید:
+      # - ./bin/speedtest:/usr/local/bin/speedtest:ro
+
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/wg-panel-health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# سابنتِ ثابت برای شبکه‌ی داخلی، تا ignoreip ِ fail2ban قطعی باشد (IPهایی که
+# docker-proxy رله می‌کند با آدرسِ دروازه‌ی همین شبکه دیده می‌شوند).
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${WG_DOCKER_SUBNET:-172.29.101.0/24}

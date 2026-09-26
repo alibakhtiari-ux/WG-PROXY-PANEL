@@ -1,0 +1,9 @@
+# فهرستِ سفیدِ فایل‌هایی که «عیناً» واردِ بسته‌ی آفلاین می‌شوند — src|dest
+# (src نسبت به ریشه‌ی مخزن). هر چیزِ دیگرِ داخلِ بسته «تولیدی» است:
+# docker-compose.yml (تبدیل‌شده)، ایمیج، apt/، VERSION، ARCH، checksums.
+# سدِ نشت: مستندات/اسکیل‌ها/تاریخچه‌ی عملیاتیِ مخزن هرگز اینجا نمی‌آیند؛
+# tests/test_docker_airgap.py همین فایل را می‌پاید.
+docker/airgap/install.sh|install.sh
+docker/airgap/verify-checksums.sh|verify-checksums.sh
+docker/airgap/README-OFFLINE.md|README-OFFLINE.md
+docker/.env.example|.env.example

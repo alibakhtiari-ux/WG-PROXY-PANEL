@@ -1,0 +1,8 @@
+[Unit]
+Description=Nightly backup of wg-panel (config + db + wireguard + squid)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/wg-panel-backup.sh
+Nice=10
+IOSchedulingClass=idle

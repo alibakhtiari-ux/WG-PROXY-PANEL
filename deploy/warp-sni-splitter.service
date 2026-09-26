@@ -1,0 +1,39 @@
+[Unit]
+Description=WARP SNI splitter — تفکیکِ AI از کولترال بر پایهٔ SNI
+After=network-online.target warp-gemini.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+# پورتِ UDPِ QUIC همیشه ست است تا دیمن گوش بدهد؛ اینکه ترافیکی به آن منحرف
+# شود یا نه با قاعدهٔ TPROXY (مارکِ warp-sni-quic) کنترل می‌شود — پس روشن/خاموشِ
+# تفکیکِ QUIC نیازی به restartِ دیمن ندارد.
+Environment=WSS_QUIC_PORT=8446
+ExecStart=/usr/bin/python3 /usr/local/sbin/warp-sni-splitter.py
+Restart=always
+RestartSec=2
+# IP_TRANSPARENT + SO_MARK به CAP_NET_ADMIN/RAW نیاز دارند. CAP_NET_BIND_SERVICE
+# لازم است چون سوکتِ پاسخِ QUIC (source-spoofing) به مقصد:۴۴۳ (پورتِ privileged
+# <۱۰۲۴) bind می‌شود — بی این cap، پاسخِ QUIC هرگز به کاربر برنمی‌گردد.
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE
+# سخت‌سازی — فقط /opt/wg-panel نوشتنی (heartbeat/stats)؛ بقیه فقط‌خواندنی.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/opt/wg-panel
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+# ایمنیِ حافظه (الگوی swap-safety سرور): این دیمن در datapath است، نباید
+# قربانیِ OOM شود وگرنه AI/کولترال هر دو تا restart بلک‌هول می‌شوند.
+OOMScoreAdjust=-600
+OOMPolicy=continue
+# هر جریانِ TCP دو سوکت مصرف می‌کند (کاربر + upstream)؛ سقفِ پیش‌فرضِ ۱۰۲۴
+# در پیکِ شبانه پُر می‌شود و اولین قربانیِ EMFILE خودِ heartbeat است (فایلش
+# باز نمی‌شود) → warp-guard دیمنِ زنده را «ناسالم» می‌بیند و flap می‌کند.
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

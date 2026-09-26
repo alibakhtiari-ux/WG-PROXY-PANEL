@@ -1,0 +1,8 @@
+[Unit]
+Description=Verify wg-panel backups are fresh and intact (alert on failure)
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/wg-panel-verify-backup.sh
+Nice=15

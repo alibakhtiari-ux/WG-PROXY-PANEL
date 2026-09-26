@@ -1,0 +1,53 @@
+# contextِ بیلد ریشه‌ی مخزن است (docker-compose.yml: context: ..) تا wg_panel.py
+# مستقیم از منبعِ کانونی بیاید. بدونِ این فایل، `docker build` کلِ مخزن —
+# ۱٫۲ گیگابایت شاملِ .git و .claude و docker/airgap/dist — را به daemon
+# می‌فرستد. ایمیجِ فعلی آن را نگه نمی‌دارد (COPYها باریک‌اند)، ولی:
+#   ۱) بیلد بی‌دلیل کند و پرمصرف می‌شود؛
+#   ۲) یک `COPY . .` در آینده کلِ مستنداتِ عملیاتی را داخلِ ایمیج می‌برد،
+#      و هیچ گاردی جلویش را نمی‌گرفت — گاردِ tests/test_docker_airgap.py
+#      فهرستِ سفیدِ *بسته* را می‌پاید، نه contextِ بیلد را.
+# تستِ test_dockerignore_blocks_operational_layer همین فایل را می‌سنجد.
+
+# ── لایه‌ی عملیاتی: هرگز نباید به سمتِ daemon برود ────────────────────────
+.git
+.gitignore
+.claude/
+CLAUDE.md
+CHANGELOG.md
+README.fa.md
+*.html
+scripts/
+restore-backups/
+deploy/RUNBOOK-post-reboot.md
+deploy/RESTORE-*.md
+
+# ── راز و پیکربندیِ محلی ──────────────────────────────────────────────────
+config.json
+config-*.json
+PASSWORD.txt
+*.sample.conf
+ansible/vault.yml
+ansible/inventory.ini
+docker/.env
+docker/secrets/
+**/wg-panel-rclone-*.conf
+**/wg-panel-s4-*.env
+
+# ── خروجی‌های بیلد و داده (بازگشتی: dist خودش ۷۷۷MB است) ────────────────
+docker/airgap/dist/
+docker/data/
+docker/bin/
+docker*.zip
+*.tar.gz
+*.tar
+wg-panel-airgap-*
+airgap/*/offline-repository/
+online/
+airgap/
+
+# ── زباله ─────────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+.DS_Store
+traffic.db*
+stats.json

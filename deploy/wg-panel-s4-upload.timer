@@ -1,0 +1,11 @@
+[Unit]
+Description=Nightly upload of wg-panel backup to MEGA S4
+
+[Timer]
+# ۲۵ دقیقه بعد از بکاپِ محلی (۰۴:۳۰) تا فایلِ latest آماده باشد
+OnCalendar=*-*-* 04:55:00
+RandomizedDelaySec=300
+Persistent=true
+
+[Install]
+WantedBy=timers.target

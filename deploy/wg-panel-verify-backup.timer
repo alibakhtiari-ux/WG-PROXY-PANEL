@@ -1,0 +1,10 @@
+[Unit]
+Description=Weekly wg-panel backup verification
+
+[Timer]
+OnCalendar=Sun *-*-* 05:30:00
+RandomizedDelaySec=600
+Persistent=true
+
+[Install]
+WantedBy=timers.target

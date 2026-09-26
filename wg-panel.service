@@ -1,0 +1,26 @@
+[Unit]
+Description=WireGuard monitoring panel (wg-panel)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /opt/wg-panel/wg_panel.py
+WorkingDirectory=/opt/wg-panel
+Restart=always
+RestartSec=3
+
+# سخت‌گیری: root لازم است (wg/کانفیگ‌ها) ولی دسترسی فایل‌سیستم محدود می‌شود
+NoNewPrivileges=yes
+ProtectHome=yes
+PrivateTmp=yes
+ProtectSystem=full
+ReadWritePaths=/etc/wireguard /opt/wg-panel
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,35 @@
+config.json
+PASSWORD.txt
+*.sample.conf
+stats.json
+__pycache__/
+traffic.db
+traffic.db-wal
+traffic.db-shm
+.DS_Store
+restore-backups/
+config-*.json
+*.tar.gz
+ansible/vault.yml
+# drop-inِ مقادیرِ خاصِ استقرار — فقط نمونه‌اش ردیابی می‌شود، چون
+# deploy/ هم منتشر می‌شود و هم داخلِ بسته‌های نصب می‌رود (§۲۹٫۹۸).
+deploy/wg-panel-deployment.conf
+ansible/inventory.ini
+docker/.env
+docker/data/
+docker/secrets/
+docker/bin/
+docker/airgap/dist/
+# آرشیوهای دستیِ Finder از پوشه‌ی docker (مثل docker.zip، ۷۷۴MB) — نه سورس‌اند نه باید در گیت بیایند
+docker*.zip
+# خروجی‌های بیلدِ بسته‌های آفلاینِ systemd (payload و tarball در گیت نمی‌آیند؛ اسکلت tracked می‌ماند)
+wg-panel-airgap-*.tar*
+airgap/*/offline-repository/apt/
+airgap/*/offline-repository/binaries/
+airgap/*/offline-repository/manifests/
+airgap/*/offline-repository/ansible/collections/
+scripts/wg-panel-rclone-*.conf
+scripts/wg-panel-s4-*.env
+.claude/settings.local.json
+.claude/worktrees/
+.claude/hooks/.last-server-change

@@ -1,0 +1,48 @@
+# ⚠️ این فایل امروز **هیچ‌جا اجرا نمی‌شود.**
+#
+# مخزن عمداً هیچ ریموتِ گیتی ندارد و روی هیچ میزبانی نیست، پس هیچ رانری این
+# را برنمی‌دارد. اگر روزی میزبانی شد، همین‌جا سبز/قرمز می‌دهد. تا آن روز
+# دروازه‌ی واقعی همان باتریِ محلیِ ده‌گامه است.
+#
+# چرا فقط سه گام و نه کلِ باتری: باتری در `.claude/skills/verify-battery/`
+# زندگی می‌کند و آن پوشه **لایه‌ی عملیاتیِ همین استقرار** است و در شاخه‌ی
+# `public` منتشر نمی‌شود. ورک‌فلویی که آن مسیر را صدا بزند روی شاخه‌ی عمومی
+# از روزِ اول قرمز است. کپیِ خلاصه‌ای از باتری هم ساخته نشد: این مخزن قبلاً
+# یاد گرفته که نسخه‌ی دوم دریفت می‌کند.
+#
+# سه گامِ زیر عمداً همان‌هایی‌اند که در یک کلونِ تمیز و بدونِ `.claude/`
+# واقعاً سبز می‌شوند.
+name: verify
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: unit tests
+        run: python3 -m unittest discover -s tests -v
+
+      - name: py_compile
+        run: python3 -m py_compile wg_panel.py
+
+      # همان جاروی گامِ ۴ باتری، بازنویسی‌شده تا به `.claude/` وابسته نباشد.
+      # نصاب‌ها و اسکریپت‌های docker/ را هیچ گیتِ دیگری اجرا نمی‌کند؛
+      # `bash -n` تنها دروازه‌شان است.
+      - name: bash -n
+        run: |
+          n=0
+          while IFS= read -r f; do
+            bash -n "$f" || { echo "::error file=$f::syntax error"; exit 1; }
+            n=$((n + 1))
+          done < <(find . -name '*.sh' -type f \
+                        -not -path './.git/*' -not -path '*/dist/*' | sort)
+          echo "$n shell scripts checked"
