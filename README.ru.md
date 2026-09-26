@@ -507,6 +507,9 @@ sudo systemctl enable --now wg-panel
 
 ```bash
 sudo install -m600 -o root -g root wg_panel.py /opt/wg-panel/wg_panel.py
+sudo install -m644 -t /opt/wg-panel qr.js three.module.min.js.gz three.core.min.js.gz
+sudo install -m644 wg-panel.service /etc/systemd/system/
+sudo systemctl daemon-reload
 sudo systemctl restart wg-panel
 ```
 
@@ -657,7 +660,7 @@ docker compose up -d --build
 |---|---|---|
 | `wg-panel-backup.sh` · `.service` · `.timer` | `/usr/local/sbin/` · `/etc/systemd/system/` | Ночной архив в 04:30 в `/var/backups/wg-panel/`, хранятся 14 |
 | `wg-panel-s4-upload.sh` · `.service` · `.timer` | туда же | Загружает архив в MEGA S4 через `rclone` в 04:55, **после чего удаляет локальную копию**. Нужны `/etc/wg-panel-s4.env` (`REMOTE`, `BUCKET`, необязательный `PREFIX`) и `/etc/wg-panel-rclone.conf` |
-| `wg-panel-verify-backup.sh` · `.service` · `.timer` | туда же | Еженедельная проверка загруженных резервных копий. Она также ожидает полную резервную копию хоста, которой нет в этом репозитории, поэтому сама по себе сообщает о сбое |
+| `wg-panel-verify-backup.sh` · `.service` · `.timer` | туда же | Еженедельная проверка загруженных резервных копий: свежесть, контрольная сумма, содержимое архива и целостность базы данных. Цепочка полных резервных копий хоста (её нет в этом репозитории) тоже проверяется, как только она хотя бы раз выполнила загрузку |
 | `wg-panel-oom.conf` | `/etc/systemd/system/wg-panel.service.d/` | Защищает панель от OOM killer |
 | `wg-quick-oom.conf` | `/etc/systemd/system/wg-quick@.service.d/` | То же для интерфейсов WireGuard |
 | `wg-panel.logrotate` | `/etc/logrotate.d/wg-panel` | Ежемесячная ротация `actions.log`, хранятся 12 |
@@ -776,8 +779,6 @@ scrape_configs:
   четырёх языков, получает персидский; добавьте один раз `?lang=en`, и выбор
   сохранится в cookie. Оповещения приходят на персидском, пока не назначен
   владелец бота.
-- **Часть текста в Telegram только на персидском:** описания команд в меню
-  бота и подписи периодического отчёта с картинками (`report`).
 - **Региональные настройки по умолчанию.** Docker-файл `.env.example` задаёт
   `TZ=Asia/Tehran`, `deploy/setup-deps.sh` устанавливает пакеты с иранского
   зеркала Ubuntu (только 24.04, amd64), а диагностика доступа к сервисам
@@ -843,17 +844,18 @@ Docker — `docker/data/panel/config.json`). Найдите учётную за�
 
 <br>
 
-Отдача ограничивается через устройство `ifb`. Юнит systemd не позволяет панели
-загружать модули ядра (`ProtectKernelModules=yes`), поэтому загружайте `ifb`
-при старте системы:
+Отдача ограничивается через устройство `ifb`. Юнит systemd загружает модуль
+`ifb` перед запуском панели, а в Docker его загружает на хосте
+`host-setup.sh`. Если у вас старая копия `wg-panel.service`, установите
+текущую или загружайте модуль при старте системы сами:
 
 ```bash
 echo ifb | sudo tee /etc/modules-load.d/ifb.conf
 sudo modprobe ifb
 ```
 
-Если ограничения отдачи применить не удаётся, панель пишет об этом в
-`actions.log`.
+Если `modprobe ifb` завершается ошибкой, в ядре нет модуля `ifb` и ограничения
+отдачи применить нельзя; панель пишет об этом в `actions.log`.
 
 </details>
 
@@ -945,7 +947,7 @@ python3 tests/check_js.py      # синтаксис JavaScript, нужен Node.
 | `.github/` | CI, процесс выпуска релизов, шаблоны issue и pull request |
 | `SECURITY.md` · `CONTRIBUTING.md` | Как сообщить об уязвимости и руководство для участников |
 | `README.*.md` | Этот README на персидском, русском и китайском |
-| `LICENSE` · `three.LICENSE.txt` | Лицензия проекта и лицензия three.js |
+| `three.LICENSE.txt` · `LICENSE` | Лицензия three.js и лицензия проекта |
 
 <a id="contributing"></a>
 

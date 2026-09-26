@@ -476,6 +476,9 @@ brought up to date automatically when the panel starts.
 
 ```bash
 sudo install -m600 -o root -g root wg_panel.py /opt/wg-panel/wg_panel.py
+sudo install -m644 -t /opt/wg-panel qr.js three.module.min.js.gz three.core.min.js.gz
+sudo install -m644 wg-panel.service /etc/systemd/system/
+sudo systemctl daemon-reload
 sudo systemctl restart wg-panel
 ```
 
@@ -613,7 +616,7 @@ The files in [deploy/](deploy/) go to these places:
 |---|---|---|
 | `wg-panel-backup.sh` · `.service` · `.timer` | `/usr/local/sbin/` · `/etc/systemd/system/` | Nightly archive at 04:30 in `/var/backups/wg-panel/`, 14 kept |
 | `wg-panel-s4-upload.sh` · `.service` · `.timer` | same | Uploads the archive to MEGA S4 with `rclone` at 04:55, **then deletes the local copy**. Needs `/etc/wg-panel-s4.env` (`REMOTE`, `BUCKET`, optional `PREFIX`) and `/etc/wg-panel-rclone.conf` |
-| `wg-panel-verify-backup.sh` · `.service` · `.timer` | same | Weekly check of the uploaded backups. It also expects a full-host backup that is not in this repository, so on its own it reports a failure |
+| `wg-panel-verify-backup.sh` · `.service` · `.timer` | same | Weekly check of the uploaded backups: freshness, checksum, archive contents and the database's integrity. A full-host backup chain (not in this repository) is checked too once it has uploaded |
 | `wg-panel-oom.conf` | `/etc/systemd/system/wg-panel.service.d/` | Makes the OOM killer spare the panel |
 | `wg-quick-oom.conf` | `/etc/systemd/system/wg-quick@.service.d/` | The same for the WireGuard interfaces |
 | `wg-panel.logrotate` | `/etc/logrotate.d/wg-panel` | Monthly rotation of `actions.log`, 12 kept |
@@ -720,8 +723,6 @@ If that matters on your server, here is what goes out and how to stop it:
 - **Persian is the fallback language.** A browser that asks for none of the
   four languages gets Persian; add `?lang=en` once and the choice is kept in a
   cookie. Alerts are in Persian until a bot owner is set.
-- **Some Telegram text is Persian only:** the descriptions in the bot's
-  command menu and the captions of the periodic picture report (`report`).
 - **Regional defaults.** The Docker `.env.example` sets `TZ=Asia/Tehran`,
   `deploy/setup-deps.sh` installs from an Iranian Ubuntu mirror (24.04, amd64
   only), and service diagnostics probe services that are blocked in Iran.
@@ -784,16 +785,18 @@ and add the proxy to `trusted_proxies` — see
 
 <br>
 
-Upload is shaped through an `ifb` device. The systemd unit does not allow the
-panel to load kernel modules (`ProtectKernelModules=yes`), so load `ifb` at
-boot:
+Upload is shaped through an `ifb` device. The systemd unit loads the `ifb`
+module before the panel starts, and with Docker `host-setup.sh` loads it on
+the host. If you use an older copy of `wg-panel.service`, install the current
+one, or load the module at boot yourself:
 
 ```bash
 echo ifb | sudo tee /etc/modules-load.d/ifb.conf
 sudo modprobe ifb
 ```
 
-The panel writes to `actions.log` when upload limits cannot be enforced.
+If `modprobe ifb` fails, the kernel has no `ifb` module and upload limits
+cannot be enforced; the panel writes this to `actions.log`.
 
 </details>
 
@@ -876,7 +879,7 @@ needs Node.js and Playwright, and compresses the images if Pillow is installed.
 | `.github/` | CI, release workflow, issue and pull request templates |
 | `SECURITY.md` · `CONTRIBUTING.md` | Vulnerability reporting and contribution guide |
 | `README.*.md` | This README in Persian, Russian and Chinese |
-| `LICENSE` · `three.LICENSE.txt` | The project's license and the three.js license |
+| `three.LICENSE.txt` · `LICENSE` | The three.js license and the project's license |
 
 ## Contributing
 

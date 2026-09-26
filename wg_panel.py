@@ -6670,6 +6670,46 @@ I18N = {
     "bot.lang.done": ("زبان به {name} تغییر کرد.", "Language changed to {name}.",
                       "Язык изменён на {name}.", "语言已切换为 {name}。"),
 
+    # ═══ رباتِ تلگرام — توضیحِ دستورهای منو (bot_setcommands) ═══
+    "bot.cmd.start": ("منو و شروع", "Start and main menu",
+                      "Запуск и главное меню", "开始与主菜单"),
+    "bot.cmd.menu": ("منوی اصلی", "Main menu", "Главное меню", "主菜单"),
+    "bot.cmd.addwg": ("ایجاد کاربر وایرگارد", "Create a WireGuard user",
+                      "Создать пользователя WireGuard", "创建 WireGuard 用户"),
+    "bot.cmd.addpx": ("ایجاد کاربر پروکسی", "Create a proxy user",
+                      "Создать пользователя прокси", "创建代理用户"),
+    "bot.cmd.wgusers": ("کاربران وایرگارد", "WireGuard users",
+                        "Пользователи WireGuard", "WireGuard 用户"),
+    "bot.cmd.pxusers": ("کاربران پروکسی", "Proxy users",
+                        "Пользователи прокси", "代理用户"),
+    "bot.cmd.live": ("کاربران آنلاین", "Online users",
+                     "Пользователи в сети", "在线用户"),
+    "bot.cmd.find": ("جست‌وجوی کاربر", "Find a user",
+                     "Найти пользователя", "查找用户"),
+    "bot.cmd.listexp": ("گزارش بر اساس انقضا", "Report by expiry date",
+                        "Отчёт по сроку действия", "按到期时间报告"),
+    "bot.cmd.listquota": ("گزارش بر اساس مصرف", "Report by usage",
+                          "Отчёт по расходу трафика", "按用量报告"),
+    "bot.cmd.digest": ("خلاصه‌ی وضعیت", "Status summary",
+                       "Сводка состояния", "状态摘要"),
+    "bot.cmd.speed": ("تست سرعت", "Speed test", "Тест скорости", "测速"),
+    "bot.cmd.backup": ("وضعیت پشتیبان‌گیری", "Backup status",
+                       "Состояние бэкапов", "备份状态"),
+    "bot.cmd.ecmp": ("گارد ECMP (سلامت مسیر تونل‌ها)",
+                     "ECMP guard (tunnel path health)",
+                     "Страж ECMP (исправность маршрутов туннелей)",
+                     "ECMP 守护（隧道路径健康）"),
+    "bot.cmd.warp": ("مسیریابی WARP (سرویس‌های هوش‌مصنوعی)",
+                     "WARP routing (AI services)",
+                     "Маршрутизация WARP (ИИ-сервисы)",
+                     "WARP 路由（AI 服务）"),
+    "bot.cmd.botusers": ("کاربران ربات", "Bot users",
+                         "Пользователи бота", "机器人用户"),
+    "bot.cmd.cancel": ("لغو کار جاری", "Cancel the current action",
+                       "Отменить текущее действие", "取消当前操作"),
+    "bot.cmd.botwatch": ("پایش کاربران بات", "Bot user activity",
+                         "Активность пользователей бота", "机器人用户活动"),
+
     # ═══ رباتِ تلگرام — کلید از نامِ متدِ دربرگیرنده ═══
     # ── apply ──
     "bot.apply.1": ("مجوزِ این کار را ندارید.",
@@ -8575,6 +8615,26 @@ I18N = {
     "alert.digest.disk": ("دیسک:", "Disk:", "Диск:", "磁盘："),
     "alert.digest.backup": ("بکاپ", "Backups", "Бэкапы", "备份"),
     "alert.digest.stale": ("کهنه", "stale", "устарел", "过期"),
+    # ── build_report_photos (گزارشِ تصویریِ دوره‌ای) ──
+    "alert.report.title": ("📊 گزارشِ دوره‌ایِ {p0}", "📊 Periodic report: {p0}",
+                           "📊 Периодический отчёт: {p0}", "📊 定期报告：{p0}"),
+    "alert.report.wan": ("ترافیکِ WAN ({p0}) — ۷ روزِ اخیر",
+                         "WAN traffic ({p0}) — last 7 days",
+                         "Трафик WAN ({p0}) — последние 7 дней",
+                         "WAN 流量（{p0}）— 最近 7 天"),
+    "alert.report.total": ("مجموع: {p0}", "Total: {p0}", "Всего: {p0}", "合计：{p0}"),
+    "alert.report.top": ("🏆 پرمصرف‌ترین کاربرانِ ۷ روزِ اخیر",
+                         "🏆 Top users of the last 7 days",
+                         "🏆 Самые активные пользователи за 7 дней",
+                         "🏆 最近 7 天用量最高的用户"),
+    "alert.report.speed": ("🚀 روندِ تستِ سرعت — ۷ روزِ اخیر ({p0} تست)",
+                           "🚀 Speed test trend — last 7 days ({p0} tests)",
+                           "🚀 Динамика скорости — последние 7 дней (тестов: {p0})",
+                           "🚀 测速趋势 — 最近 7 天（{p0} 次测试）"),
+    "alert.report.avg": ("میانگین: {p0} / {p1} Mbit/s", "Average: {p0} / {p1} Mbit/s",
+                         "В среднем: {p0} / {p1} Мбит/с", "平均：{p0} / {p1} Mbit/s"),
+    "alert.report.partial": ("بخشی از عکس‌ها ارسال نشد", "Some of the images were not sent",
+                             "Часть изображений не отправлена", "部分图片未发送"),
     "alert.digest.speed": ("سرعتِ {p0}:", "Speed {p0}:", "Скорость {p0}:", "{p0} 速度："),
     "alert.digest.expiring": ("نزدیکِ انقضا (تا {p0} روز)", "Expiring soon (within {p0} days)",
                               "Скоро истекают (в течение {p0} дней)", "即将到期（{p0} 天内）"),
@@ -16423,6 +16483,16 @@ def build_report_photos():
     هر بخش مستقل است؛ خطای یکی بقیه را حذف نمی‌کند."""
     photos = []
     label = _host_label()
+    lang = alert_lang()
+    fa = lang in LANG_FA_DIGITS
+
+    def n(x):
+        return _fa_num(x) if fa else str(x)
+
+    def caption(lines):
+        # RLM فقط برای زبانِ راست‌به‌چپ؛ در en/ru/zh خطوط چپ‌چین می‌مانند
+        return (_rtl_lines(lines) if LANG_DIR.get(lang) == "rtl"
+                else "\n".join(lines))
     try:
         st = build_stats()
         wan = next((i for i in st["interfaces"]
@@ -16435,10 +16505,10 @@ def build_report_photos():
                 png = render_chart_png(
                     [(vals, (88, 166, 255), "TOTAL/DAY")], x_labels=xl,
                     title="WAN %s - 7D" % wan["iface"].upper(), bars=True)
-                photos.append((png, _rtl_lines([
-                    "📊 گزارشِ دوره‌ایِ %s" % label,
-                    "ترافیکِ WAN (%s) — ۷ روزِ اخیر" % wan["iface"],
-                    "مجموع: %s" % fmt_bytes_srv(sum(vals))])))
+                photos.append((png, caption([
+                    A("alert.report.title", p0=label),
+                    A("alert.report.wan", p0=wan["iface"]),
+                    A("alert.report.total", p0=fmt_bytes_srv(sum(vals)))])))
     except Exception as e:
         log_action("report wan error: %r" % e)
     try:
@@ -16455,20 +16525,20 @@ def build_report_photos():
                 agg[nm] = agg.get(nm, 0) + sum(byb.values())
         top = sorted(agg.items(), key=lambda kv: kv[1], reverse=True)[:5]
         if top:
-            def ascii_name(n):
-                return ("".join(ch for ch in n if ord(ch) < 128)
+            def ascii_name(nm):
+                return ("".join(ch for ch in nm if ord(ch) < 128)
                         or "user")[:10]
             vals = [v for _, v in top]
-            xl = [((i + 0.5) / len(top), ascii_name(n))
-                  for i, (n, _) in enumerate(top)]
+            xl = [((i + 0.5) / len(top), ascii_name(nm))
+                  for i, (nm, _) in enumerate(top)]
             png = render_chart_png(
                 [(vals, (63, 185, 80), "7D TOTAL")], x_labels=xl,
                 title="TOP USERS - 7D", bars=True)
-            cap = ["🏆 پرمصرف‌ترین کاربرانِ ۷ روزِ اخیر"]
-            for i, (n, v) in enumerate(top):
+            cap = [A("alert.report.top")]
+            for i, (nm, v) in enumerate(top):
                 cap.append("%s) %s — %s"
-                           % (_fa_num(i + 1), n, fmt_bytes_srv(v)))
-            photos.append((png, _rtl_lines(cap)))
+                           % (n(i + 1), nm, fmt_bytes_srv(v)))
+            photos.append((png, caption(cap)))
     except Exception as e:
         log_action("report top error: %r" % e)
     try:
@@ -16486,12 +16556,11 @@ def build_report_photos():
                 [(dn, (63, 185, 80), "DOWN"), (up, (88, 166, 255), "UP")],
                 x_labels=xl, y_fmt=_fmt_mbps_ascii,
                 title="SPEEDTEST - 7D")
-            photos.append((png, _rtl_lines([
-                "🚀 روندِ تستِ سرعت — ۷ روزِ اخیر (%s تست)"
-                % _fa_num(len(rows)),
-                "میانگین: %s / %s Mbit/s"
-                % (_fa_num("%.0f" % (sum(dn) / len(dn))),
-                   _fa_num("%.0f" % (sum(up) / len(up))))])))
+            photos.append((png, caption([
+                A("alert.report.speed", p0=n(len(rows))),
+                A("alert.report.avg",
+                  p0=n("%.0f" % (sum(dn) / len(dn))),
+                  p1=n("%.0f" % (sum(up) / len(up))))])))
     except Exception as e:
         log_action("report speed error: %r" % e)
     return photos
@@ -16512,7 +16581,7 @@ def send_periodic_report():
                           photo=("report.png", png), iface=c["iface"])
         okall = okall and ok
         time.sleep(1)   # احترام به نرخِ تلگرام
-    return okall, "ارسال شد" if okall else "بخشی از عکس‌ها ارسال نشد"
+    return okall, "api.ok.sent" if okall else "alert.report.partial"
 WARP_EP_IP = "162.159.192.1"                       # endpointِ ثابتِ wgwarp
 WARP_GUARD_STATE = "/opt/wg-panel/warp-guard.state"  # egress/rule برای sync.sh
 WARP_GUARD_HEARTBEAT = "/opt/wg-panel/warp-guard.active"  # تازه = گارد زنده
@@ -19605,6 +19674,8 @@ class TelegramBot(threading.Thread):
         if not bot_set_lang(frm, code):
             return
         self._lang = norm_lang(code) or DEFAULT_LANG
+        # منوی دستورها هم به زبانِ تازه (و اگر مالک بود، منوی پیش‌فرض هم)
+        threading.Thread(target=bot_setcommands, daemon=True).start()
         self.send(chat, self._rtl(self.T("bot.lang.done",
                                          name=LANG_LABEL[self._lang])))
         self._main_menu(chat, frm)
@@ -21902,40 +21973,49 @@ def request_login_approval(user, ip):
 
 
 def bot_setcommands():
-    """منوی دستورِ ربات را در تلگرام ثبت می‌کند (دکمه‌ی Menu).
-    مالک(ها) منوی ویژه‌ی چتِ خودشان را می‌گیرند (scope=chat) که در انتها
-    «پایش کاربران بات» دارد — بقیه این دستور را اصلاً نمی‌بینند."""
+    """منوی دستورِ ربات را در تلگرام ثبت می‌کند (دکمه‌ی Menu)، به زبانِ هر کاربر.
+
+    دو لایه؛ تلگرام خاص‌ترین را نشان می‌دهد:
+      ۱. پیش‌فرض (همه‌ی چت‌ها): زبانِ مالک، همان زبانِ هشدارها؛
+      ۲. scope=chat برای هر کاربرِ مجاز: زبانی که با /lang برگزیده، تا منو
+         همان زبانِ پاسخ‌های ربات باشد. مالک(ها) در انتها «پایش کاربران
+         بات» را هم می‌گیرند — بقیه این دستور را اصلاً نمی‌بینند.
+    پیش‌تر توضیح‌ها ثابت و فارسی بودند، در هر زبانی که کاربر انتخاب کرده بود.
+    """
     tok = alert_cfg()["bot_token"]
     if not (tok and bot_cfg()["enabled"]):
         return
-    cmds = [("start", "منو و شروع"), ("menu", "منوی اصلی"),
-            ("addwg", "ایجاد کاربر وایرگارد"),
-            ("addpx", "ایجاد کاربر پروکسی"),
-            ("wgusers", "کاربران وایرگارد"), ("pxusers", "کاربران پروکسی"),
-            ("live", "کاربران آنلاین"), ("find", "جست‌وجوی کاربر"),
-            ("listexp", "گزارش بر اساس انقضا"),
-            ("listquota", "گزارش بر اساس مصرف"),
-            ("digest", "خلاصه‌ی وضعیت"), ("speed", "تست سرعت"),
-            ("backup", "وضعیت پشتیبان‌گیری"),
-            ("ecmp", "گارد ECMP (سلامت مسیر تونل‌ها)"),
-            ("warp", "مسیریابی WARP (سرویس‌های هوش‌مصنوعی)"),
-            ("botusers", "کاربران ربات"),
-            ("cancel", "لغو کار جاری")]
+    cmds = [("start", "bot.cmd.start"), ("menu", "bot.cmd.menu"),
+            ("addwg", "bot.cmd.addwg"),
+            ("addpx", "bot.cmd.addpx"),
+            ("wgusers", "bot.cmd.wgusers"), ("pxusers", "bot.cmd.pxusers"),
+            ("live", "bot.cmd.live"), ("find", "bot.cmd.find"),
+            ("listexp", "bot.cmd.listexp"),
+            ("listquota", "bot.cmd.listquota"),
+            ("digest", "bot.cmd.digest"), ("speed", "bot.cmd.speed"),
+            ("backup", "bot.cmd.backup"),
+            ("ecmp", "bot.cmd.ecmp"),
+            ("warp", "bot.cmd.warp"),
+            ("botusers", "bot.cmd.botusers"),
+            ("cancel", "bot.cmd.cancel")]
+    own = cmds + [("botwatch", "bot.cmd.botwatch")]
     ifc = alert_cfg()["iface"]
-    tg_api(tok, "setMyCommands",
-           {"commands": [{"command": c, "description": d} for c, d in cmds]},
-           iface=ifc)
-    own = cmds + [("botwatch", "پایش کاربران بات")]
+
+    def put(items, lang, scope=None):
+        p = {"commands": [{"command": c, "description": t(k, lang)}
+                          for c, k in items]}
+        if scope:
+            p["scope"] = scope
+        tg_api(tok, "setMyCommands", p, iface=ifc)
+
+    put(cmds, alert_lang())
     for u in bot_cfg()["users"]:
-        if u.get("role") != "owner":
-            continue
         try:
             cid = int(str(u.get("id")))
         except (TypeError, ValueError):
             continue
-        tg_api(tok, "setMyCommands",
-               {"commands": [{"command": c, "description": d} for c, d in own],
-                "scope": {"type": "chat", "chat_id": cid}}, iface=ifc)
+        put(own if u.get("role") == "owner" else cmds, bot_lang(cid),
+            {"type": "chat", "chat_id": cid})
 
 
 BOT = TelegramBot()
@@ -33329,8 +33409,16 @@ class Handler(BaseHTTPRequestHandler):
                         role not in (CONFIG.get("roles") or {}):
                     self._json({"ok": False, "error": aerr("api.err.bot.role_bad", role=role)})
                     return
-                users.append({"id": tid, "role": role,
-                              "name": str(u.get("name", ""))[:40]})
+                row = {"id": tid, "role": role,
+                       "name": str(u.get("name", ""))[:40]}
+                # زبانی که کاربر با /lang برگزیده در فرمِ پنل نیست؛ بدونِ این
+                # هر ذخیره آن را پاک می‌کرد و ربات، منو و (برای مالک) هشدارها
+                # بی‌صدا به فارسی برمی‌گشتند.
+                prev = next((x for x in bot_cfg()["users"]
+                             if str(x.get("id")) == tid), {})
+                if norm_lang(prev.get("lang")):
+                    row["lang"] = prev["lang"]
+                users.append(row)
             oerr = bot_owner_violation(users)
             if oerr:
                 self._json({"ok": False, "error": oerr})

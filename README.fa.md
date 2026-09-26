@@ -486,6 +486,9 @@ sudo systemctl enable --now wg-panel
 
 ```bash
 sudo install -m600 -o root -g root wg_panel.py /opt/wg-panel/wg_panel.py
+sudo install -m644 -t /opt/wg-panel qr.js three.module.min.js.gz three.core.min.js.gz
+sudo install -m644 wg-panel.service /etc/systemd/system/
+sudo systemctl daemon-reload
 sudo systemctl restart wg-panel
 ```
 
@@ -627,7 +630,7 @@ docker compose up -d --build
 |---|---|---|
 | `wg-panel-backup.sh` · `.service` · `.timer` | `/usr/local/sbin/` · `/etc/systemd/system/` | آرشیوِ شبانه ساعتِ 04:30 در `/var/backups/wg-panel/`، ۱۴ نسخه نگه داشته می‌شود |
 | `wg-panel-s4-upload.sh` · `.service` · `.timer` | همان | ساعتِ 04:55 آرشیو را با `rclone` به MEGA S4 آپلود می‌کند و **سپس نسخه‌ی محلی را پاک می‌کند**. به `/etc/wg-panel-s4.env` (`REMOTE`، `BUCKET` و `PREFIX` ِ اختیاری) و `/etc/wg-panel-rclone.conf` نیاز دارد |
-| `wg-panel-verify-backup.sh` · `.service` · `.timer` | همان | بررسیِ هفتگیِ بکاپ‌های آپلودشده. یک بکاپِ کاملِ میزبان را هم انتظار دارد که در این مخزن نیست، پس به‌تنهایی خطا گزارش می‌کند |
+| `wg-panel-verify-backup.sh` · `.service` · `.timer` | همان | بررسیِ هفتگیِ بکاپ‌های آپلودشده: تازگی، checksum، محتوای آرشیو و سلامتِ دیتابیس. زنجیره‌ی بکاپِ کاملِ میزبان (که در این مخزن نیست) هم از وقتی که دست‌کم یک بار آپلود کرده باشد سنجیده می‌شود |
 | `wg-panel-oom.conf` | `/etc/systemd/system/wg-panel.service.d/` | پنل را از OOM killer در امان نگه می‌دارد |
 | `wg-quick-oom.conf` | `/etc/systemd/system/wg-quick@.service.d/` | همین کار برای اینترفیس‌های WireGuard |
 | `wg-panel.logrotate` | `/etc/logrotate.d/wg-panel` | چرخشِ ماهانه‌ی `actions.log`، ۱۲ نسخه |
@@ -743,8 +746,6 @@ Prometheus را به آن اضافه کنید.
 - **فارسی زبانِ پیش‌فرض است.** مرورگری که هیچ‌کدام از چهار زبان را نخواهد فارسی
   می‌گیرد؛ یک بار `?lang=en` را اضافه کنید تا انتخاب در کوکی بماند. هشدارها تا
   وقتی مالکِ ربات تعیین نشده فارسی‌اند.
-- **بعضی متن‌های تلگرام فقط فارسی‌اند:** توضیحاتِ منوی دستورهای ربات و
-  زیرنویسِ گزارشِ تصویریِ دوره‌ای (`report`).
 - **پیش‌فرض‌های منطقه‌ای.** `.env.example` ِ Docker مقدارِ `TZ=Asia/Tehran` را
   دارد، `deploy/setup-deps.sh` از یک mirror ِ ایرانیِ اوبونتو نصب می‌کند (فقط
   24.04 و amd64)، و تشخیصِ مسیرِ سرویس‌ها سرویس‌هایی را می‌سنجد که در ایران
@@ -809,16 +810,18 @@ Prometheus را به آن اضافه کنید.
 
 <br>
 
-آپلود از طریقِ یک دستگاهِ `ifb` شکل‌دهی می‌شود. یونیتِ systemd اجازه‌ی بارگذاریِ
-ماژولِ کرنل را به پنل نمی‌دهد (`ProtectKernelModules=yes`)، پس `ifb` را هنگامِ
-بوت بارگذاری کنید:
+آپلود از طریقِ یک دستگاهِ `ifb` شکل‌دهی می‌شود. یونیتِ systemd ماژولِ `ifb` را
+پیش از شروعِ پنل بارگذاری می‌کند، و در Docker ‏`host-setup.sh` آن را روی میزبان
+بارگذاری می‌کند. اگر نسخه‌ی قدیمی‌ترِ `wg-panel.service` را دارید، نسخه‌ی فعلی را
+نصب کنید، یا ماژول را خودتان هنگامِ بوت بارگذاری کنید:
 
 ```bash
 echo ifb | sudo tee /etc/modules-load.d/ifb.conf
 sudo modprobe ifb
 ```
 
-وقتی محدودیتِ آپلود اعمال نشود، پنل آن را در `actions.log` می‌نویسد.
+اگر `modprobe ifb` شکست بخورد، کرنل ماژولِ `ifb` ندارد و محدودیتِ آپلود اعمال
+نمی‌شود؛ پنل این را در `actions.log` می‌نویسد.
 
 </details>
 
@@ -907,7 +910,7 @@ Pillow نصب باشد تصاویر را فشرده می‌کند.
 | `.github/` | CI، گردش‌کارِ release، و قالب‌های issue و pull request |
 | `SECURITY.md` · `CONTRIBUTING.md` | گزارشِ آسیب‌پذیری و راهنمای مشارکت |
 | `README.*.md` | همین README به فارسی، روسی و چینی |
-| `LICENSE` · `three.LICENSE.txt` | مجوزِ پروژه و مجوزِ three.js |
+| `three.LICENSE.txt` · `LICENSE` | مجوزِ three.js و مجوزِ پروژه |
 
 <a id="contributing"></a>
 

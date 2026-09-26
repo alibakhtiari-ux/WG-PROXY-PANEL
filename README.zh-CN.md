@@ -444,6 +444,9 @@ peer `Endpoint` 的配置被视为客户端接口，其余所有 `wg*` 配置则
 
 ```bash
 sudo install -m600 -o root -g root wg_panel.py /opt/wg-panel/wg_panel.py
+sudo install -m644 -t /opt/wg-panel qr.js three.module.min.js.gz three.core.min.js.gz
+sudo install -m644 wg-panel.service /etc/systemd/system/
+sudo systemctl daemon-reload
 sudo systemctl restart wg-panel
 ```
 
@@ -579,7 +582,7 @@ WireGuard 客户端一样拥有配额、限速和到期日期。
 |---|---|---|
 | `wg-panel-backup.sh` · `.service` · `.timer` | `/usr/local/sbin/` · `/etc/systemd/system/` | 每晚 04:30 在 `/var/backups/wg-panel/` 中生成归档，保留 14 份 |
 | `wg-panel-s4-upload.sh` · `.service` · `.timer` | 同上 | 04:55 用 `rclone` 把归档上传到 MEGA S4，**然后删除本地副本**。需要 `/etc/wg-panel-s4.env`（`REMOTE`、`BUCKET`，可选 `PREFIX`）和 `/etc/wg-panel-rclone.conf` |
-| `wg-panel-verify-backup.sh` · `.service` · `.timer` | 同上 | 每周检查已上传的备份。它还要求存在一份不在本仓库中的整机备份，因此单独使用时会报告失败 |
+| `wg-panel-verify-backup.sh` · `.service` · `.timer` | 同上 | 每周检查已上传的备份：新鲜度、校验和、归档内容以及数据库完整性。整机备份链（不在本仓库中）在至少上传过一次之后也会被检查 |
 | `wg-panel-oom.conf` | `/etc/systemd/system/wg-panel.service.d/` | 让 OOM killer 不杀死面板 |
 | `wg-quick-oom.conf` | `/etc/systemd/system/wg-quick@.service.d/` | 对 WireGuard 接口做同样的保护 |
 | `wg-panel.logrotate` | `/etc/logrotate.d/wg-panel` | 每月轮转 `actions.log`，保留 12 份 |
@@ -685,8 +688,6 @@ scrape_configs:
 - **波斯语是后备语言。** 如果浏览器请求的语言不在四种语言之列，就会显示波斯语；
   添加一次 `?lang=en`，选择就会保存在 Cookie 中。在设置机器人所有者之前，告警
   使用波斯语。
-- **部分 Telegram 文本仅有波斯语：** 机器人命令菜单中的说明，以及定期图片报告
-  （`report`）的图片说明。
 - **地区性默认值。** Docker 的 `.env.example` 设置了 `TZ=Asia/Tehran`，
   `deploy/setup-deps.sh` 从伊朗的 Ubuntu 镜像安装（仅 24.04、amd64），服务诊断
   探测的是在伊朗被封锁的服务。请根据你的服务器修改这些设置。
@@ -746,15 +747,17 @@ scrape_configs:
 
 <br>
 
-上传通过 `ifb` 设备限速。systemd 单元不允许面板加载内核模块
-（`ProtectKernelModules=yes`），因此请在开机时加载 `ifb`：
+上传通过 `ifb` 设备限速。systemd 单元会在面板启动前加载 `ifb` 模块；使用
+Docker 时，`host-setup.sh` 会在宿主机上加载它。如果你用的是旧版
+`wg-panel.service`，请安装当前版本，或自行在开机时加载该模块：
 
 ```bash
 echo ifb | sudo tee /etc/modules-load.d/ifb.conf
 sudo modprobe ifb
 ```
 
-当上传限速无法生效时，面板会写入 `actions.log`。
+如果 `modprobe ifb` 失败，说明内核没有 `ifb` 模块，上传限速无法生效；面板会将此
+写入 `actions.log`。
 
 </details>
 
@@ -838,7 +841,7 @@ Docker 构建上下文；测试数据使用 RFC 5737 文档地址。本仓库中
 | `.github/` | CI、发布工作流、issue 和 pull request 模板 |
 | `SECURITY.md` · `CONTRIBUTING.md` | 漏洞报告与贡献指南 |
 | `README.*.md` | 本 README 的波斯语、俄语和中文版本 |
-| `LICENSE` · `three.LICENSE.txt` | 本项目的许可证和 three.js 的许可证 |
+| `three.LICENSE.txt` · `LICENSE` | three.js 的许可证和本项目的许可证 |
 
 <a id="contributing"></a>
 

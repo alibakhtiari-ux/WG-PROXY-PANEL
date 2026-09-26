@@ -43,6 +43,14 @@ else
     say "   (Ubuntu 22.04+ has it in-kernel; check custom kernels.)"
     exit 1
 fi
+# ifb: شکل‌دهیِ آپلودِ محدودیتِ سرعت. کانتینر نمی‌تواند لودش کند، و بدونِ آن
+# محدودیتِ آپلود اعمال نمی‌شود. اختیاری است: نبودنش مانعِ نصب نیست.
+modprobe ifb 2>/dev/null || true
+if [ -e /sys/module/ifb ]; then
+    echo ifb > /etc/modules-load.d/ifb.conf
+else
+    say "⚠️ The ifb module would not load — per-client upload limits will not apply. · ماژولِ ifb لود نشد؛ محدودیتِ آپلود اعمال نمی‌شود."
+fi
 
 # ---------- پیش‌بررسیِ پورت‌ها ----------
 _env_get() {  # $1 = KEY، $2 = پیش‌فرض — از .env کنارِ همین اسکریپت
