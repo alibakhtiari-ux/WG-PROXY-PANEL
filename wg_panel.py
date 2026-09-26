@@ -9320,9 +9320,35 @@ HEARTBEAT_MAX_AGE = {
 }
 
 
+# نامِ ضربانِ نخِ جاری، تا کارهای طولانیِ داخلِ یک دور هم بتوانند «هنوز
+# زنده‌ام» بگویند (_heartbeat_progress).
+_HB_TLS = threading.local()
+
+
 def _heartbeat(name):
+    _HB_TLS.name = name
     with _HEARTBEAT_LOCK:
         _HEARTBEAT[name] = time.time()
+
+
+def _heartbeat_progress():
+    """ضربانِ میانِ‌دور برای نخی که _heartbeat زده است؛ در بقیه‌ی نخ‌ها no-op.
+
+    سقفِ HEARTBEAT_MAX_AGE برای «یک دورِ عادی» تنظیم شده، نه یک دورِ
+    **خرابی**. ربات در یک دور getUpdates را با timeout ِ ۴۵ ثانیه روی همه‌ی
+    مسیرهای نامزد (مستقیم + هر تونلِ فعال) امتحان می‌کند؛ وقتی تلگرام
+    فیلتر است، با سه تونل همین یک دور از ۱۸۰ ثانیه می‌گذشت و /api/health و
+    متریکِ panel_thread_alive نخِ سالمِ ربات را «مرده» گزارش می‌کردند —
+    دقیقاً همان وقتی که اپراتور دنبالِ علتِ واقعی است. alertmon هم با
+    سنجش‌های subprocess‌ای (هر کدام تا ۲۰ ثانیه) در دورِ خرابی به همین سقف
+    می‌رسید. به‌جای بزرگ‌کردنِ سقف (که مرگِ واقعی را دیرتر نشان می‌دهد)،
+    هر تلاشِ شبکه/subprocess پیشرفت را ثبت می‌کند؛ سقف حالا فقط باید از
+    **یک** فراخوانی بلندتر باشد.
+    """
+    name = getattr(_HB_TLS, "name", None)
+    if name:
+        with _HEARTBEAT_LOCK:
+            _HEARTBEAT[name] = time.time()
 
 
 def health_report():
@@ -9593,6 +9619,7 @@ def wg_pubkey(priv, timeout=10):
 
 def run(cmd, timeout=20):
     """اجرای دستور؛ خروجی (rc, stdout, stderr)."""
+    _heartbeat_progress()
     try:
         p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         return p.returncode, p.stdout, p.stderr
@@ -15760,6 +15787,7 @@ def tg_api(token, method, params=None, photo=None, iface="", timeout=20,
                % (token, method, TG_HOST, len(payload))).encode() + payload
     last = "no attempt"
     for ifc in tg_iface_candidates(iface):
+        _heartbeat_progress()           # هر مسیر تا timeout طول می‌کشد
         try:
             st, data = _https_raw_over_iface(TG_HOST, 443, req, ifc, timeout)
             try:
@@ -15781,6 +15809,7 @@ def tg_api(token, method, params=None, photo=None, iface="", timeout=20,
                 except (TypeError, ValueError):
                     wait = 1
                 time.sleep(wait)
+                _heartbeat_progress()
                 st, data = _https_raw_over_iface(TG_HOST, 443, req, ifc, timeout)
                 try:
                     obj = json.loads(data.decode("utf-8", "replace"))

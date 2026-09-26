@@ -11461,6 +11461,46 @@ class ProductMonitoringTests(unittest.TestCase):
         m._STARTED_AT = time.time()
         self.assertTrue(m.health_report()["threads"]["bot"]["ok"])
 
+    def test_a_long_failing_telegram_cycle_keeps_the_bot_alive(self):
+        """دورِ خرابی (تلگرامِ فیلتر روی چند مسیر) نباید نخ را «مرده» کند.
+
+        هر مسیرِ نامزد تا timeout طول می‌کشد؛ با چند تونل یک دورِ getUpdates
+        از سقفِ ۱۸۰ ثانیه می‌گذشت. هر تلاش باید پیشرفت را ثبت کند — و فقط
+        برای نخی که خودش ضربان می‌زند.
+        """
+        m = self.m
+        m._HEARTBEAT.clear()
+        m._STARTED_AT = time.time() - 3600
+        m.tg_iface_candidates = lambda explicit="": ["", "wg21", "wg22", "wg23"]
+        tried = []
+
+        def down(host, port, req, iface, timeout):
+            # هر تلاش «۶۰ ثانیه» طول می‌کشد: ضربانِ قبلی را عقب می‌بریم
+            with m._HEARTBEAT_LOCK:
+                m._HEARTBEAT["bot"] -= 60
+            tried.append(iface)
+            raise OSError("timed out")
+        m._https_raw_over_iface = down
+
+        def bot_loop():
+            m._heartbeat("bot")
+            m.tg_api("T", "getUpdates", {"timeout": 30}, timeout=45)
+        t = threading.Thread(target=bot_loop)
+        t.start(); t.join()
+        self.assertEqual(len(tried), 4)
+        self.assertTrue(m.health_report()["threads"]["bot"]["ok"],
+                        m.health_report()["threads"]["bot"])
+        # نخِ بی‌نام (مثلاً درخواستِ وب) ضربانِ کسی را نمی‌زند
+        with m._HEARTBEAT_LOCK:
+            m._HEARTBEAT["bot"] = time.time() - 999
+        t = threading.Thread(target=lambda: m.tg_api("T", "getMe"))
+        t.start(); t.join()
+        self.assertFalse(m.health_report()["threads"]["bot"]["ok"])
+        # run() هم پیشرفت ثبت می‌کند (همان تابعی که alertmon صدا می‌زند)
+        src = _read_panel_source()
+        seg = src[src.index("def run(cmd, timeout=20):"):][:300]
+        self.assertIn("_heartbeat_progress()", seg)
+
     def test_every_background_loop_beats(self):
         """هر نخی که health می‌سنجد باید در سورس ضربان بزند — وگرنه health
         همیشه آن را مرده می‌بیند (یا برعکس، نخی بی‌ناظر می‌ماند)."""
