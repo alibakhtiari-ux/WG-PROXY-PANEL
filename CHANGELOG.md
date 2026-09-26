@@ -11,6 +11,8 @@ prints as its version.
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-09-26
+
 ### Added
 
 - `trusted_proxies` in `config.json`: when the panel runs behind a reverse
@@ -219,6 +221,7 @@ prints as its version.
 
 First public release.
 
-[Unreleased]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/compare/81faf06...v1.1.0
 [1.0.0]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/commit/81faf06
