@@ -181,7 +181,8 @@ class TestServiceUnitCaps(unittest.TestCase):
 
     def test_unit_has_net_bind_service(self):
         path = os.path.join(_D, "warp-sni-splitter.service")
-        txt = open(path, encoding="utf-8").read()
+        with open(path, encoding="utf-8") as f:
+            txt = f.read()
         amb = [l for l in txt.splitlines()
                if l.strip().startswith("AmbientCapabilities=")]
         self.assertTrue(amb, "AmbientCapabilities تعریف نشده")
@@ -191,7 +192,8 @@ class TestServiceUnitCaps(unittest.TestCase):
 
     def test_quic_port_set_in_unit(self):
         path = os.path.join(_D, "warp-sni-splitter.service")
-        txt = open(path, encoding="utf-8").read()
+        with open(path, encoding="utf-8") as f:
+            txt = f.read()
         self.assertIn("WSS_QUIC_PORT=", txt)
 
 
