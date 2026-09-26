@@ -99,7 +99,8 @@
 > این تصاویر از یک پنلِ واقعیِ در حالِ اجرا گرفته شده‌اند که با **داده‌ی
 > ساختگی** پر شده است: نام‌های ساختگی برای کاربران، کلیدهای تولیدشده، دامنه‌ی
 > نمونه‌ی `vpn.example.com` و آدرس‌های IP از بازه‌های مستندسازیِ RFC 5737. هیچ
-> سرور، کاربر یا کلیدِ واقعی‌ای در آن‌ها نیست.
+> سرور، کاربر یا کلیدِ واقعی‌ای در آن‌ها نیست. همه‌شان با
+> `python3 demo/screenshots.py` از نو ساخته می‌شوند.
 
 <a id="features"></a>
 
@@ -383,6 +384,15 @@ cd docker/airgap && bash build-offline-bundle.sh --arch amd64
 
 ## نصب با systemd
 
+پنل و یونیتش را از [آخرین release](https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/releases/latest) دانلود کنید و با checksumهای
+منتشرشده بسنجید (کلون‌کردنِ مخزن هم کار می‌کند):
+
+```bash
+base=https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/releases/latest/download
+curl -fLO "$base/wg_panel.py" -O "$base/wg-panel.service" -O "$base/SHA256SUMS"
+sha256sum -c SHA256SUMS
+```
+
 پنل پیکربندیِ خودش را **نمی‌سازد**: فایلِ `config.json` را از همان پوشه‌ای که
 `wg_panel.py` در آن است می‌خوانَد و بدونِ آن اجرا نمی‌شود. فایل و یونیت را نصب
 کنید:
@@ -421,12 +431,17 @@ sudo systemctl enable --now wg-panel
 `config.json` و داده‌های `traffic.db` حفظ می‌شوند؛ پیکربندی‌های قدیمی‌تر هنگامِ
 شروعِ پنل خودکار به‌روز می‌شوند.
 
-**با systemd:**
+**با systemd:** release ِ جدید را مثلِ بالا دانلود کنید، همراه با بررسیِ
+`sha256sum -c`، سپس:
 
 ```bash
 sudo install -m600 -o root -g root wg_panel.py /opt/wg-panel/wg_panel.py
 sudo systemctl restart wg-panel
 ```
+
+برای دیدنِ build ای که روی سرور اجرا می‌شود، خروجیِ
+`sha256sum /opt/wg-panel/wg_panel.py | cut -c1-12` را با build id ِ یادداشتِ
+release مقایسه کنید. تغییراتِ هر نسخه در [CHANGELOG.md](CHANGELOG.md) آمده است.
 
 **با Docker:** کدِ جدید را روی سرور بیاورید (`git pull`)، سپس در پوشه‌ی
 `docker/`:
@@ -576,6 +591,13 @@ python3 tests/check_js.py      # نحوِ JavaScript، نیازمندِ Node.js
 > `tests/check_js.py` (که CI هم اجرایش می‌کند) خطاهای نحوی را می‌گیرد؛ با این
 > حال بعد از تغییرِ رابط، پنل را باز کنید و کنسولِ مرورگر را ببینید.
 
+**حالتِ دمو.** `python3 demo/run.py` پنل را روی `http://127.0.0.1:8787` (کاربر
+`admin`، رمز `demo`) با کاربرانِ ساختگی، شش ماه تاریخچه‌ی ترافیک و ابزارهای
+سیستمیِ ساختگی بالا می‌آورد. نه WireGuard لازم دارد نه root، و بیرون از یک پوشه‌ی
+موقت چیزی نمی‌نویسد. `python3 demo/screenshots.py` همه‌ی تصاویرِ
+`docs/screenshots/` را از نو می‌سازد؛ Node.js و Playwright لازم دارد و اگر
+Pillow نصب باشد تصاویر را فشرده می‌کند.
+
 <a id="repository-layout"></a>
 
 ## ساختارِ مخزن
@@ -588,6 +610,8 @@ python3 tests/check_js.py      # نحوِ JavaScript، نیازمندِ Node.js
 | `deploy/` | یونیت‌های اختیاریِ systemd، قاعده‌ی fail2ban، اسکریپت‌های بکاپ، تفکیک‌کننده‌ی SNI |
 | `tests/` | مجموعه‌ی تست‌ها |
 | `docs/screenshots/` | تصاویرِ استفاده‌شده در READMEها |
+| `demo/` | حالتِ دمو و سازنده‌ی اسکرین‌شات‌ها |
+| `CHANGELOG.md` | تغییراتِ هر نسخه |
 | `fonts/` | زیرمجموعه‌ی فونتِ وزیرمتن |
 | `qr.js` · `three.*.min.js.gz` | کتابخانه‌های همراهِ کدِ QR و three.js |
 

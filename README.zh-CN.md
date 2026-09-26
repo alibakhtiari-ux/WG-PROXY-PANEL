@@ -97,7 +97,8 @@ WireGuard 接口的 Web 面板：每个客户端的实时流量、添加和停�
 > [!NOTE]
 > 这些截图取自一个真实运行、但填充了**虚构数据**的面板：虚构的客户端名称、
 > 生成的密钥、示例域名 `vpn.example.com`，以及 RFC 5737 文档保留网段中的 IP
-> 地址。其中不包含任何真实的服务器、用户或密钥。
+> 地址。其中不包含任何真实的服务器、用户或密钥。所有截图都可以用
+> `python3 demo/screenshots.py` 重新生成。
 
 <a id="features"></a>
 
@@ -348,6 +349,15 @@ cd docker/airgap && bash build-offline-bundle.sh --arch amd64
 
 ## 使用 systemd 安装
 
+从[最新发布版](https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/releases/latest)下载面板及其单元文件，并用发布的校验和进行核对
+（也可以直接克隆仓库）：
+
+```bash
+base=https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/releases/latest/download
+curl -fLO "$base/wg_panel.py" -O "$base/wg-panel.service" -O "$base/SHA256SUMS"
+sha256sum -c SHA256SUMS
+```
+
 面板**不会**自行创建配置：它从 `wg_panel.py` 所在的目录读取 `config.json`，
 没有该文件就无法启动。安装文件和单元：
 
@@ -384,12 +394,16 @@ sudo systemctl enable --now wg-panel
 面板只有一个文件，升级就是替换这个文件。`config.json` 中的设置和
 `traffic.db` 中的数据都会保留；旧版配置会在面板启动时自动更新。
 
-**使用 systemd：**
+**使用 systemd：** 按上文下载新版本（包括 `sha256sum -c` 校验），然后：
 
 ```bash
 sudo install -m600 -o root -g root wg_panel.py /opt/wg-panel/wg_panel.py
 sudo systemctl restart wg-panel
 ```
+
+要查看服务器上运行的是哪个构建，可将
+`sha256sum /opt/wg-panel/wg_panel.py | cut -c1-12` 的输出与发布说明中的
+build id 对比。各版本的变更见 [CHANGELOG.md](CHANGELOG.md)。
 
 **使用 Docker：** 将新代码拉到服务器上（`git pull`），然后在 `docker/`
 目录中执行：
@@ -532,6 +546,12 @@ Docker 构建上下文；测试数据使用 RFC 5737 文档地址。本仓库中
 > `py_compile` 依然通过，结果是浏览器中出现空白页。`tests/check_js.py`（CI 也会
 > 运行）可以发现语法错误；但修改界面后，仍请打开面板并检查浏览器控制台。
 
+**演示模式。** `python3 demo/run.py` 会在 `http://127.0.0.1:8787` 启动面板
+（用户 `admin`，密码 `demo`），使用虚构的客户端、六个月的流量历史和模拟的
+系统工具。它不需要 WireGuard，也不需要 root，并且不会在临时目录之外写入任何
+内容。`python3 demo/screenshots.py` 会重新生成 `docs/screenshots/` 中的所有
+图片；它需要 Node.js 和 Playwright，若已安装 Pillow 还会压缩图片。
+
 <a id="repository-layout"></a>
 
 ## 仓库结构
@@ -544,6 +564,8 @@ Docker 构建上下文；测试数据使用 RFC 5737 文档地址。本仓库中
 | `deploy/` | 可选的 systemd 单元、fail2ban 规则、备份脚本、SNI 分流器 |
 | `tests/` | 测试套件 |
 | `docs/screenshots/` | README 中使用的截图 |
+| `demo/` | 演示模式与截图生成器 |
+| `CHANGELOG.md` | 各版本的变更 |
 | `fonts/` | Vazirmatn 字体子集 |
 | `qr.js` · `three.*.min.js.gz` | 随附的二维码库和 three.js |
 

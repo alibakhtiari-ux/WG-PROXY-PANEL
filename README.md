@@ -97,7 +97,8 @@ means copying one file.
 > The screenshots were taken from a real running panel filled with **synthetic
 > data**: made-up client names, generated keys, the example domain
 > `vpn.example.com`, and IP addresses from the RFC 5737 documentation ranges.
-> No real server, user or key appears in them.
+> No real server, user or key appears in them. `python3 demo/screenshots.py`
+> regenerates all of them.
 
 ## Features
 
@@ -374,6 +375,16 @@ Details: [docker/README.md](docker/README.md) ·
 
 ## Install with systemd
 
+Download the panel and its unit from the [latest release](https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/releases/latest) and
+check them against the published checksums (a clone of the repository works
+too):
+
+```bash
+base=https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/releases/latest/download
+curl -fLO "$base/wg_panel.py" -O "$base/wg-panel.service" -O "$base/SHA256SUMS"
+sha256sum -c SHA256SUMS
+```
+
 The panel does **not** create its own configuration: it reads `config.json`
 from the same directory as `wg_panel.py` and will not start without it.
 Install the file and the unit:
@@ -410,12 +421,18 @@ The panel is one file, so upgrading means replacing that file. The settings in
 `config.json` and the data in `traffic.db` are kept; older configurations are
 brought up to date automatically when the panel starts.
 
-**With systemd:**
+**With systemd:** download the new release as above, including the
+`sha256sum -c` check, then:
 
 ```bash
 sudo install -m600 -o root -g root wg_panel.py /opt/wg-panel/wg_panel.py
 sudo systemctl restart wg-panel
 ```
+
+To see which build a server runs, compare
+`sha256sum /opt/wg-panel/wg_panel.py | cut -c1-12` with the build id in the
+release notes. Changes between versions are listed in
+[CHANGELOG.md](CHANGELOG.md).
 
 **With Docker:** bring the new code onto the server (`git pull`), then, in
 `docker/`:
@@ -556,6 +573,13 @@ they check deployment tooling that is not published here.
 > `tests/check_js.py` (also run by CI) catches syntax errors; after changing
 > the interface, still open the panel and check the browser console.
 
+**Demo mode.** `python3 demo/run.py` starts the panel at
+`http://127.0.0.1:8787` (user `admin`, password `demo`) with made-up clients,
+six months of traffic history and fake system tools. It needs no WireGuard and
+no root, and it writes nothing outside a temporary folder. `python3
+demo/screenshots.py` rebuilds every image in `docs/screenshots/`; it needs
+Node.js and Playwright, and compresses the images if Pillow is installed.
+
 ## Repository layout
 
 | Path | Contents |
@@ -566,6 +590,8 @@ they check deployment tooling that is not published here.
 | `deploy/` | Optional systemd units, fail2ban jail, backup scripts, SNI splitter |
 | `tests/` | Test suite |
 | `docs/screenshots/` | The screenshots used in the READMEs |
+| `demo/` | Demo mode and the screenshot generator |
+| `CHANGELOG.md` | Changes in each version |
 | `fonts/` | Vazirmatn font subset |
 | `qr.js` · `three.*.min.js.gz` | Bundled QR code and three.js libraries |
 

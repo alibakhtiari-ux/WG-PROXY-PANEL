@@ -100,7 +100,8 @@ WireGuard на этом сервере: трафик каждого клиент
 > Снимки сделаны с настоящей работающей панели, заполненной **вымышленными
 > данными**: придуманные имена клиентов, сгенерированные ключи, домен-пример
 > `vpn.example.com` и IP-адреса из документационных диапазонов RFC 5737.
-> Реальных серверов, пользователей и ключей на них нет.
+> Реальных серверов, пользователей и ключей на них нет. Все они заново
+> создаются командой `python3 demo/screenshots.py`.
 
 <a id="features"></a>
 
@@ -402,6 +403,15 @@ cd docker/airgap && bash build-offline-bundle.sh --arch amd64
 
 ## Установка через systemd
 
+Скачайте панель и её юнит из [последнего релиза](https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/releases/latest) и сверьте их с
+опубликованными контрольными суммами (можно и клонировать репозиторий):
+
+```bash
+base=https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/releases/latest/download
+curl -fLO "$base/wg_panel.py" -O "$base/wg-panel.service" -O "$base/SHA256SUMS"
+sha256sum -c SHA256SUMS
+```
+
 Панель **не создаёт** конфигурацию сама: она читает `config.json` из того же
 каталога, где лежит `wg_panel.py`, и без него не запускается. Установите файл
 и юнит:
@@ -440,12 +450,17 @@ sudo systemctl enable --now wg-panel
 Настройки в `config.json` и данные в `traffic.db` сохраняются; старые
 конфигурации автоматически приводятся к актуальному виду при запуске панели.
 
-**С systemd:**
+**С systemd:** скачайте новый релиз, как описано выше, вместе с проверкой
+`sha256sum -c`, затем:
 
 ```bash
 sudo install -m600 -o root -g root wg_panel.py /opt/wg-panel/wg_panel.py
 sudo systemctl restart wg-panel
 ```
+
+Чтобы узнать, какая сборка работает на сервере, сравните вывод
+`sha256sum /opt/wg-panel/wg_panel.py | cut -c1-12` с build id в описании
+релиза. Изменения каждой версии перечислены в [CHANGELOG.md](CHANGELOG.md).
 
 **С Docker:** доставьте новый код на сервер (`git pull`), затем в каталоге
 `docker/`:
@@ -598,6 +613,14 @@ python3 tests/check_js.py      # синтаксис JavaScript, нужен Node.
 > `tests/check_js.py` (его запускает и CI) ловит синтаксические ошибки; и всё
 > же после изменения интерфейса откройте панель и проверьте консоль браузера.
 
+**Демо-режим.** `python3 demo/run.py` запускает панель на
+`http://127.0.0.1:8787` (пользователь `admin`, пароль `demo`) с вымышленными
+клиентами, историей трафика за шесть месяцев и поддельными системными
+утилитами. Ему не нужны ни WireGuard, ни root, и он ничего не пишет за пределами
+временного каталога. `python3 demo/screenshots.py` заново создаёт все
+изображения в `docs/screenshots/`; для этого нужны Node.js и Playwright, а если
+установлен Pillow, изображения сжимаются.
+
 <a id="repository-layout"></a>
 
 ## Структура репозитория
@@ -610,6 +633,8 @@ python3 tests/check_js.py      # синтаксис JavaScript, нужен Node.
 | `deploy/` | Необязательные юниты systemd, правило fail2ban, скрипты резервного копирования, SNI-разделитель |
 | `tests/` | Тесты |
 | `docs/screenshots/` | Снимки экрана для README |
+| `demo/` | Демо-режим и генератор снимков экрана |
+| `CHANGELOG.md` | Изменения в каждой версии |
 | `fonts/` | Подмножество шрифта Vazirmatn |
 | `qr.js` · `three.*.min.js.gz` | Встроенные библиотеки QR-кода и three.js |
 
