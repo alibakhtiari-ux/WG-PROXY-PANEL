@@ -6606,6 +6606,24 @@ I18N = {
                            "File {v} in the archive is not valid: {why}",
                            "Файл {v} в архиве недействителен: {why}",
                            "归档中的文件 {v} 无效：{why}"),
+    "api.err.bk.unlabeled": ("{v} الان بالاست و کانفیگِ بازیابی {n} بلوکِ "
+                             "[Peer] ِ فعالِ بدونِ برچسبِ #!!! دارد؛ اعمالِ "
+                             "زنده فقط بلوک‌های برچسب‌دار را می‌بیند و "
+                             "کاربرانِ فعلی را از کرنل برمی‌داشت. اول "
+                             "برچسب بزنید یا اینترفیس را پایین بیاورید",
+                             "{v} is up and the restored config has {n} "
+                             "active [Peer] block(s) without a #!!! label; the "
+                             "live apply only sees labelled blocks and would "
+                             "drop the current users from the kernel. Label "
+                             "them first or bring the interface down",
+                             "{v} запущен, а в восстанавливаемом конфиге {n} "
+                             "активных блоков [Peer] без метки #!!!; живое "
+                             "применение видит только помеченные блоки и "
+                             "убрало бы текущих пользователей из ядра. "
+                             "Сначала пометьте их или остановите интерфейс",
+                             "{v} 正在运行，而要恢复的配置中有 {n} 个没有 #!!! "
+                             "标签的活动 [Peer] 块；实时应用只识别带标签的块，"
+                             "会把当前用户从内核中移除。请先加标签或停用该接口"),
     "api.ok.restore": ("{n} فایل بازیابی شد (وضعیت قبلی در restore-backups "
                        "ذخیره شد)",
                        "{n} file(s) restored (the previous state was saved in "
@@ -12053,6 +12071,39 @@ def _validate_restore_content(dest, data):
     return ""
 
 
+def _unlabeled_active_peers(lines):
+    """تعدادِ [Peer] ِ فعالی که داخلِ هیچ بلوکِ #!!!name نیست."""
+    blocks = _parse_user_blocks(lines)
+    return sum(1 for i, l in enumerate(lines)
+               if l.strip() == "[Peer]"
+               and not any(b["start"] <= i <= b["end"] for b in blocks))
+
+
+def _restore_live_problem(planned_data):
+    """خطای aerr اگر بازیابی نتواند روی اینترفیسِ زنده درست اعمال شود، وگرنه ''.
+
+    اعمالِ زنده (apply_conf_delta) فقط بلوک‌های برچسب‌دار را می‌شناسد. کانفیگی
+    با [Peer] ِ بی‌برچسب روی اینترفیسِ بالا یعنی: همه‌ی کاربرانِ برچسب‌دارِ
+    فعلی از کرنل برداشته می‌شوند و peerهای بی‌برچسبِ فایل اضافه نمی‌شوند —
+    تا ری‌استارتِ wg-quick، فایل و کرنل دو چیزِ کاملاً متفاوت‌اند. روی
+    اینترفیسِ پایین مشکلی نیست: wg-quick up کلِ فایل را می‌خواند.
+    هم dry-run و هم مسیرِ واقعی همین را صدا می‌زنند تا پیش‌نمایش چیزی را
+    تأیید نکند که بازیابی بعد رد می‌کند.
+    """
+    live = set(live_interfaces())
+    for dest, data in planned_data:
+        if not (os.path.dirname(dest) == WG_DIR and dest.endswith(".conf")):
+            continue
+        iface = os.path.basename(dest)[:-5]
+        if iface not in live:
+            continue
+        n = _unlabeled_active_peers(
+            data.decode("utf-8", "replace").splitlines())
+        if n:
+            return aerr("api.err.bk.unlabeled", v=iface, n=n)
+    return ""
+
+
 def _restore_plan(planned_data):
     """پیش‌نمایشِ بازیابی: به ازای هر اینترفیس، peerهایی که اضافه/حذف/تغییر
     می‌شوند (نام‌ها؛ کلید = PublicKey) + فهرستِ فایل‌ها."""
@@ -12076,14 +12127,18 @@ def _restore_plan(planned_data):
             new = {}
         added = sorted(new[k]["name"] for k in new if k not in cur)
         removed = sorted(cur[k]["name"] for k in cur if k not in new)
-        changed = sorted(new[k]["name"] for k in new if k in cur and (
-            new[k]["enabled"], new[k]["allowed_ips"].replace(" ", ""),
-            new[k]["psk"]) != (cur[k]["enabled"],
-                               cur[k]["allowed_ips"].replace(" ", ""),
-                               cur[k]["psk"]))
+        # همان چهار چیزی که مسیرِ واقعی (_peer_live_state → apply_conf_delta)
+        # مقایسه و اعمال می‌کند؛ keepalive پیش از این جا افتاده بود و
+        # پیش‌نمایش «بدونِ تغییر» می‌گفت در حالی که بازیابی wg set می‌زد.
+        def sig(b):
+            return (b["enabled"], b["allowed_ips"].replace(" ", ""),
+                    b["psk"], b["keepalive"])
+        changed = sorted(new[k]["name"] for k in new
+                         if k in cur and sig(new[k]) != sig(cur[k]))
         plan["ifaces"][iface] = {"add": added, "remove": removed,
                                  "change": changed,
-                                 "peers_now": len(cur), "peers_after": len(new)}
+                                 "peers_now": len(cur), "peers_after": len(new),
+                                 "live": iface in live_interfaces()}
     return plan
 
 
@@ -12139,6 +12194,9 @@ def restore_from_tar(raw, dry_run=False):
             if why:
                 return False, aerr("api.err.bk.invalid", v=mem.name, why=why)
             planned_data.append((dest, data))
+        why = _restore_live_problem(planned_data)
+        if why:
+            return False, why
         if dry_run:
             return True, _restore_plan(planned_data)
 
@@ -12271,6 +12329,9 @@ def restore_from_nightly_tar(raw, components, ok_key="api.ok.restore.parts"):
             if why:
                 return False, aerr("api.err.bk.invalid", v=mem.name, why=why)
             planned_data.append((dest, data))
+        why = _restore_live_problem(planned_data)
+        if why:
+            return False, why
         ok, snap_err = _write_pre_restore_snapshot()
         if not ok:
             return False, snap_err

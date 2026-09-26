@@ -11494,6 +11494,53 @@ class ProductWireGuardTests(unittest.TestCase):
         self.assertEqual([c for c in m._run_calls if c[:2] == ["wg", "set"]], [])
         self.assertFalse(os.path.exists(os.path.join(self.tmp, "restore-backups")))
 
+    def test_restore_dry_run_counts_a_keepalive_change_like_the_real_path(self):
+        """پیش‌نمایش همان چهار چیزی را می‌سنجد که بازیابی اعمال می‌کند."""
+        m = self.m
+        new_conf = FIXTURE_CONF.replace(
+            "AllowedIPs = 192.168.188.20/32,149.154.166.110\n",
+            "AllowedIPs = 192.168.188.20/32,149.154.166.110\n"
+            "PersistentKeepalive = 25\n")
+        raw = self._tar({"wgtest.conf": new_conf.encode()})
+        ok, plan = m.restore_from_tar(raw, dry_run=True)
+        self.assertTrue(ok, plan)
+        self.assertEqual(plan["ifaces"]["wgtest"]["change"], ["user02"])
+        self.assertTrue(plan["ifaces"]["wgtest"]["live"])
+        del m._run_calls[:]
+        ok, _msg = m.restore_from_tar(raw)
+        self.assertTrue(ok)
+        sets = [c for c in m._run_calls if c[:2] == ["wg", "set"]]
+        self.assertEqual(len(sets), 1, sets)          # یک تغییر، همان که گفت
+
+    def test_restore_refuses_unlabelled_peers_on_a_live_interface(self):
+        """کانفیگِ بی‌برچسب روی اینترفیسِ بالا: همه‌ی کاربرانِ فعلی از کرنل
+        برداشته می‌شدند و peerهای تازه اضافه نمی‌شدند. dry-run و مسیرِ
+        واقعی هر دو رد می‌کنند؛ روی اینترفیسِ پایین فقط فایل نوشته می‌شود."""
+        m = self.m
+        stock = (b"[Interface]\nPrivateKey = K\nListenPort = 51820\n\n"
+                 b"[Peer]\nPublicKey = X\nAllowedIPs = 10.0.0.2/32\n\n"
+                 b"[Peer]\nPublicKey = Y\nAllowedIPs = 10.0.0.3/32\n")
+        raw = self._tar({"wgtest.conf": stock})
+        before = pathlib.Path(self.tmp, "wgtest.conf").read_text()
+        for dry in (True, False):
+            with self.subTest(dry_run=dry):
+                del m._run_calls[:]
+                ok, msg = m.restore_from_tar(raw, dry_run=dry)
+                self.assertFalse(ok)
+                txt = m.api_text(msg, "en")
+                self.assertIn("wgtest", txt)
+                self.assertIn("2 active [Peer]", txt)
+                self.assertEqual([c for c in m._run_calls if c[:2] == ["wg", "set"]], [])
+                self.assertEqual(pathlib.Path(self.tmp, "wgtest.conf").read_text(),
+                                 before)
+        self.assertEqual(m._unlabeled_active_peers(FIXTURE_CONF.splitlines()), 0)
+        m.live_interfaces = lambda: []
+        ok, _plan = m.restore_from_tar(raw, dry_run=True)
+        self.assertTrue(ok)
+        ok, _msg = m.restore_from_tar(raw)
+        self.assertTrue(ok)
+        self.assertEqual(pathlib.Path(self.tmp, "wgtest.conf").read_bytes(), stock)
+
     def test_restore_route_honours_the_dry_run_header(self):
         m = self.m
         salt = "a" * 32
