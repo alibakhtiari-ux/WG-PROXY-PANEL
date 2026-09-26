@@ -11,6 +11,8 @@ prints as its version.
 
 ## [Unreleased]
 
+## [1.2.2] — 2026-09-26
+
 ### Changed
 
 - A broken user record in `config.json` (bad username, salt, role, expiry
@@ -319,7 +321,8 @@ prints as its version.
 
 First public release.
 
-[Unreleased]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/compare/v1.2.1...HEAD
+[Unreleased]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/compare/v1.2.2...HEAD
+[1.2.2]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/compare/81faf06...v1.1.0
