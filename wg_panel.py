@@ -1199,6 +1199,8 @@ I18N = {
                             "恢复码——每个可代替应用验证码使用一次。请立即妥善保存，之后不会再显示。"),
     "ui.js.confirmTotp.4": ("متوجه شدم، ذخیره کردم", "Done, I saved them",
                             "Готово, я сохранил", "已保存，完成"),
+    "ui.js.confirmTotp.5": ("کپیِ کدها", "Copy codes",
+                            "Копировать коды", "复制恢复码"),
     "ui.js.confirmTotp.2": ("ورود دومرحله‌ای فعال شد ✅",
                               "Two-factor login enabled ✅",
                               "Двухфакторный вход включён ✅",
@@ -10171,6 +10173,12 @@ def totp_recovery_consume(user, code):
     """اگر code یکی از کدهای بازیابیِ مصرف‌نشده باشد، آن را حذف می‌کند و
     True برمی‌گرداند (باید داخلِ config_txn صدا زده شود)."""
     code = str(code or "").strip().lower().replace(" ", "")
+    # کدها «xxxxx-xxxxx» صادر می‌شوند، ولی کاربر از روی کاغذ خط‌تیره را
+    # جا می‌اندازد یا خطِ تیره‌ی دیگری (– ‑) تایپ/چسباند می‌کند. شکلِ
+    # کانونی: فقط حروف و ارقام، و اگر ۱۰ تاست، خط‌تیره وسط.
+    bare = re.sub(r"[^0-9a-z]", "", code)
+    if len(bare) == 10:
+        code = "%s-%s" % (bare[:5], bare[5:])
     if not code:
         return False
     h = _recovery_hash(code)
@@ -31046,9 +31054,19 @@ async function confirmTotp(){
       codes.map(esc).join('\n') + '</pre>' +
     '<div class="mrow"><button onclick="navigator.clipboard.writeText(' +
       'el(\'t-recovery\').textContent).then(()=>toast(\'' + _t('ui.js.showShareResult.7') + '\',true))">' +
-      _t('ui.js.showShareResult.8') + '</button> ' +
+      _t('ui.js.confirmTotp.5') + '</button> ' +
     '<button class="primary" onclick="el(\'modal-bg\').classList.add(\'hidden\')">' +
       _t('ui.js.confirmTotp.4') + '</button></div>';
+  // مودال با hidden بسته می‌شود نه با پاک‌شدن؛ کدها تا مودالِ بعدی در DOM
+  // می‌ماندند — هر اسکریپت/افزونه یا نگاهی به DevTools همان‌جا پیدایشان
+  // می‌کرد. هر راهِ بستن (دکمه، Esc، پس‌زمینه) با همین ناظر پاکشان می‌کند.
+  const bg = el('modal-bg');
+  const mo = new MutationObserver(() => {
+    if(!bg.classList.contains('hidden')) return;
+    if(el('t-recovery')) el('modal-body').innerHTML = '';
+    mo.disconnect();
+  });
+  mo.observe(bg, {attributes: true, attributeFilter: ['class']});
 }
 async function disableTotp(){
   const r = await api('/api/totp/disable', {password: el('t-pw').value});

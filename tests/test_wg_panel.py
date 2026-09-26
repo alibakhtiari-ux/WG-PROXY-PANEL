@@ -11272,6 +11272,27 @@ class ProductAuthTests(unittest.TestCase):
                                    session=False)
         self.assertTrue(obj.get("ok"), obj)
 
+    def test_a_recovery_code_is_accepted_without_its_dash(self):
+        """از روی کاغذ خط‌تیره جا می‌افتد یا خطِ تیره‌ی دیگری چسبانده می‌شود."""
+        m = self.m
+        u = {"username": "admin"}
+        codes = m.totp_recovery_codes(u)
+        self.assertTrue(m.totp_recovery_consume(u, codes[0].replace("-", "")))
+        self.assertTrue(m.totp_recovery_consume(u, codes[1].replace("-", "\u2013").upper()))
+        self.assertFalse(m.totp_recovery_consume(u, codes[0].replace("-", "")))
+        self.assertFalse(m.totp_recovery_consume(u, codes[2][:9]))
+        self.assertEqual(len(u["totp_recovery"]), m.TOTP_RECOVERY_COUNT - 2)
+
+    def test_recovery_codes_leave_the_dom_and_have_their_own_copy_label(self):
+        src = _read_panel_source()
+        seg = src[src.index("async function confirmTotp(){"):]
+        seg = seg[:seg.index("async function disableTotp(){")]
+        self.assertIn("ui.js.confirmTotp.5", seg)
+        self.assertNotIn("ui.js.showShareResult.8", seg,
+                         "دکمه‌ی کپیِ کدها برچسبِ «کپی لینک» دارد")
+        self.assertIn("MutationObserver", seg)
+        self.assertIn("el('modal-body').innerHTML = ''", seg)
+
     def test_disabling_totp_drops_the_recovery_codes(self):
         m = self.m
         self._enable_totp()
