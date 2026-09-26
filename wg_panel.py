@@ -841,7 +841,7 @@ I18N = {
                          "This link is invalid or has expired.",
                          "Ссылка недействительна или истекла.",
                          "链接无效或已过期。"),
-    # سه کلیدِ زیر را JSِ خودِ صفحه می‌سازد (⇐ _SHARE_JS_KEYS). دوتای آخر
+    # چهار کلیدِ زیر را JSِ خودِ صفحه می‌سازد (⇐ _SHARE_JS_KEYS). سه‌تای آخر
     # به متنِ پیش از خودشان می‌چسبند، پس جداکننده داخلِ خودِ رشته است —
     # در فارسی/انگلیسی/روسی فاصله، در چینی ویرگولِ تمام‌عرض.
     "ui.share.month": ("مصرف ماه جاری: {v}",
@@ -856,6 +856,10 @@ I18N = {
                         " — dashed line: daily quota share",
                         " — пунктир: дневная доля квоты",
                         " — 虚线：每日配额份额"),
+    "ui.share.budgetabove": (" — سهمِ روزانه‌ی سهمیه: {v} (بالاتر از محدوده‌ی نمودار)",
+                             " — daily quota share: {v} (above the chart)",
+                             " — дневная доля квоты: {v} (выше графика)",
+                             " — 每日配额份额：{v}（高于图表范围）"),
     "ui.common.ok": ("باشه",
                        "OK",
                        "ОК",
@@ -21288,7 +21292,8 @@ def build_metrics():
 # کلیدهایی که JSِ خودِ صفحه‌ی اشتراک در زمانِ اجرا می‌سازد. مثلِ پنلِ اصلی از
 # راهِ یک شیءِ JSON تزریق می‌شوند، نه جایگزینیِ متنی — تا نقلِ‌قول یا بک‌اسلشِ
 # ترجمه نتواند نحوِ اسکریپت را بشکند.
-_SHARE_JS_KEYS = ("ui.share.month", "ui.share.quota", "ui.share.budget")
+_SHARE_JS_KEYS = ("ui.share.month", "ui.share.quota", "ui.share.budget",
+                  "ui.share.budgetabove")
 _SHARE_CACHE = {}
 
 
@@ -21432,11 +21437,17 @@ function dl(){
   var W = cv.width = (cv.clientWidth || 400) * dpr, H = cv.height = 110 * dpr;
   var ctx = cv.getContext('2d');
   var rows = U.rows;
-  var max = 1;
-  rows.forEach(function(r){ max = Math.max(max, (r.rx||0) + (r.tx||0)); });
+  var peak = 1;
+  rows.forEach(function(r){ peak = Math.max(peak, (r.rx||0) + (r.tx||0)); });
+  // مقیاس را مصرف تعیین می‌کند، نه سهمیه: سهمِ روزانه‌ی یک سهمیه‌ی بزرگ
+  // (۲۰۰GB ⇒ ~۶٫۷GB) میله‌های چندصد مگابایتی را به چند پیکسل می‌رساند.
+  // خطِ سهمیه فقط وقتی کشیده می‌شود که بی‌آنکه میله‌ها را له کند جا شود؛
+  // وگرنه مقدارش زیرِ نمودار نوشته می‌شود.
   var budget = q ? q / 30 : 0;
-  if(budget) max = Math.max(max, budget * 1.15);
-  var pad = 6*dpr, gw = W - 2*pad, gh = H - 18*dpr;
+  var showLine = budget && budget <= peak * 1.5;
+  var max = (showLine ? Math.max(peak, budget) : peak) * 1.15;
+  // ۲۲px پایین برای تاریخ‌ها، تا برچسب روی پایه‌ی میله‌ها نیفتد
+  var pad = 6*dpr, gw = W - 2*pad, gh = H - 22*dpr - pad;
   var bw = Math.max(2*dpr, gw / Math.max(rows.length, 30) * 0.7);
   ctx.fillStyle = 'rgba(88,166,255,.85)';
   rows.forEach(function(r, i){
@@ -21444,15 +21455,18 @@ function dl(){
     var h = ((r.rx||0) + (r.tx||0)) / max * gh;
     ctx.fillRect(x, pad + gh - h, bw, h);
   });
-  if(budget){
+  if(showLine){
     var y = pad + gh - budget / max * gh;
     ctx.strokeStyle = 'rgba(227,179,65,.9)'; ctx.lineWidth = dpr;
     ctx.setLineDash([3*dpr, 3*dpr]);
     ctx.beginPath(); ctx.moveTo(pad, y); ctx.lineTo(pad + gw, y); ctx.stroke();
     ctx.setLineDash([]);
     document.getElementById('u-bnote').textContent = _t('ui.share.budget');
+  } else if(budget){
+    document.getElementById('u-bnote').textContent =
+      _t('ui.share.budgetabove', {v: fmt(budget)});
   }
-  ctx.fillStyle = '#8b949e'; ctx.font = (9*dpr) + 'px Vazirmatn,Tahoma';
+  ctx.fillStyle = '#8b949e'; ctx.font = (9*dpr) + 'px Vazirmatn,Tahoma,sans-serif';
   ctx.direction = 'ltr';
   ctx.fillText(fa(rows[0].t), pad, H - 5*dpr);
   var lt = fa(rows[rows.length-1].t);
@@ -21739,7 +21753,14 @@ tr.graphrow td{background:var(--bg);padding:14px 16px;border-bottom:2px solid va
 .gchip b{color:var(--fg);font-size:13px;direction:ltr;display:inline-block;margin-inline-start:4px}
 .gchip.crx b{color:var(--rx)} .gchip.ctx b{color:var(--tx)}
 canvas.bigchart{width:100%;height:216px;display:block;border-radius:8px}
-canvas.bigchart.fs{height:70vh}
+canvas.bigchart.fs{height:min(52vh,540px)}
+/* پنجره‌ی نمودار (بزرگ‌نمایی، نمای کلی، مقایسه) پهن می‌شود تا نمودار واقعاً
+   بزرگ باشد؛ ارتفاعِ بوم طوری است که زبانه‌ها، راهنما و دکمه‌ها در یک صفحه
+   جا شوند. مرورگرِ بی :has همان پهنای قبلی را می‌گیرد، نه چیزِ خراب. */
+#modal-bg .box:has(#fs-cv,#ov-cv,#cmp-cv){max-width:min(1180px,96vw)}
+#modal-body #cmp-cv{height:min(46vh,440px)}
+#modal-body .cmplegend{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));
+  gap:5px 18px}
 .glegend{color:var(--muted);font-size:11px;margin-top:7px;display:flex;gap:12px;
   flex-wrap:wrap;align-items:center}
 .lgi{cursor:pointer;user-select:none;display:inline-flex;align-items:center;gap:5px}
@@ -21772,6 +21793,23 @@ canvas.minichart{cursor:crosshair}
 #tvmode .tv-card .v{font-size:40px;font-weight:800;margin-top:8px;line-height:1.1}
 #tvmode .tv-card .u{font-size:12px;color:var(--muted);margin-top:6px}
 #tvmode .tv-card.warn .v{color:var(--amber)} #tvmode .tv-card.bad .v{color:var(--red)}
+/* اسلایدِ وضعیت: شش کاشی که کلِ صفحه را پر می‌کنند؛ متن با کوچک‌ترین بُعدِ
+   صفحه (vmin) بزرگ می‌شود تا روی تلویزیون از دور خوانا باشد. */
+#tvmode .tv-cards.tv-status{flex:1;grid-template-columns:repeat(3,1fr);
+  grid-template-rows:repeat(2,1fr);gap:clamp(12px,2vmin,28px)}
+#tvmode .tv-status .tv-card{display:flex;flex-direction:column;justify-content:center;
+  align-items:center;padding:clamp(14px,3vmin,40px)}
+#tvmode .tv-status .tv-card .k{font-size:clamp(14px,2.6vmin,30px)}
+#tvmode .tv-status .tv-card .v{font-size:clamp(40px,9vmin,130px);margin-top:1vmin}
+#tvmode .tv-status .tv-card .u{font-size:clamp(12px,2vmin,24px);margin-top:.8vmin}
+#tvmode .tv-meter{width:min(80%,340px);height:clamp(6px,1vmin,12px);margin-top:2vmin;
+  background:var(--panel2);border-radius:99px;overflow:hidden}
+#tvmode .tv-meter>span{display:block;height:100%;background:var(--green);border-radius:99px}
+#tvmode .tv-card.warn .tv-meter>span{background:var(--amber)}
+#tvmode .tv-card.bad .tv-meter>span{background:var(--red)}
+@media (max-width:760px){
+  #tvmode .tv-cards.tv-status{grid-template-columns:repeat(2,1fr);grid-template-rows:none}
+}
 #tvmode .tv-list{display:flex;flex-direction:column;gap:4px;overflow:hidden}
 #tvmode .tv-row{display:flex;align-items:center;gap:12px;font-size:16px;
   padding:8px 6px;border-bottom:1px solid var(--border)}
@@ -21824,7 +21862,7 @@ canvas.minichart{cursor:crosshair}
   tr.graphrow td{padding:12px 10px}
   .gwrap{width:calc(100vw - 34px)}
   canvas.bigchart{height:190px}
-  canvas.bigchart.fs{height:66vh}
+  canvas.bigchart.fs{height:min(50vh,420px)}
   .gchip{padding:3px 9px;font-size:10px} .gchip b{font-size:12px}
   #addrow{gap:6px}
 }
@@ -24125,13 +24163,18 @@ function tvRender(){
   if(_tv.slide === 0){
     const cur = (s.sys && s.sys.cur) || {};
     const cls = v => v >= 85 ? ' bad' : v >= 60 ? ' warn' : '';
-    const card = (k, v, u, c) =>
+    const card = (k, v, u, c, pct) =>
       '<div class="tv-card' + (c || '') + '"><div class="k">' + k +
-      '</div><div class="v">' + v + '</div><div class="u">' + u + '</div></div>';
-    body.innerHTML = '<div class="tv-cards">' +
-      card(_t('ui.js.initTheme.1'), _t('ui.js.tvRender.2', {p0: faNum(Math.round(cur.cpu || 0))}), '', cls(cur.cpu || 0)) +
-      card(_t('ui.js.initTheme.2'), _t('ui.js.tvRender.2', {p0: faNum(Math.round(cur.ram || 0))}), '', cls(cur.ram || 0)) +
-      card(_t('ui.js.tvRender.5'), _t('ui.js.tvRender.2', {p0: faNum(Math.round(cur.disk || 0))}), '', cls(cur.disk || 0)) +
+      '</div><div class="v">' + v + '</div><div class="u">' + u + '</div>' +
+      (pct == null ? '' : '<div class="tv-meter"><span style="width:' +
+        Math.max(0, Math.min(100, pct)) + '%"></span></div>') + '</div>';
+    const pc = v => Math.round(v || 0);
+    // کاشی‌ها کلِ صفحه را پر می‌کنند (۳×۲) و متن با اندازه‌ی صفحه بزرگ می‌شود؛
+    // پیش از این شش کارتِ کوچک وسطِ یک تلویزیونِ بزرگ می‌نشستند.
+    body.innerHTML = '<div class="tv-cards tv-status">' +
+      card(_t('ui.js.initTheme.1'), _t('ui.js.tvRender.2', {p0: faNum(pc(cur.cpu))}), '', cls(cur.cpu || 0), pc(cur.cpu)) +
+      card(_t('ui.js.initTheme.2'), _t('ui.js.tvRender.2', {p0: faNum(pc(cur.ram))}), '', cls(cur.ram || 0), pc(cur.ram)) +
+      card(_t('ui.js.tvRender.5'), _t('ui.js.tvRender.2', {p0: faNum(pc(cur.disk))}), '', cls(cur.disk || 0), pc(cur.disk)) +
       card(_t('ui.js.tvRender.7'), fmtRate(nt.rx_rate), _t('ui.js.paintHover.3', {p0: fmtRate(nt.tx_rate)}), '') +
       card(_t('ui.js.tvRender.9'), faNum(s.users.filter(u => u.online).length),
            _t('ui.js.tvRender.10', {p0: faNum(s.users.length)}), '') +
