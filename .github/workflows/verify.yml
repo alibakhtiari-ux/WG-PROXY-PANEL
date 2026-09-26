@@ -4,9 +4,10 @@
 # 3.12 is Ubuntu 24.04's, so both are tested. The panel uses only the
 # standard library, so there is nothing to install.
 #
-# What this cannot see: errors inside the JavaScript that lives in Python
-# strings. py_compile passes on broken JavaScript — see CONTRIBUTING.md for
-# how to check it before opening a pull request.
+# py_compile cannot see errors inside the JavaScript that lives in Python
+# strings — broken JavaScript still compiles and the browser shows a blank
+# page. tests/check_js.py extracts every inline script and runs
+# `node --check` on it; Node.js is preinstalled on GitHub's runners.
 name: verify
 
 on:
@@ -35,6 +36,9 @@ jobs:
 
       - name: py_compile
         run: python3 -m py_compile wg_panel.py
+
+      - name: JavaScript syntax
+        run: python3 tests/check_js.py
 
       # The installers and docker/ scripts are not exercised by the tests;
       # a syntax check is their only gate.

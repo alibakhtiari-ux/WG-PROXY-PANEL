@@ -16,6 +16,7 @@ CLAUDE.md
 CHANGELOG.md
 README.fa.md
 docs/
+demo/
 *.html
 scripts/
 restore-backups/

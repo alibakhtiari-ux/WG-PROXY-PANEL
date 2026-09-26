@@ -841,7 +841,7 @@ I18N = {
                          "This link is invalid or has expired.",
                          "Ссылка недействительна или истекла.",
                          "链接无效或已过期。"),
-    # سه کلیدِ زیر را JSِ خودِ صفحه می‌سازد (⇐ _SHARE_JS_KEYS). دوتای آخر
+    # چهار کلیدِ زیر را JSِ خودِ صفحه می‌سازد (⇐ _SHARE_JS_KEYS). سه‌تای آخر
     # به متنِ پیش از خودشان می‌چسبند، پس جداکننده داخلِ خودِ رشته است —
     # در فارسی/انگلیسی/روسی فاصله، در چینی ویرگولِ تمام‌عرض.
     "ui.share.month": ("مصرف ماه جاری: {v}",
@@ -856,6 +856,10 @@ I18N = {
                         " — dashed line: daily quota share",
                         " — пунктир: дневная доля квоты",
                         " — 虚线：每日配额份额"),
+    "ui.share.budgetabove": (" — سهمِ روزانه‌ی سهمیه: {v} (بالاتر از محدوده‌ی نمودار)",
+                             " — daily quota share: {v} (above the chart)",
+                             " — дневная доля квоты: {v} (выше графика)",
+                             " — 每日配额份额：{v}（高于图表范围）"),
     "ui.common.ok": ("باشه",
                        "OK",
                        "ОК",
@@ -2926,14 +2930,6 @@ I18N = {
                              "Daily quota budget",
                              "Дневной бюджет квоты",
                              "每日配额预算"),
-    "ui.js.paintChart.3": ("قطع شد",
-                             "went down",
-                             "разорвано",
-                             "已断开"),
-    "ui.js.paintChart.4": ("وصل شد",
-                             "came up",
-                             "восстановлено",
-                             "已连接"),
     # ── paintCompare ──
     "ui.js.paintCompare.1": ("داده‌ی کافی برای مقایسه نیست",
                                "Not enough data to compare",
@@ -6362,20 +6358,6 @@ I18N = {
                          "sha256 не совпадает (скачано={got}, записано={want}) — "
                          "восстановление остановлено",
                          "sha256 不匹配（下载={got}，记录={want}）——已停止恢复"),
-    "api.err.s4.env": ("پرونده‌ی /etc/wg-panel-s4.env در دسترس نیست",
-                       "/etc/wg-panel-s4.env is not accessible",
-                       "Файл /etc/wg-panel-s4.env недоступен",
-                       "无法访问 /etc/wg-panel-s4.env"),
-    "api.err.s4.remote": ("REMOTE/BUCKET در env تنظیم نشده",
-                          "REMOTE/BUCKET is not set in the env file",
-                          "REMOTE/BUCKET не заданы в env-файле",
-                          "env 文件中未设置 REMOTE/BUCKET"),
-    "api.err.s4.parse": ("پاسخ rclone قابلِ‌خواندن نبود",
-                         "The rclone response could not be read",
-                         "Не удалось прочитать ответ rclone",
-                         "无法读取 rclone 的响应"),
-    "api.err.s4.rclone": ("خطای rclone", "rclone error", "Ошибка rclone",
-                          "rclone 出错"),
     "api.err.tg.send": ("تلگرام: {v}", "Telegram: {v}", "Telegram: {v}",
                         "Telegram：{v}"),
     "api.err.warp.t.empty": ("مقدار خالی است", "The value is empty",
@@ -8788,6 +8770,303 @@ I18N = {
                          "The manual backup “{p0}” failed: {p1}",
                          "Ручное резервное копирование «{p0}» не удалось: {p1}",
                          "手动备份“{p0}”失败：{p1}"),
+    # ── برچسب‌های داده‌ای که پیش‌تر فقط فارسی به مرورگر می‌رسیدند ──
+    "ui.permgrp.wg": ("کاربران وایرگارد",
+                    "WireGuard clients",
+                    "Клиенты WireGuard",
+                    "WireGuard 客户端"),
+    "ui.permgrp.proxy": ("کاربران پروکسی",
+                       "Proxy users",
+                       "Пользователи прокси",
+                       "代理用户"),
+    "ui.permgrp.tun": ("تونل‌های خروجی",
+                     "Egress tunnels",
+                     "Исходящие туннели",
+                     "出口隧道"),
+    "ui.permgrp.net": ("اینترفیس‌های شبکه",
+                     "Network interfaces",
+                     "Сетевые интерфейсы",
+                     "网络接口"),
+    "ui.permgrp.sys": ("وضعیت سرور (گیج‌ها)",
+                     "Server status (gauges)",
+                     "Состояние сервера (индикаторы)",
+                     "服务器状态（仪表）"),
+    "ui.permgrp.svc": ("تشخیص مسیر سرویس‌ها",
+                     "Service reachability",
+                     "Диагностика доступа к сервисам",
+                     "服务可达性诊断"),
+    "ui.permgrp.audit": ("تاریخچه و لاگ",
+                       "History and logs",
+                       "История и журналы",
+                       "历史与日志"),
+    "ui.permgrp.mgmt": ("مدیریت پنل",
+                      "Panel administration",
+                      "Управление панелью",
+                      "面板管理"),
+    "ui.perm.wg.view": ("دیدن و نمودار",
+                      "View and charts",
+                      "Просмотр и графики",
+                      "查看和图表"),
+    "ui.perm.wg.add": ("افزودن",
+                     "Add",
+                     "Добавление",
+                     "添加"),
+    "ui.perm.wg.edit": ("ویرایش و فعال/غیرفعال",
+                      "Edit and enable/disable",
+                      "Изменение и включение/отключение",
+                      "编辑和启用/停用"),
+    "ui.perm.wg.del": ("حذف",
+                     "Delete",
+                     "Удаление",
+                     "删除"),
+    "ui.perm.wg.conf": ("کانفیگ / QR / لینک اشتراک",
+                      "Config / QR / share link",
+                      "Конфигурация / QR / ссылка для передачи",
+                      "配置 / 二维码 / 分享链接"),
+    "ui.perm.proxy.view": ("دیدن، نمودار و لاگ",
+                         "View, charts and log",
+                         "Просмотр, графики и журнал",
+                         "查看、图表和日志"),
+    "ui.perm.proxy.add": ("افزودن",
+                        "Add",
+                        "Добавление",
+                        "添加"),
+    "ui.perm.proxy.edit": ("ویرایش",
+                         "Edit",
+                         "Изменение",
+                         "编辑"),
+    "ui.perm.proxy.del": ("حذف",
+                        "Delete",
+                        "Удаление",
+                        "删除"),
+    "ui.perm.proxy.conf": ("کانفیگ / QR (شاملِ رمز)",
+                         "Config / QR (includes the password)",
+                         "Конфигурация / QR (включая пароль)",
+                         "配置 / 二维码（含密码）"),
+    "ui.perm.tun.view": ("دیدن",
+                       "View",
+                       "Просмотр",
+                       "查看"),
+    "ui.perm.tun.toggle": ("روشن/خاموش",
+                         "Turn on/off",
+                         "Включение/выключение",
+                         "开启/关闭"),
+    "ui.perm.net.view": ("دیدن",
+                       "View",
+                       "Просмотр",
+                       "查看"),
+    "ui.perm.sys.view": ("دیدن",
+                       "View",
+                       "Просмотр",
+                       "查看"),
+    "ui.perm.svc.view": ("دیدن و تست",
+                       "View and test",
+                       "Просмотр и проверка",
+                       "查看和测试"),
+    "ui.perm.svc.edit": ("افزودن/ویرایش/حذف",
+                       "Add/edit/delete",
+                       "Добавление/изменение/удаление",
+                       "添加/编辑/删除"),
+    "ui.perm.audit.view": ("دیدن",
+                         "View",
+                         "Просмотр",
+                         "查看"),
+    "ui.perm.users.manage": ("کاربران پنل و نقش‌ها (هم‌ارزِ ادمینِ کامل)",
+                           "Panel users and roles (equivalent to a full admin)",
+                           "Пользователи панели и роли (равносильно полному администратору)",
+                           "面板用户和角色（等同于完整管理员）"),
+    "ui.perm.alerts.manage": ("تنظیماتِ هشدارِ تلگرام",
+                            "Telegram alert settings",
+                            "Настройки оповещений Telegram",
+                            "Telegram 告警设置"),
+    "ui.perm.bot.manage": ("کاربرانِ رباتِ تلگرام",
+                         "Telegram bot users",
+                         "Пользователи Telegram-бота",
+                         "Telegram 机器人用户"),
+    "ui.perm.ecmp.manage": ("گاردِ ECMP (ترمیمِ مسیرِ تونل‌های مرده)",
+                          "ECMP guard (repairs the routes of dead tunnels)",
+                          "Страж ECMP (восстановление маршрутов мёртвых туннелей)",
+                          "ECMP 守护（修复失效隧道的路由）"),
+    "ui.perm.warp.manage": ("مقصدهای مسیریابیِ WARP (افزودن/حذفِ سایت و IP)",
+                          "WARP routing destinations (add/remove sites and IPs)",
+                          "Направления маршрутизации WARP (добавление/удаление сайтов и IP)",
+                          "WARP 路由目标（添加/删除站点和 IP）"),
+    "ui.perm.settings.ips": ("محدودیت IP سراسری",
+                           "Global IP restriction",
+                           "Глобальное ограничение по IP",
+                           "全局 IP 限制"),
+    "ui.perm.backup.get": ("دانلود بکاپ",
+                         "Download backups",
+                         "Скачивание резервных копий",
+                         "下载备份"),
+    "ui.perm.backup.restore": ("بازیابی بکاپ",
+                             "Restore backups",
+                             "Восстановление из резервных копий",
+                             "恢复备份"),
+    "ui.alertev.tunnel": ("قطع/وصلِ تونل‌های خروجی",
+                        "Egress tunnels going down/up",
+                        "Падение и восстановление исходящих туннелей",
+                        "出口隧道断开/恢复"),
+    "ui.alertev.ecmp": ("ترمیمِ خودکارِ مسیرِ ECMP (حذف/بازگرداندنِ تونلِ مرده)",
+                      "Automatic ECMP route repair (removing/restoring a dead tunnel)",
+                      "Автоматическое восстановление маршрута ECMP (удаление/возврат мёртвого туннеля)",
+                      "ECMP 路由自动修复（移除/恢复失效隧道）"),
+    "ui.alertev.warp": ("مسیریابیِ WARP (قطعِ تونل، ناهمخوانیِ خروج، افتِ حساب)",
+                      "WARP routing (tunnel down, egress mismatch, account degraded)",
+                      "Маршрутизация WARP (обрыв туннеля, несовпадение выхода, деградация аккаунта)",
+                      "WARP 路由（隧道中断、出口不一致、账户降级）"),
+    "ui.alertev.peer": ("آفلاین‌شدنِ کاربرانِ نشان‌دار (وایرگارد)",
+                      "Flagged clients going offline (WireGuard)",
+                      "Отмеченные клиенты уходят в офлайн (WireGuard)",
+                      "被标记的客户端离线（WireGuard）"),
+    "ui.alertev.quota": ("رسیدن به سقفِ سهمیه (وایرگارد/پروکسی)",
+                       "Quota reached (WireGuard/proxy)",
+                       "Достигнута квота (WireGuard/прокси)",
+                       "达到配额（WireGuard/代理）"),
+    "ui.alertev.expiry": ("نزدیک‌شدنِ انقضای حساب‌ها",
+                        "Accounts about to expire",
+                        "Скорое истечение учётных записей",
+                        "账户即将到期"),
+    "ui.alertev.resource": ("بالا ماندنِ CPU/RAM/DISK سرور",
+                          "Sustained high server CPU/RAM/disk",
+                          "Долго высокая загрузка CPU/RAM/диска сервера",
+                          "服务器 CPU/内存/磁盘持续偏高"),
+    "ui.alertev.swap": ("مصرفِ Swap (خطرِ کمبودِ حافظه)",
+                      "Swap use (risk of running out of memory)",
+                      "Использование swap (риск нехватки памяти)",
+                      "使用 Swap（内存不足风险）"),
+    "ui.alertev.login": ("تلاش‌های ناموفقِ مکررِ ورود",
+                       "Repeated failed logins",
+                       "Повторные неудачные попытки входа",
+                       "多次登录失败"),
+    "ui.alertev.backup": ("شکستِ آپلودِ بکاپِ شبانه (MEGA S4)",
+                        "Nightly backup upload failed (MEGA S4)",
+                        "Сбой выгрузки ночной резервной копии (MEGA S4)",
+                        "夜间备份上传失败（MEGA S4）"),
+    "ui.alertev.speedtest": ("افتِ سرعتِ اینترنت (تستِ دوره‌ای)",
+                           "Internet speed drop (periodic test)",
+                           "Падение скорости интернета (периодическая проверка)",
+                           "网速下降（定期测试）"),
+    "ui.alertev.startup": ("راه‌اندازی/ری‌استارتِ پنل",
+                         "Panel start/restart",
+                         "Запуск/перезапуск панели",
+                         "面板启动/重启"),
+    "ui.bk.comp.wireguard": ("کانفیگ‌های WireGuard",
+                           "WireGuard configs",
+                           "Конфигурации WireGuard",
+                           "WireGuard 配置"),
+    "ui.bk.comp.clients": ("کانفیگ کلاینت‌ها",
+                         "Client configs",
+                         "Конфигурации клиентов",
+                         "客户端配置"),
+    "ui.bk.comp.db": ("دیتابیس حسابداری/تاریخچه",
+                    "Accounting/history database",
+                    "База учёта трафика и истории",
+                    "流量统计/历史数据库"),
+    "ui.svc.name.youtube": ("یوتیوب",
+                          "YouTube",
+                          "YouTube",
+                          "YouTube"),
+    "ui.svc.name.ytmusic": ("یوتیوب موزیک",
+                          "YouTube Music",
+                          "YouTube Music",
+                          "YouTube Music"),
+    "ui.svc.name.x": ("x.com (توییتر)",
+                    "x.com (Twitter)",
+                    "x.com (Twitter)",
+                    "x.com（Twitter）"),
+    "ui.svc.name.telegram": ("تلگرام",
+                           "Telegram",
+                           "Telegram",
+                           "Telegram"),
+    "ui.svc.name.tidal": ("Tidal",
+                        "Tidal",
+                        "Tidal",
+                        "Tidal"),
+    "ui.bk.unit.panel": ("بکاپِ محلیِ پنل",
+                       "Local panel backup",
+                       "Локальная копия панели",
+                       "本地面板备份"),
+    "ui.bk.unit.full": ("بکاپِ کاملِ سرور",
+                      "Full server backup",
+                      "Полная копия сервера",
+                      "整机备份"),
+    "ui.audit.reason.expired": ("رسیدن به تاریخ انقضا",
+                              "Expiry date reached",
+                              "Истёк срок действия",
+                              "已到期"),
+    "ui.audit.reason.quota": ("رسیدن به سقف سهمیه‌ی ماهانه",
+                            "Monthly quota reached",
+                            "Исчерпана месячная квота",
+                            "已达到月度配额"),
+    "ui.audit.reason.total_cap": ("رسیدن به سقف حجم کل",
+                                "Lifetime data cap reached",
+                                "Исчерпан общий лимит трафика",
+                                "已达到总流量上限"),
+    "api.err.s4.noenv": ("پرونده‌ی /etc/wg-panel-s4.env در دسترس نیست",
+                       "The file /etc/wg-panel-s4.env is not available",
+                       "Файл /etc/wg-panel-s4.env недоступен",
+                       "文件 /etc/wg-panel-s4.env 不可用"),
+    "api.err.s4.nobucket": ("REMOTE/BUCKET در env تنظیم نشده",
+                          "REMOTE/BUCKET is not set in the env file",
+                          "REMOTE/BUCKET не заданы в env-файле",
+                          "env 文件中未设置 REMOTE/BUCKET"),
+    "api.err.s4.badjson": ("پاسخ rclone قابلِ‌خواندن نبود",
+                         "The rclone response could not be read",
+                         "Не удалось разобрать ответ rclone",
+                         "无法解析 rclone 的响应"),
+    "api.err.s4.rclone": ("خطای rclone",
+                        "rclone error",
+                        "Ошибка rclone",
+                        "rclone 出错"),
+    "ui.warpev.target_add": ("افزودنِ مقصد",
+                           "Destination added",
+                           "Добавлено направление",
+                           "已添加目标"),
+    "ui.warpev.target_del": ("حذفِ مقصد",
+                           "Destination removed",
+                           "Удалено направление",
+                           "已删除目标"),
+    "ui.warpev.preset_on": ("روشن‌کردنِ سرویس",
+                          "Service turned on",
+                          "Сервис включён",
+                          "已开启服务"),
+    "ui.warpev.preset_off": ("خاموش‌کردنِ سرویس",
+                           "Service turned off",
+                           "Сервис выключен",
+                           "已关闭服务"),
+    "ui.warpev.egress": ("سوییچِ تونلِ خروج",
+                       "Egress tunnel switched",
+                       "Смена исходящего туннеля",
+                       "已切换出口隧道"),
+    "ui.warpev.rotate": ("چرخشِ endpoint",
+                       "Endpoint rotated",
+                       "Смена endpoint",
+                       "已轮换 endpoint"),
+    "ui.warpev.standby": ("سوییچ به کلیدِ استندبای",
+                        "Switched to the standby key",
+                        "Переход на резервный ключ",
+                        "已切换到备用密钥"),
+    "ui.warpev.degrade": ("حالتِ اضطراری (fail-open)",
+                        "Emergency mode (fail-open)",
+                        "Аварийный режим (fail-open)",
+                        "应急模式（fail-open）"),
+    "ui.warpev.restore": ("بازگشتِ سالم",
+                        "Back to normal",
+                        "Возврат в норму",
+                        "已恢复正常"),
+    "ui.warpev.failopen_sni": ("fail-openِ فیلترِ SNI",
+                             "SNI filter fail-open",
+                             "Fail-open фильтра SNI",
+                             "SNI 过滤器 fail-open"),
+    "ui.warpev.country": ("تغییرِ کشورِ خروج",
+                        "Exit country changed",
+                        "Смена страны выхода",
+                        "出口国家已变更"),
+    "ui.warpev.quic": ("تنظیمِ QUIC",
+                     "QUIC setting",
+                     "Настройка QUIC",
+                     "QUIC 设置"),
 }
 
 
@@ -12888,10 +13167,19 @@ class MetaDB:
 
         name خالی = خودِ اینترفیس/تونل (category های tunnel/iface)؛
         name پر = کاربرِ وایرگارد (category=peer با target «name @ iface»).
-        خروجی: [{ts, label, detail, sev}] — sev: bad|ok|info برای رنگِ فلگ.
+        خروجی: [{ts, src, action, detail, actor, sev}] — src: audit|warp؛
+        action کدِ پایدار است (peer.disable، tun.monitor.down، rotate) و
+        مرورگر آن را ترجمه می‌کند. sev: bad|ok|info برای رنگِ فلگ.
         """
         def sev_of(action):
             a = str(action)
+            parts = set(re.split(r"[._]", a))
+            if parts & {"del", "disable", "down", "degrade", "standby",
+                        "failopen"} or a == "iface.loop.found":
+                return "bad"
+            if parts & {"add", "enable", "up", "fix", "restore"}:
+                return "ok"
+            # ردیف‌های پیش از چهارزبانه‌شدن متنِ فارسی دارند، نه کد
             if any(w in a for w in ("قطع", "غیرفعال", "حذف", "حلقه")):
                 return "bad"
             if any(w in a for w in ("وصل", "فعال", "افزودن", "رفع")):
@@ -12910,16 +13198,16 @@ class MetaDB:
                 "category IN ('tunnel','iface') AND target=? AND ts>=? "
                 "ORDER BY ts LIMIT 300", (iface, since_ts))
         for ts, action, detail, actor in cur.fetchall():
-            out.append({"ts": ts, "label": action,
-                        "detail": ("%s — %s" % (detail, actor)).strip(" —"),
+            out.append({"ts": ts, "src": "audit", "action": action,
+                        "detail": detail or "", "actor": actor or "",
                         "sev": sev_of(action)})
         if include_warp:
             cur = con.execute(
                 "SELECT ts, kind, detail FROM warp_event WHERE ts>=? "
                 "ORDER BY ts LIMIT 200", (since_ts,))
             for ts, kind, detail in cur.fetchall():
-                out.append({"ts": ts, "label": "WARP: %s" % kind,
-                            "detail": detail or "",
+                out.append({"ts": ts, "src": "warp", "action": kind or "",
+                            "detail": detail or "", "actor": "",
                             "sev": sev_of(kind) if kind else "info"})
         con.close()
         out.sort(key=lambda e: e["ts"])
@@ -13280,9 +13568,9 @@ class Sampler(threading.Thread):
                 if not reason:
                     continue
                 action = meta.get("enforce_action") or "disable"
-                det = {"expired": "رسیدن به تاریخ انقضا",
-                       "quota": "رسیدن به سقف سهمیه‌ی ماهانه",
-                       "total_cap": "رسیدن به سقف حجم کل"}[reason]
+                # کلیدِ کاتالوگ، نه متنِ فارسی: مرورگر پارامترِ why را هنگامِ
+                # نمایش به زبانِ کاربر ترجمه می‌کند (auditDetail).
+                det = "ui.audit.reason." + reason
                 ALERTS.event("quota" if reason != "expired" else "expiry",
                              A('alert.enforce.1', p0=b['name'], p1=iface, p2=reason, p3=A('alert.lit.1') if action == 'delete' else A('alert.lit.2')))
                 if action == "delete":
@@ -13818,14 +14106,14 @@ def _s4_target(which="panel"):
                     k, _, v = ln.partition("=")
                     env[k.strip()] = v.strip().strip('"').strip("'")
     except OSError:
-        return "", "", 30, "api.err.s4.env"
+        return "", "", 30, "api.err.s4.noenv"
     remote, bucket = env.get("REMOTE", ""), env.get("BUCKET", "")
     if which == "full":
         prefix, keep = env.get("FULL_PREFIX", FULL_BACKUP_NAME), 14
     else:
         prefix, keep = env.get("PREFIX", "wg-panel"), 30
     if not (remote and bucket):
-        return "", "", keep, "api.err.s4.remote"
+        return "", "", keep, "api.err.s4.nobucket"
     # سرویسِ پنل ProtectHome=yes دارد و /root را نمی‌بیند؛ configِ
     # rclone در /etc نگه‌داری می‌شود (اگر نبود، مسیرِ سنتیِ root).
     conf = "/etc/wg-panel-rclone.conf"
@@ -13860,12 +14148,12 @@ def _s4_remote_status(force=False, which="panel"):
                     latest_bytes=(objs[0].get("Size", 0) if objs else 0),
                     latest_mod=(objs[0].get("ModTime", "") if objs else ""))
             except ValueError:
-                data["error"] = "api.err.s4.parse"
+                data["error"] = "api.err.s4.badjson"
         else:
             data["error"] = ((err or out or "").strip()
                              or "api.err.s4.rclone")[:160]
     elif not data["error"]:
-        data["error"] = "api.err.s4.remote"
+        data["error"] = "api.err.s4.nobucket"
     _S4_CACHE[which] = {"ts": now, "data": data}
     return data
 
@@ -13902,7 +14190,7 @@ def s4_panel_versions(force=False):
                 vers.sort(key=lambda v: v["name"], reverse=True)
                 data.update(ok=True, versions=vers)
             except ValueError:
-                data["error"] = "api.err.s4.parse"
+                data["error"] = "api.err.s4.badjson"
         else:
             data["error"] = ((err or out or "").strip()
                              or "api.err.s4.rclone")[:160]
@@ -15109,8 +15397,7 @@ def build_report_photos():
             xl = [(0.0, lbl(rows[0]["ts"])), (1.0, lbl(rows[-1]["ts"]))]
             png = render_chart_png(
                 [(dn, (63, 185, 80), "DOWN"), (up, (88, 166, 255), "UP")],
-                x_labels=xl,
-                y_top="%d Mbit/s" % int(max(max(dn), max(up))),
+                x_labels=xl, y_fmt=_fmt_mbps_ascii,
                 title="SPEEDTEST - 7D")
             photos.append((png, _rtl_lines([
                 "🚀 روندِ تستِ سرعت — ۷ روزِ اخیر (%s تست)"
@@ -17392,6 +17679,8 @@ class _Canvas:
 
 
 # فونتِ بیت‌مپِ ۵×۷ برای برچسب‌های نمودار (فقط لاتین/رقم؛ متنِ فارسی در کپشن).
+# همه‌ی ASCIIِ چاپی به‌جز حروفِ کوچک را پوشش می‌دهد (_draw_text متن را upper
+# می‌کند)، چون نامِ کاربر هم روی محورِ X می‌آید و نویسه‌ی بی‌گلیف جای خالی می‌شود.
 _FONT5x7 = {
     "0": (0x0E, 0x11, 0x13, 0x15, 0x19, 0x11, 0x0E),
     "1": (0x04, 0x0C, 0x04, 0x04, 0x04, 0x04, 0x0E),
@@ -17403,22 +17692,64 @@ _FONT5x7 = {
     "7": (0x1F, 0x01, 0x02, 0x04, 0x08, 0x08, 0x08),
     "8": (0x0E, 0x11, 0x11, 0x0E, 0x11, 0x11, 0x0E),
     "9": (0x0E, 0x11, 0x11, 0x0F, 0x01, 0x02, 0x0C),
+    "A": (0x0E, 0x11, 0x11, 0x11, 0x1F, 0x11, 0x11),
     "B": (0x1E, 0x11, 0x11, 0x1E, 0x11, 0x11, 0x1E),
     "C": (0x0E, 0x11, 0x10, 0x10, 0x10, 0x11, 0x0E),
     "D": (0x1E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x1E),
+    "E": (0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x1F),
+    "F": (0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x10),
     "G": (0x0E, 0x11, 0x10, 0x17, 0x11, 0x11, 0x0F),
     "H": (0x11, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11),
+    "I": (0x0E, 0x04, 0x04, 0x04, 0x04, 0x04, 0x0E),
+    "J": (0x07, 0x02, 0x02, 0x02, 0x02, 0x12, 0x0C),
     "K": (0x11, 0x12, 0x14, 0x18, 0x14, 0x12, 0x11),
+    "L": (0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1F),
     "M": (0x11, 0x1B, 0x15, 0x15, 0x11, 0x11, 0x11),
+    "N": (0x11, 0x11, 0x19, 0x15, 0x13, 0x11, 0x11),
+    "O": (0x0E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E),
+    "P": (0x1E, 0x11, 0x11, 0x1E, 0x10, 0x10, 0x10),
+    "Q": (0x0E, 0x11, 0x11, 0x11, 0x15, 0x12, 0x0D),
     "R": (0x1E, 0x11, 0x11, 0x1E, 0x14, 0x12, 0x11),
     "S": (0x0F, 0x10, 0x10, 0x0E, 0x01, 0x01, 0x1E),
     "T": (0x1F, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04),
+    "U": (0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E),
+    "V": (0x11, 0x11, 0x11, 0x11, 0x11, 0x0A, 0x04),
     "W": (0x11, 0x11, 0x11, 0x15, 0x15, 0x1B, 0x11),
     "X": (0x11, 0x11, 0x0A, 0x04, 0x0A, 0x11, 0x11),
+    "Y": (0x11, 0x11, 0x11, 0x0A, 0x04, 0x04, 0x04),
+    "Z": (0x1F, 0x01, 0x02, 0x04, 0x08, 0x10, 0x1F),
     ".": (0, 0, 0, 0, 0, 0x06, 0x06),
+    ",": (0, 0, 0, 0, 0x0C, 0x04, 0x08),
     ":": (0, 0x06, 0x06, 0, 0x06, 0x06, 0),
+    ";": (0, 0x0C, 0x0C, 0, 0x0C, 0x04, 0x08),
     "/": (0x01, 0x02, 0x02, 0x04, 0x08, 0x08, 0x10),
+    "\\": (0x10, 0x08, 0x08, 0x04, 0x02, 0x02, 0x01),
     "-": (0, 0, 0, 0x1F, 0, 0, 0),
+    "_": (0, 0, 0, 0, 0, 0, 0x1F),
+    "+": (0, 0x04, 0x04, 0x1F, 0x04, 0x04, 0),
+    "=": (0, 0, 0x1F, 0, 0x1F, 0, 0),
+    "*": (0, 0x04, 0x15, 0x0E, 0x15, 0x04, 0),
+    "%": (0x18, 0x19, 0x02, 0x04, 0x08, 0x13, 0x03),
+    "#": (0x0A, 0x0A, 0x1F, 0x0A, 0x1F, 0x0A, 0x0A),
+    "$": (0x04, 0x0F, 0x14, 0x0E, 0x05, 0x1E, 0x04),
+    "&": (0x0C, 0x12, 0x14, 0x08, 0x15, 0x12, 0x0D),
+    "@": (0x0E, 0x11, 0x01, 0x0D, 0x15, 0x15, 0x0E),
+    "!": (0x04, 0x04, 0x04, 0x04, 0x04, 0, 0x04),
+    "?": (0x0E, 0x11, 0x01, 0x02, 0x04, 0, 0x04),
+    "'": (0x0C, 0x04, 0x08, 0, 0, 0, 0),
+    '"': (0x0A, 0x0A, 0x0A, 0, 0, 0, 0),
+    "`": (0x08, 0x04, 0x02, 0, 0, 0, 0),
+    "^": (0x04, 0x0A, 0x11, 0, 0, 0, 0),
+    "~": (0, 0, 0x08, 0x15, 0x02, 0, 0),
+    "|": (0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04),
+    "(": (0x02, 0x04, 0x08, 0x08, 0x08, 0x04, 0x02),
+    ")": (0x08, 0x04, 0x02, 0x02, 0x02, 0x04, 0x08),
+    "[": (0x0E, 0x08, 0x08, 0x08, 0x08, 0x08, 0x0E),
+    "]": (0x0E, 0x02, 0x02, 0x02, 0x02, 0x02, 0x0E),
+    "{": (0x02, 0x04, 0x04, 0x08, 0x04, 0x04, 0x02),
+    "}": (0x08, 0x04, 0x04, 0x02, 0x04, 0x04, 0x08),
+    "<": (0x02, 0x04, 0x08, 0x10, 0x08, 0x04, 0x02),
+    ">": (0x08, 0x04, 0x02, 0x01, 0x02, 0x04, 0x08),
     " ": (0, 0, 0, 0, 0, 0, 0),
 }
 
@@ -17455,28 +17786,44 @@ def _fmt_bytes_ascii(n):
     return "%.1f TB" % n
 
 
-def render_chart_png(series, x_labels=None, y_top="", title="", bars=False):
+def _fmt_mbps_ascii(v):
+    """مقدارِ Mbit/s برای محورِ Y (نمودارِ تستِ سرعت)؛ از ۱۰۰۰ به بالا Gbit/s."""
+    v = float(v or 0)
+    if v >= 1000:
+        return "%.1f Gbit/s" % (v / 1000)
+    return ("%.0f Mbit/s" if (v >= 10 or v == 0) else "%.1f Mbit/s") % v
+
+
+def _chart_y_labels(series, y_fmt=None):
+    """پنج برچسبِ محورِ Y از بالا به پایین (بیشینه → صفر) با فرمت‌گرِ y_fmt."""
+    allv = [v for vals, _, _ in series for v in (vals or [])]
+    mx = (max(allv) if allv else 0.0) or 1.0
+    fmt = y_fmt or _fmt_bytes_ascii
+    return mx, [fmt(mx * (4 - k) / 4) for k in range(5)]
+
+
+def render_chart_png(series, x_labels=None, title="", bars=False, y_fmt=None):
     """نمودارِ کامل با محور/راهنما/برچسب. PNG برمی‌گرداند.
     series: [(values, (r,g,b), name_ascii), ...] یک یا دو سری.
-    x_labels: [(frac0..1, text_ascii), ...]. y_top: برچسبِ بیشینه (بالا-چپ).
-    title: عنوانِ لاتینِ اختیاری (بالا). bars=True → میله‌ای (برای حجمِ روزانه)."""
+    x_labels: [(frac0..1, text_ascii), ...].
+    title: عنوانِ لاتینِ اختیاری (بالا). bars=True → میله‌ای (برای حجمِ روزانه).
+    y_fmt: تابعِ مقدار → برچسبِ ascii برای محورِ Y؛ پیش‌فرض بایت
+    (_fmt_bytes_ascii). برای سرعت _fmt_mbps_ascii بدهید."""
     W, H = 900, 400
-    PADL, PADR, PADT, PADB = 78, 22, 46, 34
+    mx, ylabels = _chart_y_labels(series, y_fmt)
+    # حاشیه‌ی چپ به اندازه‌ی پهن‌ترین برچسبِ Y تا متن روی نمودار نیفتد
+    PADL = max(78, max(_text_w(s, 2) for s in ylabels) + 14)
+    PADR, PADT, PADB = 22, 46, 34
     bg = bytes((13, 17, 23))
     grid = bytes((38, 45, 56))
     axis = bytes((90, 100, 115))
     cv = _Canvas(W, H, bg)
     x0, x1 = PADL, W - PADR
     y0, y1 = PADT, H - PADB
-    allv = [v for vals, _, _ in series for v in (vals or [])]
-    mx = max(allv) if allv else 0.0
-    mx = mx or 1.0
     # شبکه‌ی افقی + برچسبِ مقدار در هر خط
-    for k in range(5):
+    for k, lbl in enumerate(ylabels):
         gy = y0 + (y1 - y0) * k // 4
         cv.hline(x0, x1, gy, grid)
-        val = mx * (4 - k) / 4
-        lbl = _fmt_bytes_ascii(val)
         _draw_text(cv, 4, gy - 5, lbl, axis, scale=2)
     cv.rect(x0, y0, x0 + 1, y1, axis)          # محورِ Y
     cv.hline(x0, x1, y1, axis)                 # محورِ X
@@ -18800,8 +19147,10 @@ class TelegramBot(threading.Thread):
         else:
             for e in evs:
                 icon = self._WARP_EVENT_ICON.get(e.get("kind"), "•")
+                lk = "ui.warpev.%s" % e.get("kind")
+                lbl = self.T(lk) if lk in I18N else (e.get("label") or "")
                 L.append(self._rtl("%s <b>%s</b> · %s"
-                                   % (icon, esc_html(e.get("label") or ""),
+                                   % (icon, esc_html(lbl),
                                       _ago_srv(e.get("ts")))))
                 det = (e.get("detail") or "").strip()
                 who = (e.get("actor") or "").strip()
@@ -20140,7 +20489,7 @@ class TelegramBot(threading.Thread):
             xl.insert(1, (0.5, lbl(rows[len(rows) // 2]["ts"])))
         png = render_chart_png(
             [(dn, (63, 185, 80), "DOWN"), (up, (88, 166, 255), "UP")],
-            x_labels=xl, y_top="%d Mbit/s" % max(max(dn), max(up)),
+            x_labels=xl, y_fmt=_fmt_mbps_ascii,
             title=iface.upper())
         cap = "\n".join([
             self._rtl(self.T('bot.speed_graph.2', p0=esc_html(iface), p1=_fa_num(len(rows)))),
@@ -20995,6 +21344,7 @@ def build_svc_status():
         rows.append({
             "key": key,
             "label": svc["label"],
+            "custom": bool(svc.get("custom")),
             "probe_url": svc["probe"],
             "domains": svc["domains"],
             "ip_count": summary.get(key, {}).get("count", 0),
@@ -21269,7 +21619,8 @@ def build_metrics():
 # کلیدهایی که JSِ خودِ صفحه‌ی اشتراک در زمانِ اجرا می‌سازد. مثلِ پنلِ اصلی از
 # راهِ یک شیءِ JSON تزریق می‌شوند، نه جایگزینیِ متنی — تا نقلِ‌قول یا بک‌اسلشِ
 # ترجمه نتواند نحوِ اسکریپت را بشکند.
-_SHARE_JS_KEYS = ("ui.share.month", "ui.share.quota", "ui.share.budget")
+_SHARE_JS_KEYS = ("ui.share.month", "ui.share.quota", "ui.share.budget",
+                  "ui.share.budgetabove")
 _SHARE_CACHE = {}
 
 
@@ -21413,11 +21764,17 @@ function dl(){
   var W = cv.width = (cv.clientWidth || 400) * dpr, H = cv.height = 110 * dpr;
   var ctx = cv.getContext('2d');
   var rows = U.rows;
-  var max = 1;
-  rows.forEach(function(r){ max = Math.max(max, (r.rx||0) + (r.tx||0)); });
+  var peak = 1;
+  rows.forEach(function(r){ peak = Math.max(peak, (r.rx||0) + (r.tx||0)); });
+  // مقیاس را مصرف تعیین می‌کند، نه سهمیه: سهمِ روزانه‌ی یک سهمیه‌ی بزرگ
+  // (۲۰۰GB ⇒ ~۶٫۷GB) میله‌های چندصد مگابایتی را به چند پیکسل می‌رساند.
+  // خطِ سهمیه فقط وقتی کشیده می‌شود که بی‌آنکه میله‌ها را له کند جا شود؛
+  // وگرنه مقدارش زیرِ نمودار نوشته می‌شود.
   var budget = q ? q / 30 : 0;
-  if(budget) max = Math.max(max, budget * 1.15);
-  var pad = 6*dpr, gw = W - 2*pad, gh = H - 18*dpr;
+  var showLine = budget && budget <= peak * 1.5;
+  var max = (showLine ? Math.max(peak, budget) : peak) * 1.15;
+  // ۲۲px پایین برای تاریخ‌ها، تا برچسب روی پایه‌ی میله‌ها نیفتد
+  var pad = 6*dpr, gw = W - 2*pad, gh = H - 22*dpr - pad;
   var bw = Math.max(2*dpr, gw / Math.max(rows.length, 30) * 0.7);
   ctx.fillStyle = 'rgba(88,166,255,.85)';
   rows.forEach(function(r, i){
@@ -21425,15 +21782,18 @@ function dl(){
     var h = ((r.rx||0) + (r.tx||0)) / max * gh;
     ctx.fillRect(x, pad + gh - h, bw, h);
   });
-  if(budget){
+  if(showLine){
     var y = pad + gh - budget / max * gh;
     ctx.strokeStyle = 'rgba(227,179,65,.9)'; ctx.lineWidth = dpr;
     ctx.setLineDash([3*dpr, 3*dpr]);
     ctx.beginPath(); ctx.moveTo(pad, y); ctx.lineTo(pad + gw, y); ctx.stroke();
     ctx.setLineDash([]);
     document.getElementById('u-bnote').textContent = _t('ui.share.budget');
+  } else if(budget){
+    document.getElementById('u-bnote').textContent =
+      _t('ui.share.budgetabove', {v: fmt(budget)});
   }
-  ctx.fillStyle = '#8b949e'; ctx.font = (9*dpr) + 'px Vazirmatn,Tahoma';
+  ctx.fillStyle = '#8b949e'; ctx.font = (9*dpr) + 'px Vazirmatn,Tahoma,sans-serif';
   ctx.direction = 'ltr';
   ctx.fillText(fa(rows[0].t), pad, H - 5*dpr);
   var lt = fa(rows[rows.length-1].t);
@@ -21720,7 +22080,14 @@ tr.graphrow td{background:var(--bg);padding:14px 16px;border-bottom:2px solid va
 .gchip b{color:var(--fg);font-size:13px;direction:ltr;display:inline-block;margin-inline-start:4px}
 .gchip.crx b{color:var(--rx)} .gchip.ctx b{color:var(--tx)}
 canvas.bigchart{width:100%;height:216px;display:block;border-radius:8px}
-canvas.bigchart.fs{height:70vh}
+canvas.bigchart.fs{height:min(52vh,540px)}
+/* پنجره‌ی نمودار (بزرگ‌نمایی، نمای کلی، مقایسه) پهن می‌شود تا نمودار واقعاً
+   بزرگ باشد؛ ارتفاعِ بوم طوری است که زبانه‌ها، راهنما و دکمه‌ها در یک صفحه
+   جا شوند. مرورگرِ بی :has همان پهنای قبلی را می‌گیرد، نه چیزِ خراب. */
+#modal-bg .box:has(#fs-cv,#ov-cv,#cmp-cv){max-width:min(1180px,96vw)}
+#modal-body #cmp-cv{height:min(46vh,440px)}
+#modal-body .cmplegend{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));
+  gap:5px 18px}
 .glegend{color:var(--muted);font-size:11px;margin-top:7px;display:flex;gap:12px;
   flex-wrap:wrap;align-items:center}
 .lgi{cursor:pointer;user-select:none;display:inline-flex;align-items:center;gap:5px}
@@ -21753,6 +22120,23 @@ canvas.minichart{cursor:crosshair}
 #tvmode .tv-card .v{font-size:40px;font-weight:800;margin-top:8px;line-height:1.1}
 #tvmode .tv-card .u{font-size:12px;color:var(--muted);margin-top:6px}
 #tvmode .tv-card.warn .v{color:var(--amber)} #tvmode .tv-card.bad .v{color:var(--red)}
+/* اسلایدِ وضعیت: شش کاشی که کلِ صفحه را پر می‌کنند؛ متن با کوچک‌ترین بُعدِ
+   صفحه (vmin) بزرگ می‌شود تا روی تلویزیون از دور خوانا باشد. */
+#tvmode .tv-cards.tv-status{flex:1;grid-template-columns:repeat(3,1fr);
+  grid-template-rows:repeat(2,1fr);gap:clamp(12px,2vmin,28px)}
+#tvmode .tv-status .tv-card{display:flex;flex-direction:column;justify-content:center;
+  align-items:center;padding:clamp(14px,3vmin,40px)}
+#tvmode .tv-status .tv-card .k{font-size:clamp(14px,2.6vmin,30px)}
+#tvmode .tv-status .tv-card .v{font-size:clamp(40px,9vmin,130px);margin-top:1vmin}
+#tvmode .tv-status .tv-card .u{font-size:clamp(12px,2vmin,24px);margin-top:.8vmin}
+#tvmode .tv-meter{width:min(80%,340px);height:clamp(6px,1vmin,12px);margin-top:2vmin;
+  background:var(--panel2);border-radius:99px;overflow:hidden}
+#tvmode .tv-meter>span{display:block;height:100%;background:var(--green);border-radius:99px}
+#tvmode .tv-card.warn .tv-meter>span{background:var(--amber)}
+#tvmode .tv-card.bad .tv-meter>span{background:var(--red)}
+@media (max-width:760px){
+  #tvmode .tv-cards.tv-status{grid-template-columns:repeat(2,1fr);grid-template-rows:none}
+}
 #tvmode .tv-list{display:flex;flex-direction:column;gap:4px;overflow:hidden}
 #tvmode .tv-row{display:flex;align-items:center;gap:12px;font-size:16px;
   padding:8px 6px;border-bottom:1px solid var(--border)}
@@ -21805,7 +22189,7 @@ canvas.minichart{cursor:crosshair}
   tr.graphrow td{padding:12px 10px}
   .gwrap{width:calc(100vw - 34px)}
   canvas.bigchart{height:190px}
-  canvas.bigchart.fs{height:66vh}
+  canvas.bigchart.fs{height:min(50vh,420px)}
   .gchip{padding:3px 9px;font-size:10px} .gchip b{font-size:12px}
   #addrow{gap:6px}
 }
@@ -23117,7 +23501,7 @@ function renderSvc(s){
     return '<div class="svc-card" data-svc="' + esc(row.key) + '">' +
       '<div class="svc-head">' +
         '<div class="svc-ident">' +
-          '<div class="svc-name">' + esc(row.label) +
+          '<div class="svc-name">' + esc(svcLabel(row)) +
             ' <span class="svc-ipchip"><b>' + row.ip_count + '</b> IP</span></div>' +
           '<div class="svc-doms">' + esc(row.domains.join(' · ')) + '</div>' +
         '</div>' +
@@ -23131,7 +23515,7 @@ function renderSvc(s){
             '\')">' + _t('ui.js.renderSvc.14') + (open ? ' ▲' : ' ▼') + '</button>' : '') +
           (can('svc.edit') ?
           '<button class="svc-mtrbtn danger" onclick="deleteSvc(\'' +
-            esc(row.key) + '\',\'' + esc(row.label) + '\')">' + _t('ui.js.renderSvc.15') + '</button>' : '') +
+            esc(row.key) + '\',\'' + esc(svcLabel(row)) + '\')">' + _t('ui.js.renderSvc.15') + '</button>' : '') +
         '</div>' +
       '</div>' +
       '<div class="svc-ips-holder" data-ips="' + esc(row.key) + '"></div>' +
@@ -24106,13 +24490,18 @@ function tvRender(){
   if(_tv.slide === 0){
     const cur = (s.sys && s.sys.cur) || {};
     const cls = v => v >= 85 ? ' bad' : v >= 60 ? ' warn' : '';
-    const card = (k, v, u, c) =>
+    const card = (k, v, u, c, pct) =>
       '<div class="tv-card' + (c || '') + '"><div class="k">' + k +
-      '</div><div class="v">' + v + '</div><div class="u">' + u + '</div></div>';
-    body.innerHTML = '<div class="tv-cards">' +
-      card(_t('ui.js.initTheme.1'), _t('ui.js.tvRender.2', {p0: faNum(Math.round(cur.cpu || 0))}), '', cls(cur.cpu || 0)) +
-      card(_t('ui.js.initTheme.2'), _t('ui.js.tvRender.2', {p0: faNum(Math.round(cur.ram || 0))}), '', cls(cur.ram || 0)) +
-      card(_t('ui.js.tvRender.5'), _t('ui.js.tvRender.2', {p0: faNum(Math.round(cur.disk || 0))}), '', cls(cur.disk || 0)) +
+      '</div><div class="v">' + v + '</div><div class="u">' + u + '</div>' +
+      (pct == null ? '' : '<div class="tv-meter"><span style="width:' +
+        Math.max(0, Math.min(100, pct)) + '%"></span></div>') + '</div>';
+    const pc = v => Math.round(v || 0);
+    // کاشی‌ها کلِ صفحه را پر می‌کنند (۳×۲) و متن با اندازه‌ی صفحه بزرگ می‌شود؛
+    // پیش از این شش کارتِ کوچک وسطِ یک تلویزیونِ بزرگ می‌نشستند.
+    body.innerHTML = '<div class="tv-cards tv-status">' +
+      card(_t('ui.js.initTheme.1'), _t('ui.js.tvRender.2', {p0: faNum(pc(cur.cpu))}), '', cls(cur.cpu || 0), pc(cur.cpu)) +
+      card(_t('ui.js.initTheme.2'), _t('ui.js.tvRender.2', {p0: faNum(pc(cur.ram))}), '', cls(cur.ram || 0), pc(cur.ram)) +
+      card(_t('ui.js.tvRender.5'), _t('ui.js.tvRender.2', {p0: faNum(pc(cur.disk))}), '', cls(cur.disk || 0), pc(cur.disk)) +
       card(_t('ui.js.tvRender.7'), fmtRate(nt.rx_rate), _t('ui.js.paintHover.3', {p0: fmtRate(nt.tx_rate)}), '') +
       card(_t('ui.js.tvRender.9'), faNum(s.users.filter(u => u.online).length),
            _t('ui.js.tvRender.10', {p0: faNum(s.users.length)}), '') +
@@ -25128,7 +25517,7 @@ async function loadWarpEvents(){
     return '<tr>' +
       '<td class="mut" style="white-space:nowrap">' + fmtTs(e.ts) +
         ' <span style="opacity:.7">(' + agoFa(e.ts) + ')</span></td>' +
-      '<td><b style="color:' + warpEventCls(e.kind) + '">' + esc(e.label) + '</b></td>' +
+      '<td><b style="color:' + warpEventCls(e.kind) + '">' + esc(_tOr('ui.warpev.' + e.kind, e.label)) + '</b></td>' +
       '<td data-ltr style="unicode-bidi:plaintext">' + esc(e.detail || '') + '</td>' +
       '<td class="mut">' + (e.actor ? esc(e.actor) : '') + '</td>' +
     '</tr>';
@@ -25450,8 +25839,9 @@ async function loadBackupStatus(){
   const units = {}; (r.units || []).forEach(u => units[u.unit] = u);
   const rows = [];
   // سیاست: بکاپ فقط روی MEGA می‌ماند؛ ملاکِ سلامت، آخرین آپلودِ تأییدشده است
-  [['wg-panel-backup', 0, r.s4], [r.full_unit || 'wg-panel-full-backup', 1, r.s4_full]]
-      .forEach(([un, i, rem]) => {
+  [['wg-panel-backup', 0, r.s4, 'ui.bk.unit.panel'],
+   [r.full_unit || 'wg-panel-full-backup', 1, r.s4_full, 'ui.bk.unit.full']]
+      .forEach(([un, i, rem, lk]) => {
     const a = (r.archives || [])[i] || {}, u = units[un] || {},
           e = a.remote || {};
     const fresh = e.verified && e.uploaded &&
@@ -25475,7 +25865,7 @@ async function loadBackupStatus(){
         ? ' · <b style="color:var(--amber)">' + _t('ui.js.loadBackupStatus.7') + '</b>'
         : ' <span class="mut">' + _t('ui.js.loadBackupStatus.8') + ')</span>');
     rows.push('<tr><td title="' + esc(e.target || a.path || '') + '">' +
-      esc(u.label || a.label || un) + '</td>' +
+      esc(_t(lk)) + '</td>' +
       '<td>' + lastCell + '</td>' +
       '<td>' + (e.size ? fmtBytes(e.size) : (a.exists ? fmtBytes(a.size) : '—')) + '</td>' +
       '<td>' + kept + '</td>' +
@@ -25486,7 +25876,7 @@ async function loadBackupStatus(){
   if(u4.result && u4.result !== 'success') s4st = badge(_t('ui.js.loadBackupStatus.9', {p0: esc(u4.result)}), 'red');
   else if(!s4.ok) s4st = badge(_t('ui.js.loadBackupStatus.10'), 'amber');
   else s4st = badge(_t('ui.js.ecmpBadge.1'), 'green');
-  rows.push('<tr><td title="' + esc(s4.target || '') + '">' + esc(u4.label || _t('ui.js.loadBackupStatus.12')) + '</td>' +
+  rows.push('<tr><td title="' + esc(s4.target || '') + '">' + esc(_t('ui.js.loadBackupStatus.12')) + '</td>' +
     '<td>' + when(u4.last) +
       (s4.ok && s4.latest ? '<div class="mut" style="font-size:11px" dir="ltr">' + esc(s4.latest) + '</div>' : '') + '</td>' +
     '<td>' + (s4.ok ? fmtBytes(s4.latest_bytes || 0) : '—') + '</td>' +
@@ -25495,7 +25885,7 @@ async function loadBackupStatus(){
       ' <span class="mut">(' + _t('ui.js.loadBackupStatus.14') + ' ' + faNum(s4.keep || 30) + ' ' + _t('ui.js.loadBackupStatus.15') + ')</span></td>' +
     '<td>' + when(u4.next) + '</td><td>' + s4st + '</td></tr>');
   const uv = units['wg-panel-verify-backup'] || {};
-  rows.push('<tr><td>' + esc(uv.label || _t('ui.js.loadBackupStatus.16')) + ' <span class="mut">(' + _t('ui.js.graphInner.16') + ')</span></td>' +
+  rows.push('<tr><td>' + esc(_t('ui.js.loadBackupStatus.16')) + ' <span class="mut">(' + _t('ui.js.graphInner.16') + ')</span></td>' +
     '<td>' + when(uv.last) + '</td><td>—</td><td>—</td>' +
     '<td>' + when(uv.next) + '</td>' +
     '<td>' + (uv.result === 'success' ? badge(_t('ui.js.ecmpBadge.1'), 'green') :
@@ -25573,7 +25963,7 @@ async function loadCloudVersions(force){
     el('bkr-comps').innerHTML = (r.components || []).map((c, i) =>
       '<label style="display:flex;gap:5px;align-items:center;font-size:12px">' +
       '<input type="checkbox" class="bkr-c" value="' + esc(c.key) + '"' +
-      (i === 0 ? ' checked' : '') + '>' + esc(c.label) + '</label>').join('');
+      (i === 0 ? ' checked' : '') + '>' + esc(_tOr('ui.bk.comp.' + c.key, c.label)) + '</label>').join('');
   bkrLoaded = true;
 }
 async function doCloudRestore(){
@@ -25654,6 +26044,21 @@ function _tOr(key, raw){
   return s === key ? raw : s;
 }
 function auditAction(a){ return _tOr('ui.audit.act.' + a, a); }
+// برچسب‌هایی که سرور با کلیدِ پایدار می‌فرستد (نقش‌ها، هشدارها، سرویس‌ها،
+// اجزای بازیابی) این‌جا به زبانِ کاربر برگردانده می‌شوند؛ متنِ سرور فقط
+// پشتیبان است. سرویسِ سفارشی نامی است که خودِ ادمین نوشته — ترجمه نمی‌شود.
+// متنِ یک رویدادِ گراف: اکشن، جزئیات و کنشگر هر کدام به زبانِ کاربر
+function graphEventText(e){
+  const warp = e.src === 'warp';
+  const head = warp ? 'WARP: ' + _tOr('ui.warpev.' + e.action, e.action)
+                    : auditAction(e.action);
+  const tail = [warp ? e.detail : auditDetail(e.detail), auditActor(e.actor)]
+    .filter(Boolean).join(' — ');
+  return head + (tail ? ' — ' + tail : '');
+}
+function svcLabel(row){
+  return row.custom ? row.label : _tOr('ui.svc.name.' + row.key, row.label);
+}
 function auditActor(a){
   return (a || '').startsWith('sys:') ? _tOr('ui.audit.actor.' + a, a) : a;
 }
@@ -25662,7 +26067,15 @@ function auditDetail(d){
   if(d.charCodeAt(0) !== 123) return d;      // با { شروع نشده ⇒ متنِ خام
   try{
     const o = JSON.parse(d);
-    if(o && typeof o.k === 'string') return _t(o.k, o.p || {});
+    if(o && typeof o.k === 'string'){
+      // پارامتری که خودش کلیدِ دلیل است (مثلِ why در قطعِ خودکار) هم ترجمه
+      // می‌شود؛ ردیف‌های قدیمی متنِ فارسی دارند و دست‌نخورده می‌مانند.
+      const p = Object.assign({}, o.p || {});
+      for(const k in p)
+        if(typeof p[k] === 'string' && p[k].startsWith('ui.audit.reason.'))
+          p[k] = _tOr(p[k], p[k]);
+      return _t(o.k, p);
+    }
   }catch(e){}
   return d;
 }
@@ -26844,6 +27257,9 @@ function paintChart(cv){
     }
   }
   // ---- نشانگرِ رویدادها (audit/WARP) + باندِ قطعیِ تونل روی محورِ زمان
+  // مقایسه با کدِ اکشن است، نه با متنِ ترجمه‌شده — آن متن هرگز ذخیره نمی‌شود.
+  const TUN_DOWN = new Set(['tun.down', 'tun.monitor.down']),
+        TUN_UP = new Set(['tun.up', 'tun.monitor.up']);
   if(ch.timeAxis && ch.events && ch.events.length){
     const evCol = e => e.sev === 'bad' ? cssVar('--red')
                      : e.sev === 'ok' ? cssVar('--green') : cssVar('--blue');
@@ -26851,8 +27267,8 @@ function paintChart(cv){
       // باندِ کم‌رنگ بین «قطع شد» تا «وصل شد» (قطعیِ باز تا لبه‌ی راست)
       let downT = null; const bands = [];
       ch.events.forEach(e => {
-        if(e.label === _t('ui.js.paintChart.3')) downT = (downT == null) ? e.ts*1000 : downT;
-        else if(e.label === _t('ui.js.paintChart.4') && downT != null){
+        if(TUN_DOWN.has(e.action)) downT = (downT == null) ? e.ts*1000 : downT;
+        else if(TUN_UP.has(e.action) && downT != null){
           bands.push([downT, e.ts*1000]); downT = null; }
       });
       if(downT != null) bands.push([downT, tMax]);
@@ -26940,7 +27356,7 @@ function paintHover(cv){
     const half = (ch.stepMs || 3600e3) / 2;
     ch.events.forEach(e => {
       if(Math.abs(e.ts*1000 - p.t) > half) return;
-      let txt = e.label + (e.detail ? ' — ' + e.detail : '');
+      let txt = graphEventText(e);
       if(txt.length > 46) txt = txt.slice(0, 45) + '…';
       lines.push({t: '🚩 ' + txt,
         c: e.sev === 'bad' ? cssVar('--red')
@@ -28449,7 +28865,8 @@ function renderRoles(){
   const tb = el('pu-roles').querySelector('tbody');
   const permLabel = {};
   (lastRoles.catalog || []).forEach(g =>
-    g.perms.forEach(p => permLabel[p.key] = g.label + ' · ' + p.label));
+    g.perms.forEach(p => permLabel[p.key] = _tOr('ui.permgrp.' + g.group, g.label) +
+                                  ' · ' + _tOr('ui.perm.' + p.key, p.label)));
   tb.innerHTML = (lastRoles.roles || []).map(function(r){
     const a = "'" + esc(r.name) + "'";
     const chips = r.name === 'admin'
@@ -28564,10 +28981,10 @@ function showRoleModal(name){
   openPlainModal(role ? _t('ui.js.showRoleModal.1', {p0: name}) : _t('ui.js.showRoleModal.2'));
   const have = new Set(role ? role.perms : []);
   const groups = (lastRoles.catalog || []).map(function(g){
-    return '<div class="perm-group"><b>' + esc(g.label) + '</b>' +
+    return '<div class="perm-group"><b>' + esc(_tOr('ui.permgrp.' + g.group, g.label)) + '</b>' +
       '<div class="perm-grid">' + g.perms.map(p =>
         '<label><input type="checkbox" class="perm-cb" value="' + esc(p.key) + '"' +
-        (have.has(p.key) ? ' checked' : '') + '> ' + esc(p.label) +
+        (have.has(p.key) ? ' checked' : '') + '> ' + esc(_tOr('ui.perm.' + p.key, p.label)) +
         (PERM_RISK[p.key] ? ' <span class="perm-warn" title="' +
           esc(PERM_RISK[p.key][1]) + '">⚠ ' + esc(PERM_RISK[p.key][0]) +
           '</span>' : '') + '</label>'
@@ -28869,7 +29286,7 @@ async function showAlertsModal(){
     return '<label class="perm-grid"><label style="display:flex;gap:6px;' +
       'align-items:center"><input type="checkbox" class="al-ev" data-k="' +
       esc(e.key) + '"' + (c.events[e.key] ? ' checked' : '') +
-      ' style="width:auto"> ' + esc(e.label) + '</label></label>';
+      ' style="width:auto"> ' + esc(_tOr('ui.alertev.' + e.key, e.label)) + '</label></label>';
   }).join('');
   el('modal-body').innerHTML =
     '<div class="msg" id="al-msg"></div>' +
@@ -30010,14 +30427,14 @@ class Handler(BaseHTTPRequestHandler):
             if self._perm_denied(path):
                 return
             st = backup_full_status()
-            # خطای s4 تودرتوست و از گلوگاهِ _json رد نمی‌شود؛ کپی، چون همان
-            # dict ِ کش‌شده است و نباید به زبانِ یک درخواست قفل شود
+            # خطای S4 داخلِ یک dict ِ تو در تو است و _json فقط error ِ سطحِ
+            # بالا را ترجمه می‌کند. کپی، چون همین dict در _S4_CACHE می‌ماند.
             lang = self._lang()
-            s4, s4f = (dict(st[k], error=self._msg(st[k].get("error"), lang))
-                       for k in ("s4", "s4_full"))
+            s4 = {k: dict(st[k], error=self._msg(st[k].get("error"), lang))
+                  for k in ("s4", "s4_full")}
             self._json({"ok": True, "archives": st["archives"],
-                        "units": st["units"], "s4": s4,
-                        "s4_full": s4f,
+                        "units": st["units"], "s4": s4["s4"],
+                        "s4_full": s4["s4_full"],
                         "manual": manual_backup_state()})
         elif path == "/api/speedtest/status":
             if self._perm_denied(path):
@@ -30479,6 +30896,11 @@ class Handler(BaseHTTPRequestHandler):
         دادهٔ زنده را عوض می‌کنند. `PostWarpGroupTests` همان مرز را پین
         می‌کند.
         """
+        # sess در do_POST یک متغیرِ محلی است و با استخراجِ این گروه جا ماند؛
+        # بدونِ این خط هر شاخه‌ای که sess می‌خواند NameError می‌داد — از جمله
+        # وضعیتِ WARP، که بخشِ WARP را برای همیشه روی «در حال بارگذاری» نگه
+        # می‌داشت. do_POST پیش از رسیدن به این‌جا نشست را تأیید کرده است.
+        sess = self._session()
         if path == "/api/warp/status":
             # روت با tun.view باز است؛ داده‌ی شخصی جدا گیت می‌شود
             # (رجوع به warp_status_redacted).
