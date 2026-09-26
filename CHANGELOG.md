@@ -11,6 +11,69 @@ prints as its version.
 
 ## [Unreleased]
 
+### Changed
+
+- A broken user record in `config.json` (bad username, salt, role, expiry
+  date or `allow_ips`, or a duplicate) no longer stops the panel. The record
+  is logged, cannot sign in, and is written back unchanged when the panel
+  saves the configuration; quota and expiry enforcement, the bot and alerts
+  keep running. Structural errors (port, TLS, network lists) still stop it.
+- `/api/health` returns `ok: false` together with `503`; it returned
+  `ok: true` for an unhealthy panel.
+- Restoring a WireGuard config that has `[Peer]` blocks without a `#!!!`
+  label onto an interface that is up is refused (the live apply only knows
+  labelled blocks and would have dropped every current client). On an
+  interface that is down, the file is still written.
+
+### Fixed
+
+- A TOTP code could be replayed at login within its 90-second window: the
+  replay check rejected it, but the rejection branch let the login through.
+- The daily database prune never deleted old service IPs (`svc_resolved`) or
+  route-chart history (`mtr_run`); both tables grew without limit.
+- Behind a trusted proxy, a malformed or all-trusted `X-Forwarded-For` was
+  resolved to the proxy's own address — `127.0.0.1` for a proxy on the same
+  host, which skips the IP allowlist and Telegram login approval. A proxy that
+  sets only `X-Real-IP` let a forged `X-Forwarded-For` through, and only the
+  first `X-Forwarded-For` header line was read. Such requests now get a
+  non-privileged placeholder address, a forwarded loopback address is never
+  the client, and `X-Real-IP` must agree with `X-Forwarded-For`.
+- `X-Forwarded-Proto: https` from a trusted proxy is now honoured: behind a
+  TLS-terminating proxy, share links started with `http://` and the session
+  cookie was not marked `Secure`.
+- The Telegram bot's WireGuard and proxy creation wizards worked in groups:
+  a WireGuard client was created whose config was then withheld, and the
+  proxy password appeared in the group. Group messages from a user with a
+  private wizard open were also taken as wizard input.
+- Removing `PersistentKeepalive` or emptying `AllowedIPs` in a config never
+  reached the running interface. When enabling, disabling or changing the
+  PSK of a client failed to apply live, the change was recorded as applied,
+  so the file watcher never retried it.
+- The bot and alert-monitor threads were reported as dead in `/api/health`
+  during a long Telegram outage, because one cycle of retries over several
+  tunnels took longer than their heartbeat limit.
+- Long Telegram messages split inside `<pre>` (WireGuard configs, the leak
+  audit, the tunnel list) were rejected by Telegram with "can't parse
+  entities". Every part is now valid HTML on its own.
+- TOTP recovery codes stayed in the page after their window was closed, a
+  code typed without its dash was rejected, and their copy button said
+  "Copy link".
+- Seventeen more inline button handlers and the chart controls placed data
+  in single-quoted JavaScript with only HTML escaping; they now use the same
+  JSON escaping as the service card.
+- The restore preview ignored `PersistentKeepalive` changes that the restore
+  then applied.
+- `alert-edges.json` kept an entry for every deleted tunnel, proxy user and
+  domain; entries not checked for seven days are pruned.
+- A negative `Content-Length` made a request thread wait until the client
+  closed the connection.
+- The systemd install steps did not download `three.LICENSE.txt`, which is
+  listed in `SHA256SUMS`, so `sha256sum -c` failed.
+- The login rate limiter's cleanup left open reservations behind; the next
+  failure from that address was then not counted.
+- `/api/totp/setup` and `/api/totp/disable` checked the password without a
+  rate limit; they now share the per-account login budget.
+
 ## [1.2.0] — 2026-09-26
 
 ### Added
