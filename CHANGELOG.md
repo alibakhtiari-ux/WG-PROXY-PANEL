@@ -11,6 +11,68 @@ prints as its version.
 
 ## [Unreleased]
 
+### Added
+
+- `trusted_proxies` in `config.json`: when the panel runs behind a reverse
+  proxy listed there, the client IP is taken from `X-Forwarded-For` (allowlist,
+  rate limit, Telegram login approval and the audit log then see the real
+  address). Headers from any other peer are ignored.
+- Password hashes record their PBKDF2 iteration count and are upgraded from
+  200 000 to 600 000 iterations on the next successful login, without
+  invalidating anybody's password.
+- `config.json` is validated at start-up; a broken user record, salt, port,
+  TLS pair or network list stops the panel with a clear message instead of a
+  500 later.
+- TOTP recovery codes: enabling two-factor login hands out eight one-time
+  codes (only their hashes are stored); a code works once in place of the app
+  code, is written to the audit log and raises an alert.
+- `session_idle_min`: optional idle timeout for panel sessions.
+- `GET /api/health`: heartbeat of every background thread (Bearer token or
+  `sys.view`), `503` when one has stopped; `panel_thread_alive` and
+  `wg_panel_uptime_seconds` in `/metrics`.
+- Prometheus: per-client quota, total cap, speed limit, expiry timestamp,
+  lifetime usage and auto-disable reason; host CPU/RAM/disk; last probe result
+  and latency of each restricted service; `wg_panel_build_info`. Label values
+  are escaped, and the `*_bytes_total` counters are omitted for a client that
+  is absent from the live snapshot instead of reporting a false reset.
+- Restore preview: the restore dialog first shows which clients the archive
+  would add, remove or change, per interface, before anything is written
+  (`X-Dry-Run: 1` on `/api/restore`). Archives are validated first: a
+  WireGuard config must have `[Interface]` and `PrivateKey`, and `traffic.db`
+  must pass `PRAGMA integrity_check`.
+- Share page: a "Copy config" button, the link's validity and the account's
+  expiry date, `noindex`, and a download name that WireGuard clients accept
+  (15 characters or fewer).
+- Telegram bot: configs, preshared keys and proxy passwords are only sent in a
+  private chat with the bot; the bot stays silent in groups where the sender
+  is not authorised. Long messages are split at the 4096-character limit.
+
+### Changed
+
+- Client IP allocation follows the interface's real prefix (`/22` is no longer
+  treated as `/24`), reserves every server address and walks the whole subnet;
+  IPv6 endpoints are written as `[host]:port`.
+- Changing a client's AllowedIPs refuses an address or range that already
+  belongs to another client of the same interface.
+- Config writes are fsynced before the rename; a bulk add takes one backup for
+  the whole batch instead of one per client.
+- The state of edge alerts is kept on disk, so a restart no longer forgets that
+  a tunnel was already down; the expensive WARP checks (DNS leak audit, ECH
+  lookup, split series) run every few minutes instead of every 30 seconds; the
+  daily digest is marked as sent only after it was built.
+- Telegram API calls remember the last route that worked, honour
+  `retry_after` on 429 and stop retrying on 403/409.
+- The WARP endpoint ranking pings the pool in parallel with one packet each.
+- Config parsing is cached by file mtime, so the 2-second poll and the
+  Prometheus scrape no longer re-read and re-parse every config; the audit
+  search escapes `%` and `_`; the WAL is checkpointed after the daily prune.
+- The Telegram digest, the "time ago" strings, the start-up alert and the
+  audit details of adding/editing a client or a panel user are now translated
+  (they were Persian in every language).
+- The services card warns about a missing `traceroute` (the tool it actually
+  uses) rather than `mtr`; the shaper loads the `ifb` module explicitly and
+  logs when upload limits cannot be enforced.
+
 ### Fixed
 
 - Re-enabling a WireGuard client did not restore its preshared key and

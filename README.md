@@ -461,7 +461,9 @@ changed from the panel. The most important keys:
 | `server_host` · `server_endpoint` | The address written into generated client configs |
 | `client_dns` · `client_mtu` · `client_allowed` | Defaults for generated client configs |
 | `allow_ips` | Optional IP allowlist (`127.0.0.1` is always allowed) |
-| `metrics_token` | Bearer token for `/metrics` |
+| `metrics_token` | Bearer token for `/metrics` and `/api/health` |
+| `trusted_proxies` | IPs/CIDRs of a reverse proxy in front of the panel; only then is the client IP read from `X-Forwarded-For` |
+| `session_idle_min` | Sign out a session after this many idle minutes (`0`/absent = only the 12-hour absolute limit) |
 | `bot` | Telegram bot token and authorized users |
 | `alerts` | Telegram alerts and their thresholds |
 
@@ -481,6 +483,10 @@ scrape_configs:
 
 With a self-signed certificate, add `tls_config: {insecure_skip_verify: true}`
 or give Prometheus the certificate.
+
+`GET /api/health` (same Bearer token, or a signed-in user with `sys.view`)
+reports the heartbeat of every background thread and answers `503` when one
+has stopped — suitable for an external uptime check or a Docker healthcheck.
 
 ## Security
 

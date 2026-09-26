@@ -472,7 +472,9 @@ docker compose up -d --build
 | `server_host` · `server_endpoint` | آدرسی که در کانفیگِ کاربران نوشته می‌شود |
 | `client_dns` · `client_mtu` · `client_allowed` | مقادیرِ پیش‌فرضِ کانفیگِ کاربران |
 | `allow_ips` | فهرستِ مجازِ IP، اختیاری (`127.0.0.1` همیشه مجاز است) |
-| `metrics_token` | توکنِ Bearer برای `/metrics` |
+| `metrics_token` | توکن Bearer برای `/metrics` و `/api/health` |
+| `trusted_proxies` | IP/CIDR ِ reverse proxy ِ جلوی پنل؛ فقط در این حالت IP کلاینت از `X-Forwarded-For` خوانده می‌شود |
+| `session_idle_min` | خروجِ خودکار پس از این‌قدر دقیقه بی‌کاری (`0`/نبود = فقط سقفِ مطلقِ ۱۲ ساعت) |
 | `bot` | توکنِ رباتِ تلگرام و کاربرانِ مجاز |
 | `alerts` | هشدارهای تلگرام و آستانه‌هایشان |
 
@@ -494,6 +496,8 @@ scrape_configs:
 
 اگر گواهی خودامضاست، `tls_config: {insecure_skip_verify: true}` را اضافه کنید
 یا گواهی را به Prometheus بدهید.
+
+`GET /api/health` (با همان توکنِ Bearer، یا کاربرِ واردشده با `sys.view`) ضربانِ هر نخِ پس‌زمینه را گزارش می‌دهد و اگر یکی متوقف شده باشد `503` برمی‌گرداند — برای پایشِ بیرونی یا healthcheck ِ Docker.
 
 <a id="security"></a>
 

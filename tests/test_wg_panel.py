@@ -9,6 +9,7 @@ TOTP، کوکی سشن و allowlist.
 """
 
 import ast
+import base64
 import builtins
 import hashlib
 import io
@@ -4689,6 +4690,7 @@ class WarpSplitBlindTests(unittest.TestCase):
         m.ALERTS.emit = lambda t: sent.append(t)
         m.ALERTS.state.clear()
         mon = m.AlertMonitor()
+        mon.SLOW_EVERY = {}     # سنجش‌های گران در این تست هر بار اجرا شوند
         base = {"installed": True,
                 "iface": {"up": True, "handshake_age": 20},
                 "egress_actual": "wg22", "egress_want": "wg22",
@@ -5315,10 +5317,26 @@ class CloudRestoreTests(unittest.TestCase):
                 t.addfile(info)
         return buf.getvalue()
 
+    @staticmethod
+    def _db_bytes(marker="NEWDB"):
+        """یک traffic.db ِ کوچکِ **واقعی**: بازیابی حالا integrity_check و
+        وجودِ جدول‌ها را می‌سنجد، پس بایت‌های دلخواه دیگر رد می‌شوند."""
+        import sqlite3 as _sq
+        fd, path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+        con = _sq.connect(path)
+        con.execute("CREATE TABLE peer_meta(iface TEXT, name TEXT, note TEXT)")
+        con.execute("CREATE TABLE usage_day(day TEXT)")
+        con.execute("INSERT INTO peer_meta VALUES('wgtest','x',?)", (marker,))
+        con.commit(); con.close()
+        data = pathlib.Path(path).read_bytes()
+        os.remove(path)
+        return data
+
     def _full_files(self):
         return {
-            "wireguard/wgtest.conf": b"[Interface]\n# NEW\n",
-            "wg-panel/traffic.db": b"NEWDB",
+            "wireguard/wgtest.conf": b"[Interface]\nPrivateKey = FAKE=\n# NEW\n",
+            "wg-panel/traffic.db": self._db_bytes(),
             "wg-panel/clients/wgtest/u1.conf": b"[Peer]\n",
             "wg-panel/config.json": b"{\"users\": []}",
             "wg-panel/wg_panel.py": b"print('evil')",
@@ -5350,13 +5368,13 @@ class CloudRestoreTests(unittest.TestCase):
             self._nightly_tar(self._full_files()),
             ["wireguard", "clients", "db"])
         self.assertTrue(ok, msg)
-        self.assertEqual(pathlib.Path(m.DB_PATH).read_bytes(), b"NEWDB")
+        self.assertIn(b"NEWDB", pathlib.Path(m.DB_PATH).read_bytes())
         self.assertTrue(os.path.exists(
             os.path.join(self.tmp, "clients", "wgtest", "u1.conf")))
 
     def test_rejects_symlink_traversal_and_empty(self):
         m = self.m
-        files = {"wireguard/wgtest.conf": b"x"}
+        files = {"wireguard/wgtest.conf": b"[Interface]\nPrivateKey = K=\n"}
         self.assertFalse(m.restore_from_nightly_tar(
             self._nightly_tar(files, link="./wireguard/wg9.conf"),
             ["wireguard"])[0])
@@ -10606,6 +10624,7 @@ class RequestHardeningTests(unittest.TestCase):
         m.CONFIG["users"] = [
             {"username": "admin", "salt": salt,
              "hash": m.hash_password("secret-pw", salt),
+             "pbkdf2_iters": m.PBKDF2_ITERS,
              "role": "admin", "totp": "", "stoken": "s1", "active": True}]
         m.save_config = lambda: None
 
@@ -10861,6 +10880,937 @@ class RequestHardeningTests(unittest.TestCase):
         self.assertIn("--accent:", root)
         # هیچ پس‌زمینه‌ی تیره‌ی هاردکد داخلِ HTML ِ ساخته‌شده در JS (تمِ روشن)
         self.assertIsNone(re.search(r"'[^'\n]*background:#0d1117", src))
+
+
+class ProductAuthTests(unittest.TestCase):
+    """بهبودهای حساب و احراز هویت: proxy ِ معتمد، تگِ PBKDF2 و rehash،
+    اعتبارسنجیِ config، کدهای بازیابیِ TOTP، مهلتِ بی‌کاریِ نشست."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="wgpanel-auth-")
+        self.m = load_module(self.tmp)
+        m = self.m
+        with open(os.path.join(self.tmp, "wgtest.conf"), "w",
+                  encoding="utf-8") as f:
+            f.write(FIXTURE_CONF)
+        salt = "a" * 32
+        # کاربرِ **قدیمی**: هش با ۲۰۰k تکرار و بدونِ کلیدِ pbkdf2_iters
+        m.CONFIG["users"] = [
+            {"username": "admin", "salt": salt,
+             "hash": m.hash_password("secret-pw", salt, m._PBKDF2_LEGACY_ITERS),
+             "role": "admin", "totp": "", "stoken": "s1", "active": True}]
+        m.save_config = lambda: None
+        m._login_attempts.clear(); m._login_attempts_user.clear()
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _post(self, path, body, session=True, headers=None, client_ip="127.0.0.1"):
+        h = make_fake_handler(
+            self.m, path=path, method="POST", body=body, headers=headers,
+            client_ip=client_ip,
+            session=({"u": "admin", "r": "admin"} if session else None))
+        h.do_POST()
+        return (dict(h.sent).get("__code__"),
+                json.loads(b"".join(h.body).decode("utf-8") or "{}"), h)
+
+    # ---- trusted proxies ----------------------------------------------------
+    def test_client_ip_ignores_forwarded_headers_without_trusted_proxies(self):
+        m = self.m
+        m.CONFIG.pop("trusted_proxies", None)
+        hdr = {"X-Forwarded-For": "203.0.113.9", "X-Real-IP": "203.0.113.9"}
+        self.assertEqual(m.client_ip_from("127.0.0.1", hdr), "127.0.0.1")
+
+    def test_client_ip_from_a_trusted_proxy_is_the_last_untrusted_hop(self):
+        m = self.m
+        m.CONFIG["trusted_proxies"] = ["127.0.0.1", "10.0.0.0/8"]
+        f = m.client_ip_from
+        self.assertEqual(f("127.0.0.1", {"X-Forwarded-For": "203.0.113.9"}),
+                         "203.0.113.9")
+        # زنجیره: کلاینت، proxy ِ داخلی، proxy ِ لبه — معتمدها از راست کنار می‌روند
+        self.assertEqual(f("127.0.0.1", {"X-Forwarded-For":
+                                         "198.51.100.7, 203.0.113.9, 10.1.2.3"}),
+                         "203.0.113.9")
+        self.assertEqual(f("127.0.0.1", {"X-Real-IP": "203.0.113.9"}), "203.0.113.9")
+        self.assertEqual(f("127.0.0.1", {"X-Forwarded-For": "[2001:db8::5]"}),
+                         "2001:db8::5")
+        self.assertEqual(f("127.0.0.1", {"X-Forwarded-For": "203.0.113.9:443"}),
+                         "203.0.113.9")
+        # peer ِ نامعتمد با هدرِ جعلی → همان peer
+        self.assertEqual(f("198.51.100.1", {"X-Forwarded-For": "127.0.0.1"}),
+                         "198.51.100.1")
+        # هدرِ خراب → peer (نه crash، نه اعتماد)
+        self.assertEqual(f("127.0.0.1", {"X-Forwarded-For": "not-an-ip"}),
+                         "127.0.0.1")
+        # فقط proxyها در زنجیره → peer
+        self.assertEqual(f("127.0.0.1", {"X-Forwarded-For": "10.9.9.9"}),
+                         "127.0.0.1")
+
+    def test_handler_uses_the_forwarded_ip_for_allowlist_and_audit(self):
+        m = self.m
+        m.CONFIG["trusted_proxies"] = ["127.0.0.1"]
+        m.CONFIG["allow_ips"] = ["203.0.113.0/24"]
+        # کلاینتِ واقعی خارج از allowlist، از پشتِ proxy → ۴۰۳
+        code, obj, _h = self._post("/api/peer/ping", {"iface": "wgtest", "name": "user02"},
+                                   headers={"X-Forwarded-For": "198.51.100.9"})
+        self.assertEqual(code, 403)
+        code, obj, _h = self._post("/api/peer/ping", {"iface": "wgtest", "name": "user02"},
+                                   headers={"X-Forwarded-For": "203.0.113.9"})
+        self.assertEqual(code, 200)
+
+    def test_config_with_bad_trusted_proxy_is_refused_at_boot(self):
+        m = self.m
+        m.CONFIG["trusted_proxies"] = ["nope"]
+        fatal, _w = m.validate_config(m.CONFIG)
+        self.assertTrue(any("trusted_proxies" in f for f in fatal))
+
+    # ---- PBKDF2 ------------------------------------------------------------------
+    def test_legacy_hash_still_verifies_and_is_upgraded_on_login(self):
+        m = self.m
+        u = m.CONFIG["users"][0]
+        self.assertTrue(m.check_user_password(u, "secret-pw"))
+        self.assertFalse(m.check_user_password(u, "wrong"))
+        self.assertEqual(m.user_pbkdf2_iters(u), m._PBKDF2_LEGACY_ITERS)
+        old_hash = u["hash"]
+        code, obj, _h = self._post("/api/login", {"username": "admin",
+                                                 "password": "secret-pw"},
+                                   session=False)
+        self.assertTrue(obj.get("ok"), obj)
+        self.assertEqual(u["pbkdf2_iters"], m.PBKDF2_ITERS)
+        self.assertNotEqual(u["hash"], old_hash)
+        self.assertTrue(m.check_user_password(u, "secret-pw"))
+        # دومین ورود دیگر rehash نمی‌کند
+        self.assertFalse(m.rehash_user_password(u, "secret-pw"))
+        with open(m.ACTION_LOG, encoding="utf-8") as f:
+            self.assertEqual(f.read().count("password hash upgraded"), 1)
+
+    def test_new_hashes_carry_the_iteration_count(self):
+        m = self.m
+        u = m.CONFIG["users"][0]
+        m.set_user_password(u, "another-pw")
+        self.assertEqual(u["pbkdf2_iters"], m.PBKDF2_ITERS)
+        self.assertTrue(m.check_user_password(u, "another-pw"))
+        code, obj, _h = self._post("/api/users/add", {"username": "bob",
+                                                     "password": "bobpass123",
+                                                     "role": "viewer"})
+        self.assertTrue(obj["ok"], obj)
+        bob = m.find_user("bob")
+        self.assertEqual(bob["pbkdf2_iters"], m.PBKDF2_ITERS)
+        self.assertTrue(m.check_user_password(bob, "bobpass123"))
+
+    def test_a_non_hex_salt_no_longer_crashes_the_password_check(self):
+        m = self.m
+        u = dict(m.CONFIG["users"][0], salt="zz")
+        self.assertFalse(m.check_user_password(u, "secret-pw"))
+
+    # ---- validate_config -----------------------------------------------------
+    def test_validate_config_accepts_the_test_config(self):
+        m = self.m
+        fatal, _warn = m.validate_config(m.CONFIG)
+        self.assertEqual(fatal, [])
+
+    def test_validate_config_reports_the_classic_mistakes(self):
+        m = self.m
+        base = json.loads(json.dumps(m.CONFIG))
+        cases = {
+            "users not a list": dict(base, users={"a": 1}),
+            "user not an object": dict(base, users=["admin"]),
+            "bad username": dict(base, users=[dict(base["users"][0], username="a b")]),
+            "duplicate": dict(base, users=base["users"] * 2),
+            "missing role": dict(base, users=[{k: v for k, v in base["users"][0].items()
+                                               if k != "role"}]),
+            "non-hex salt": dict(base, users=[dict(base["users"][0], salt="xyz")]),
+            "bad expires": dict(base, users=[dict(base["users"][0], expires="tomorrow")]),
+            "bad port": dict(base, port="8787"),
+            "tls half": dict(base, tls_cert="/x.pem"),
+            "tls missing file": dict(base, tls_cert="/nope.pem", tls_key="/nope.key"),
+            "bad allow_ips": dict(base, allow_ips=["300.1.1.1"]),
+        }
+        for label, cfg in cases.items():
+            with self.subTest(case=label):
+                fatal, _w = m.validate_config(cfg)
+                self.assertTrue(fatal, label)
+        # هشدار (نه fatal): نقشِ تعریف‌نشده، بدونِ کاربر
+        fatal, warn = m.validate_config(
+            dict(base, users=[dict(base["users"][0], role="ghost")]))
+        self.assertEqual(fatal, [])
+        self.assertTrue(any("ghost" in w for w in warn))
+        fatal, warn = m.validate_config(dict(base, users=[]))
+        self.assertEqual(fatal, [])
+        self.assertTrue(warn)
+
+    # ---- TOTP recovery codes --------------------------------------------------
+    def _enable_totp(self):
+        m = self.m
+        code, obj, _h = self._post("/api/totp/setup", {})
+        secret = obj["secret"]
+        code, obj, _h = self._post("/api/totp/confirm", {"code": m.totp_code(secret)})
+        self.assertTrue(obj["ok"], obj)
+        return secret, obj["recovery_codes"]
+
+    def test_confirming_totp_hands_out_hashed_recovery_codes(self):
+        m = self.m
+        secret, codes = self._enable_totp()
+        u = m.CONFIG["users"][0]
+        self.assertEqual(len(codes), m.TOTP_RECOVERY_COUNT)
+        self.assertEqual(len(set(codes)), len(codes))
+        for c in codes:
+            self.assertRegex(c, r"^[a-z0-9]{5}-[a-z0-9]{5}$")
+        # روی دیسک فقط هش
+        self.assertEqual(len(u["totp_recovery"]), len(codes))
+        for c in codes:
+            self.assertNotIn(c, json.dumps(u))
+            self.assertIn(m._recovery_hash(c), u["totp_recovery"])
+
+    def test_a_recovery_code_logs_in_once_in_place_of_the_totp(self):
+        m = self.m
+        events = []
+        m.ALERTS.event = lambda k, t: events.append((k, t))
+        secret, codes = self._enable_totp()
+        m._login_attempts.clear(); m._login_attempts_user.clear()
+        # بدونِ کد → totp_required
+        code, obj, _h = self._post("/api/login", {"username": "admin",
+                                                 "password": "secret-pw"},
+                                   session=False)
+        self.assertTrue(obj.get("totp_required"))
+        # با کدِ بازیابی (حروفِ بزرگ و فاصله هم تحمل می‌شود)
+        rc = codes[0].upper().replace("-", " - ")
+        code, obj, h = self._post("/api/login", {"username": "admin",
+                                                "password": "secret-pw",
+                                                "totp": rc}, session=False)
+        self.assertTrue(obj.get("ok"), obj)
+        self.assertTrue(any(k == "Set-Cookie" for k, _v in h.sent))
+        self.assertEqual(len(m.CONFIG["users"][0]["totp_recovery"]),
+                         m.TOTP_RECOVERY_COUNT - 1)
+        self.assertEqual(events[-1][0], "login")
+        self.assertIn("admin", events[-1][1])
+        rows = m.META.audit_list(category="auth", limit=5)
+        self.assertIn("auth.totp.recovery", [r["action"] for r in rows])
+        # همان کد دوباره → رد
+        code, obj, _h = self._post("/api/login", {"username": "admin",
+                                                 "password": "secret-pw",
+                                                 "totp": codes[0]}, session=False)
+        self.assertEqual(code, 401)
+        # کدِ TOTP ِ واقعی همچنان کار می‌کند
+        code, obj, _h = self._post("/api/login", {"username": "admin",
+                                                 "password": "secret-pw",
+                                                 "totp": m.totp_code(secret)},
+                                   session=False)
+        self.assertTrue(obj.get("ok"), obj)
+
+    def test_disabling_totp_drops_the_recovery_codes(self):
+        m = self.m
+        self._enable_totp()
+        code, obj, _h = self._post("/api/totp/disable", {"password": "secret-pw"})
+        self.assertTrue(obj["ok"], obj)
+        self.assertNotIn("totp_recovery", m.CONFIG["users"][0])
+        # بدونِ TOTP، کدی که شبیهِ کدِ بازیابی است هیچ‌جا پذیرفته نمی‌شود
+        self.assertFalse(m.totp_recovery_consume(m.CONFIG["users"][0], "abcde-fghjk"))
+
+    # ---- idle timeout -----------------------------------------------------------
+    def test_session_idle_timeout_is_off_by_default_and_expires_when_set(self):
+        m = self.m
+        u = m.CONFIG["users"][0]
+        m.CONFIG.pop("session_idle_min", None)
+        ck = m.make_session_cookie(u)
+        self.assertIsNotNone(m.verify_session_cookie(ck))
+        nonce = json.loads(base64.urlsafe_b64decode(
+            ck.split(".")[0] + "=" * (-len(ck.split(".")[0]) % 4)))["n"]
+        m._session_seen[nonce] = time.time() - 10 * 3600
+        self.assertIsNotNone(m.verify_session_cookie(ck),
+                             "بدونِ تنظیم، بی‌کاری نباید نشست را ببندد")
+        m.CONFIG["session_idle_min"] = 30
+        self.assertIsNone(m.verify_session_cookie(ck))       # ۱۰ ساعت بی‌کار
+        self.assertNotIn(nonce, m._session_seen)
+        ck2 = m.make_session_cookie(u)
+        self.assertIsNotNone(m.verify_session_cookie(ck2))   # اولین دیدار
+        self.assertIsNotNone(m.verify_session_cookie(ck2))   # فعالیت به‌روز می‌شود
+
+
+class ProductWireGuardTests(unittest.TestCase):
+    """بهبودهای WireGuard: مدلِ زیرشبکه، هم‌پوشانیِ AllowedIPs، fsync،
+    یک بکاپ برای bulk، اعتبارسنجی و پیش‌نمایشِ بازیابی."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="wgpanel-wg-")
+        self.m = load_module(self.tmp)
+        with open(os.path.join(self.tmp, "wgtest.conf"), "w",
+                  encoding="utf-8") as f:
+            f.write(FIXTURE_CONF)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _write_conf(self, text):
+        with open(os.path.join(self.tmp, "wgtest.conf"), "w",
+                  encoding="utf-8") as f:
+            f.write(text)
+
+    # ---- زیرشبکه -------------------------------------------------------------
+    def test_iface_subnet_honours_the_real_prefix_and_config(self):
+        m = self.m
+        m.CONFIG.pop("user_subnets", None)
+        self.assertEqual(m.iface_subnet("wgtest"), "192.168.188.0/24")  # /32 → /24
+        self._write_conf(FIXTURE_CONF.replace("Address = 192.168.188.1/32",
+                                              "Address = 10.8.0.1/22, fd00:8::1/64"))
+        self.assertEqual(m.iface_subnet("wgtest"), "10.8.0.0/22")
+        addrs = m.iface_addresses("wgtest")
+        self.assertEqual([str(a.ip) for a in addrs], ["10.8.0.1", "fd00:8::1"])
+        # config با آدرسِ میزبانی (غیرکانونیک) هم نرمال می‌شود، نه ValueError
+        m.CONFIG["user_subnets"] = {"wgtest": "10.9.0.1/24"}
+        self.assertEqual(m.iface_subnet("wgtest"), "10.9.0.0/24")
+        m.CONFIG["user_subnets"] = {"wgtest": "garbage"}
+        self.assertIsNone(m.iface_subnet("wgtest"))
+
+    def test_next_free_ip_walks_the_whole_subnet_and_reserves_server_addresses(self):
+        m = self.m
+        m.CONFIG.pop("user_subnets", None)
+        blocks = m.parse_user_blocks("wgtest")
+        self.assertEqual(m.next_free_ip("wgtest", blocks), "192.168.188.10")
+        # /22 با آدرسِ سرورِ غیرِ .1: از .10 شروع و بعد از .255 به .1.0 می‌رود
+        self._write_conf(FIXTURE_CONF.replace("Address = 192.168.188.1/32",
+                                              "Address = 10.8.0.77/22"))
+        used = ["10.8.0.%d" % i for i in range(10, 256)] + ["10.8.1.0"]
+        blocks = [{"allowed_ips": ip + "/32"} for ip in used]
+        self.assertEqual(m.next_free_ip("wgtest", blocks), "10.8.1.1")
+        blocks = [{"allowed_ips": "10.8.0.%d/32" % i} for i in range(10, 77)]
+        self.assertEqual(m.next_free_ip("wgtest", blocks), "10.8.0.78")  # .77 سرور
+        # فقط IPv6 → None (نه IndexError)
+        self._write_conf(FIXTURE_CONF.replace("Address = 192.168.188.1/32",
+                                              "Address = fd00::1/64"))
+        self.assertIsNone(m.next_free_ip("wgtest", []))
+
+    def test_ipv6_endpoint_host_is_bracketed(self):
+        m = self.m
+        self.assertEqual(m._endpoint_host("[2001:db8::1]:51820"), "2001:db8::1")
+        self.assertEqual(m._endpoint_host("2001:db8::1"), "2001:db8::1")
+        self.assertEqual(m._endpoint_host("vpn.example.com:51820"), "vpn.example.com")
+        m.CONFIG["server_host"] = "2001:db8::9"
+        conf = m.make_client_conf("PRIV", "192.168.188.10", "wgtest")
+        self.assertIn("Endpoint = [2001:db8::9]:", conf)
+
+    # ---- هم‌پوشانی AllowedIPs -------------------------------------------------
+    def test_update_peer_ips_refuses_an_address_owned_by_another_peer(self):
+        m = self.m
+        ok, msg = m.update_peer_ips("wgtest", "user01", "192.168.188.20/32")
+        self.assertFalse(ok)
+        txt = m.api_text(msg, "en")
+        self.assertIn("192.168.188.20/32", txt)
+        self.assertIn("user02", txt)
+        # هم‌پوشانیِ رنج هم رد می‌شود؛ آدرسِ خودِ peer آزاد است
+        self.assertFalse(m.update_peer_ips("wgtest", "user01", "192.168.188.16/28")[0])
+        self.assertTrue(m.update_peer_ips("wgtest", "user01",
+                                          "192.168.188.14/32, 10.9.0.0/24")[0])
+        self.assertIsNone(m.allowed_ips_conflict(["10.1.0.0/16"],
+                                                 m.parse_user_blocks("wgtest")))
+
+    # ---- دوام و بکاپ ----------------------------------------------------------
+    def test_write_conf_atomic_fsyncs_file_and_directory(self):
+        m = self.m
+        synced = []
+        real = m.os.fsync
+        m.os = types.SimpleNamespace(**{k: getattr(m.os, k) for k in dir(m.os)
+                                        if not k.startswith("__")})
+        m.os.fsync = lambda fd: (synced.append(fd), real(fd))
+        m.write_conf_atomic(os.path.join(self.tmp, "wgtest.conf"), ["[Interface]", "x"])
+        self.assertGreaterEqual(len(synced), 2)     # فایل + دایرکتوری
+
+    def test_bulk_add_takes_one_backup_for_the_whole_batch(self):
+        m = self.m
+        m.CONFIG.pop("user_subnets", None)
+        bdir = os.path.join(self.tmp, "backups")
+        res, err = m.bulk_add_peers("wgtest", "b-", 1, 5, use_psk=False)
+        self.assertIsNone(err)
+        self.assertEqual(len(res["created"]), 5)
+        self.assertEqual(len(os.listdir(bdir)), 1)
+        # افزودنِ تکی هنوز بکاپ می‌گیرد
+        m.add_peer("wgtest", "single", use_psk=False)
+        self.assertEqual(len(os.listdir(bdir)), 2)
+
+    # ---- بازیابی: اعتبارسنجی و dry-run ----------------------------------------
+    def _tar(self, members):
+        import io as _io
+        import tarfile as _tf
+        buf = _io.BytesIO()
+        with _tf.open(fileobj=buf, mode="w:gz") as t:
+            for nm, data in members.items():
+                info = _tf.TarInfo(nm)
+                info.size = len(data)
+                t.addfile(info, _io.BytesIO(data))
+        return buf.getvalue()
+
+    def test_restore_rejects_a_corrupt_config_or_database(self):
+        m = self.m
+        orig = pathlib.Path(self.tmp, "wgtest.conf").read_text()
+        for bad, why in ((b"CORRUPTED", "no [Interface]"),
+                         (b"[Interface]\nAddress = 1.2.3.4/24\n", "PrivateKey"),
+                         (b"\xff\xfe[Interface]", "UTF-8")):
+            with self.subTest(why=why):
+                ok, msg = m.restore_from_tar(self._tar({"wgtest.conf": bad}))
+                self.assertFalse(ok)
+                self.assertIn(why, m.api_text(msg, "en"))
+        ok, msg = m.restore_from_tar(self._tar({"traffic.db": b"NEWDB"}))
+        self.assertFalse(ok)
+        self.assertIn("SQLite", m.api_text(msg, "en"))
+        # هیچ‌چیز تغییر نکرده و اسنپ‌شاتی هم گرفته نشده
+        self.assertEqual(pathlib.Path(self.tmp, "wgtest.conf").read_text(), orig)
+        self.assertFalse(os.path.exists(os.path.join(self.tmp, "restore-backups")))
+
+    def test_restore_dry_run_reports_the_peer_diff_without_writing(self):
+        m = self.m
+        new_conf = FIXTURE_CONF.replace(
+            "#!!!user01\n#[Peer]\n#PublicKey = PUB_USER01_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx=\n"
+            "#AllowedIPs = 192.168.188.14/32\n",
+            "#!!!user01\n[Peer]\nPublicKey = PUB_USER01_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx=\n"
+            "AllowedIPs = 192.168.188.14/32\n").replace(
+            "#!!!user03\n#[Peer]\n#PublicKey = PUB_USER03_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx=\n"
+            "#AllowedIPs = 192.168.188.21/32\n",
+            "#!!!user09\n[Peer]\nPublicKey = PUB_USER09_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx=\n"
+            "AllowedIPs = 192.168.188.99/32\n")
+        before = pathlib.Path(self.tmp, "wgtest.conf").read_text()
+        del m._run_calls[:]
+        ok, plan = m.restore_from_tar(self._tar({"wgtest.conf": new_conf.encode()}),
+                                      dry_run=True)
+        self.assertTrue(ok, plan)
+        d = plan["ifaces"]["wgtest"]
+        self.assertEqual(d["add"], ["user09"])
+        self.assertEqual(d["remove"], ["user03"])
+        self.assertEqual(d["change"], ["user01"])          # فعال شد
+        self.assertEqual((d["peers_now"], d["peers_after"]), (3, 3))
+        self.assertEqual(plan["files"], [os.path.join(self.tmp, "wgtest.conf")]
+                         if not self.tmp.startswith(m.BASE_DIR) else ["wgtest.conf"])
+        self.assertEqual(pathlib.Path(self.tmp, "wgtest.conf").read_text(), before)
+        self.assertEqual([c for c in m._run_calls if c[:2] == ["wg", "set"]], [])
+        self.assertFalse(os.path.exists(os.path.join(self.tmp, "restore-backups")))
+
+    def test_restore_route_honours_the_dry_run_header(self):
+        m = self.m
+        salt = "a" * 32
+        m.CONFIG["users"] = [{"username": "admin", "salt": salt,
+                              "hash": m.hash_password("pw-12345", salt),
+                              "pbkdf2_iters": m.PBKDF2_ITERS, "role": "admin",
+                              "totp": "", "stoken": "s", "active": True}]
+        m.save_config = lambda: None
+        raw = self._tar({"wgtest.conf": FIXTURE_CONF.encode()})
+        h = make_fake_handler(m, path="/api/restore", method="POST", body=raw,
+                              headers={"X-Confirm-Password": "pw-12345",
+                                       "X-Dry-Run": "1"},
+                              session={"u": "admin", "r": "admin"})
+        h.do_POST()
+        obj = json.loads(b"".join(h.body).decode())
+        self.assertTrue(obj["ok"], obj)
+        self.assertIn("wgtest", obj["plan"]["ifaces"])
+        self.assertEqual(obj["plan"]["ifaces"]["wgtest"]["add"], [])
+        self.assertFalse(os.path.exists(os.path.join(self.tmp, "restore-backups")))
+        # بدونِ هدر: بازیابیِ واقعی
+        h = make_fake_handler(m, path="/api/restore", method="POST", body=raw,
+                              headers={"X-Confirm-Password": "pw-12345"},
+                              session={"u": "admin", "r": "admin"})
+        h.do_POST()
+        obj = json.loads(b"".join(h.body).decode())
+        self.assertTrue(obj["ok"], obj)
+        self.assertTrue(os.path.exists(os.path.join(self.tmp, "restore-backups")))
+
+
+class ProductMonitoringTests(unittest.TestCase):
+    """بهبودهای پایش: ضربانِ نخ‌ها و /api/health، وضعیتِ ماندگارِ لبه‌ها،
+    throttle ِ سنجش‌های گرانِ WARP، دایجست، tg_api و تکه‌کردنِ پیام."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="wgpanel-mon-")
+        self.m = load_module(self.tmp)
+        m = self.m
+        m.ALERT_EDGES_STATE = os.path.join(self.tmp, "alert-edges.json")
+        m.DIGEST_STATE = os.path.join(self.tmp, "digest.last")
+        m.CONFIG["users"] = [{"username": "admin", "salt": "a" * 32, "hash": "h",
+                              "role": "admin", "totp": "", "stoken": "s"},
+                             {"username": "v", "salt": "a" * 32, "hash": "h",
+                              "role": "viewer", "totp": "", "stoken": "s"}]
+        m.CONFIG["metrics_token"] = "tok-123"
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    # ---- heartbeat / health ------------------------------------------------------
+    def test_health_report_flags_a_silent_thread(self):
+        m = self.m
+        m._HEARTBEAT.clear()
+        m._STARTED_AT = time.time() - 3600           # مهلتِ گرم‌شدن گذشته
+        for name in m.HEARTBEAT_MAX_AGE:
+            m._heartbeat(name)
+        rep = m.health_report()
+        self.assertTrue(rep["ok"])
+        self.assertTrue(all(t["ok"] for t in rep["threads"].values()))
+        with m._HEARTBEAT_LOCK:
+            m._HEARTBEAT["sampler"] = time.time() - 999
+            m._HEARTBEAT.pop("bot", None)
+        rep = m.health_report()
+        self.assertFalse(rep["ok"])
+        self.assertFalse(rep["threads"]["sampler"]["ok"])
+        self.assertFalse(rep["threads"]["bot"]["ok"])      # هیچ ضربانی و گرم نیست
+        self.assertTrue(rep["threads"]["sysmon"]["ok"])
+        # در مهلتِ گرم‌شدن، نخِ بی‌ضربان سالم شمرده می‌شود
+        m._STARTED_AT = time.time()
+        self.assertTrue(m.health_report()["threads"]["bot"]["ok"])
+
+    def test_every_background_loop_beats(self):
+        """هر نخی که health می‌سنجد باید در سورس ضربان بزند — وگرنه health
+        همیشه آن را مرده می‌بیند (یا برعکس، نخی بی‌ناظر می‌ماند)."""
+        src = _read_panel_source()
+        beats = set(re.findall(r'_heartbeat\("([a-z]+)"\)', src))
+        self.assertEqual(beats, set(self.m.HEARTBEAT_MAX_AGE))
+
+    def test_health_route_accepts_the_metrics_token_or_sys_view(self):
+        m = self.m
+        m._HEARTBEAT.clear()
+        m._STARTED_AT = time.time()
+        for name in m.HEARTBEAT_MAX_AGE:
+            m._heartbeat(name)
+        h = make_fake_handler(m, path="/api/health", method="GET",
+                              headers={"Authorization": "Bearer tok-123"},
+                              session=None)
+        h.do_GET()
+        self.assertEqual(dict(h.sent)["__code__"], 200)
+        obj = json.loads(b"".join(h.body).decode())
+        self.assertTrue(obj["healthy"])
+        self.assertIn("sampler", obj["threads"])
+        # بدونِ توکن و بدونِ نشست → ۴۰۱
+        h = make_fake_handler(m, path="/api/health", method="GET", session=None)
+        h.do_GET()
+        self.assertEqual(dict(h.sent)["__code__"], 401)
+        # viewer (sys.view دارد) → ۲۰۰
+        h = make_fake_handler(m, path="/api/health", method="GET",
+                              session={"u": "v", "r": "viewer"})
+        h.do_GET()
+        self.assertEqual(dict(h.sent)["__code__"], 200)
+        # نخِ مرده → ۵۰۳ ولی JSON
+        m._STARTED_AT = time.time() - 3600
+        with m._HEARTBEAT_LOCK:
+            m._HEARTBEAT["sampler"] = time.time() - 999
+        h = make_fake_handler(m, path="/api/health", method="GET",
+                              headers={"Authorization": "Bearer tok-123"},
+                              session=None)
+        h.do_GET()
+        self.assertEqual(dict(h.sent)["__code__"], 503)
+        self.assertFalse(json.loads(b"".join(h.body).decode())["healthy"])
+
+    # ---- persisted edges ----------------------------------------------------------
+    def test_edge_state_survives_a_restart(self):
+        m = self.m
+        m.CONFIG["alerts"] = {"enabled": True}
+        sent = []
+        m.ALERTS.emit = lambda t, html=False: sent.append(t)
+        m.ALERTS.state.clear()
+        m.ALERTS.edge("tun:wg9", False, "down")          # اولین مشاهده: قطع، بی‌صدا
+        self.assertEqual(sent, [])
+        self.assertTrue(os.path.exists(m.ALERT_EDGES_STATE))
+        # «ری‌استارت»: مدیرِ تازه، وضعیت از دیسک
+        fresh = m.AlertManager()
+        fresh.emit = lambda t, html=False: sent.append(t)
+        fresh.load_state()
+        self.assertEqual(fresh.state.get("tun:wg9"), False)
+        fresh.edge("tun:wg9", True, "up")                # گذر به وصل → پیام
+        self.assertEqual(sent, ["up"])
+        # فایلِ خراب → بی‌صدا نادیده
+        with open(m.ALERT_EDGES_STATE, "w") as f:
+            f.write("{not json")
+        m.AlertManager().load_state()
+
+    # ---- throttle ------------------------------------------------------------------
+    def test_expensive_warp_checks_are_throttled(self):
+        m = self.m
+        mon = m.AlertMonitor()
+        self.assertTrue(mon._due("net:leak"))
+        self.assertFalse(mon._due("net:leak"))
+        mon._slow_last["net:leak"] -= mon.SLOW_EVERY["net:leak"] + 1
+        self.assertTrue(mon._due("net:leak"))
+        # سنجشِ ناشناخته: بدونِ throttle
+        self.assertTrue(mon._due("x")); self.assertTrue(mon._due("x"))
+
+    # ---- digest ----------------------------------------------------------------------
+    def test_digest_day_is_marked_only_after_the_text_was_built(self):
+        m = self.m
+        m.CONFIG["alerts"] = {"enabled": True, "digest_enabled": True,
+                              "digest_time": "00:00"}
+        sent = []
+        m.ALERTS.emit = lambda t, html=False: sent.append(t)
+        mon = m.AlertMonitor()
+        m.build_digest_text = lambda: 1 / 0
+        mon._check_digest()
+        self.assertEqual(sent, [])
+        self.assertFalse(os.path.exists(m.DIGEST_STATE))     # روز ثبت نشده
+        # تا ۱۰ دقیقه دوباره تلاش نمی‌کند
+        m.build_digest_text = lambda: "ok-text"
+        mon._check_digest()
+        self.assertEqual(sent, [])
+        mon._digest_retry_at = 0
+        mon._check_digest()
+        self.assertEqual(sent, ["ok-text"])
+        self.assertTrue(os.path.exists(m.DIGEST_STATE))
+        mon._check_digest()
+        self.assertEqual(len(sent), 1)
+
+    # ---- tg_api ------------------------------------------------------------------------
+    def test_tg_chunks_splits_on_line_boundaries(self):
+        m = self.m
+        self.assertEqual(m.tg_chunks("short"), ["short"])
+        lines = ["line-%03d %s" % (i, "x" * 60) for i in range(200)]
+        parts = m.tg_chunks("\n".join(lines))
+        self.assertGreater(len(parts), 1)
+        for p in parts:
+            self.assertLessEqual(len(p), m.TG_MAX_MESSAGE)
+            self.assertFalse(p.startswith("\n") or p.endswith("\n"))
+        self.assertEqual("\n".join(parts).split("\n"), lines)   # هیچ خطی گم نشد
+        # خطِ تکیِ غول‌پیکر هم شکسته می‌شود
+        parts = m.tg_chunks("y" * 9000, limit=4000)
+        self.assertEqual([len(p) for p in parts], [4000, 4000, 1000])
+
+    def _fake_https(self, script):
+        """_https_raw_over_iface ِ ساختگی: script = {iface: [(status, json), …]}."""
+        m = self.m
+        calls = []
+
+        def fake(host, port, req, iface, timeout):
+            calls.append(iface)
+            seq = script.get(iface) or [(0, None)]
+            st, body = seq.pop(0) if len(seq) > 1 else seq[0]
+            if body is None:
+                raise OSError("unreachable")
+            return st, json.dumps(body).encode()
+        m._https_raw_over_iface = fake
+        m.list_tunnel_confs = lambda: ["wg21"]
+        m.systemd_state = lambda i: "active"
+        m._TG_LAST_OK["iface"] = None
+        return calls
+
+    def test_tg_api_remembers_the_route_that_worked(self):
+        m = self.m
+        calls = self._fake_https({"": [(0, None)],
+                                  "wg21": [(200, {"ok": True, "result": 1})]})
+        self.assertEqual(m.tg_api("T", "getMe"), (True, 1))
+        self.assertEqual(calls, ["", "wg21"])          # اول مستقیم، بعد تونل
+        self.assertEqual(m.tg_api("T", "getMe"), (True, 1))
+        self.assertEqual(calls[2:], ["wg21"])          # حالا اول تونل
+
+    def test_tg_api_stops_on_forbidden_and_conflict(self):
+        m = self.m
+        for st in (403, 409):
+            calls = self._fake_https({"": [(st, {"ok": False, "description": "nope"})],
+                                      "wg21": [(200, {"ok": True, "result": 1})]})
+            with self.subTest(status=st):
+                self.assertEqual(m.tg_api("T", "getUpdates"), (False, "nope"))
+                self.assertEqual(calls, [""])          # تعویضِ مسیر بی‌فایده
+
+    def test_tg_api_honours_retry_after(self):
+        m = self.m
+        m.time = types.SimpleNamespace(**{k: getattr(m.time, k) for k in dir(m.time)
+                                          if not k.startswith("__")})
+        slept = []
+        m.time.sleep = lambda s: slept.append(s)
+        calls = self._fake_https({"": [(429, {"ok": False, "description": "slow",
+                                              "parameters": {"retry_after": 3}}),
+                                       (200, {"ok": True, "result": 7})]})
+        self.assertEqual(m.tg_api("T", "sendMessage"), (True, 7))
+        self.assertEqual(slept, [3])
+        self.assertEqual(calls, ["", ""])              # همان مسیر، دو بار
+
+    def test_bot_send_splits_long_messages_and_keeps_the_keyboard_last(self):
+        m = self.m
+        b = m.TelegramBot.__new__(m.TelegramBot)
+        b._edit = None
+        b._token = lambda: "T"
+        sent = []
+        m.tg_api = lambda tok, method, p, **kw: (sent.append(p), (True, {}))[1]
+        long = "\n".join("row-%d %s" % (i, "z" * 80) for i in range(120))
+        b.send(5, long, [[{"text": "b", "callback_data": "x"}]])
+        self.assertGreater(len(sent), 1)
+        self.assertTrue(all(len(p["text"]) <= m.TG_MAX_MESSAGE for p in sent))
+        self.assertTrue(all("reply_markup" not in p for p in sent[:-1]))
+        self.assertIn("reply_markup", sent[-1])
+        sent.clear()
+        m.CONFIG["alerts"] = {"enabled": True, "bot_token": "T", "chat_id": "1"}
+        m.ALERTS.send_now("x" * 9000)
+        self.assertEqual(len(sent), 3)
+
+
+class ProductDataTests(unittest.TestCase):
+    """بهبودهای داده: متریک‌های Prometheus، کشِ پارسِ کانفیگ، SQLite، رتبه‌بندیِ موازی."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="wgpanel-data-")
+        self.m = load_module(self.tmp)
+        with open(os.path.join(self.tmp, "wgtest.conf"), "w",
+                  encoding="utf-8") as f:
+            f.write(FIXTURE_CONF)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _user(self, **kw):
+        u = {"iface": "wgtest", "name": "u1", "enabled": True, "online": True,
+             "handshake": time.time() - 5, "rx": 100, "tx": 50, "rx_rate": 1.0,
+             "tx_rate": 2.0, "month_rx": 10, "month_tx": 5, "life_rx": 1000,
+             "life_tx": 500, "quota_gb": 2, "total_gb": None, "rate_mbit": 20,
+             "expires": "2030-01-02", "auto_disabled": "", "live": True}
+        u.update(kw)
+        return u
+
+    def test_metrics_expose_quota_expiry_sys_and_build_info(self):
+        m = self.m
+        m.build_stats = lambda: {
+            "users": [self._user(), self._user(name='we"ird\\', live=False,
+                                               quota_gb=None, rate_mbit="",
+                                               expires="", auto_disabled="quota")],
+            "tunnels": [], "interfaces": [],
+            "sys": {"cur": {"cpu": 12.34, "ram": 50, "disk": 70.0}, "extra": {}}}
+        m.META.svc_probe_add = getattr(m.META, "svc_probe_add", None)
+        out = m.build_metrics()
+        self.assertIn('wg_peer_quota_bytes{iface="wgtest",name="u1"} %d' % (2 * 1024 ** 3), out)
+        self.assertIn('wg_peer_speed_limit_bits_per_second{iface="wgtest",name="u1"} 20000000', out)
+        self.assertIn('wg_peer_lifetime_usage_bytes{iface="wgtest",name="u1",dir="rx"} 1000', out)
+        exp_ts = int(m.datetime.strptime("2030-01-02", "%Y-%m-%d").timestamp())
+        self.assertIn('wg_peer_expires_timestamp_seconds{iface="wgtest",name="u1"} %d' % exp_ts, out)
+        self.assertIn('wg_peer_auto_disabled{iface="wgtest",name="we\\"ird\\\\",reason="quota"} 1', out)
+        self.assertIn('panel_sys_usage_percent{resource="cpu"} 12.3', out)
+        self.assertIn('wg_panel_build_info{version="%s"} 1' % m.BUILD_ID, out)
+        self.assertRegex(m.BUILD_ID, r"^[0-9a-f]{12}$")
+        self.assertIn("panel_thread_alive{", out)
+        self.assertIn("wg_panel_uptime_seconds ", out)
+        # شمارنده‌های *_total فقط برای peerِ حاضر در snapshotِ زنده
+        self.assertIn('wg_peer_receive_bytes_total{iface="wgtest",name="u1"} 100', out)
+        self.assertNotIn('wg_peer_receive_bytes_total{iface="wgtest",name="we', out)
+        # مقدارِ برچسبِ escape‌شده: هیچ خطِ متریکی با کوتیشنِ باز نمانده
+        lbl = r'\w+="(?:[^"\\]|\\.)*"'
+        for line in out.splitlines():
+            if line.startswith("#") or "{" not in line:
+                continue
+            body = line[line.index("{") + 1:line.rindex("}")]
+            self.assertTrue(re.fullmatch(r"%s(,%s)*" % (lbl, lbl), body), line)
+
+    def test_parse_user_blocks_is_cached_by_mtime_and_size(self):
+        m = self.m
+        calls = []
+        real = m._parse_user_blocks
+        m._parse_user_blocks = lambda lines: (calls.append(1), real(lines))[1]
+        a = m.parse_user_blocks("wgtest")
+        b = m.parse_user_blocks("wgtest")
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(a, b)
+        b[0]["name"] = "mutated"                      # کپی است، نه کش
+        self.assertEqual(m.parse_user_blocks("wgtest")[0]["name"], "user01")
+        # نوشتنِ فایل → کش باطل
+        m.add_peer("wgtest", "newone", use_psk=False)
+        names = [x["name"] for x in m.parse_user_blocks("wgtest")]
+        self.assertIn("newone", names)
+        self.assertGreaterEqual(len(calls), 2)
+        # lines ِ صریح هیچ‌وقت کش نمی‌شود
+        n = len(calls)
+        m.parse_user_blocks("wgtest", ["#!!!x", "[Peer]", "PublicKey = K"])
+        self.assertEqual(len(calls), n + 1)
+
+    def test_audit_search_treats_percent_and_underscore_literally(self):
+        m = self.m
+        m.audit("admin", "peer", "peer.add", "a_b", "", "", True)
+        m.audit("admin", "peer", "peer.add", "axb", "", "", True)
+        m.audit("admin", "peer", "peer.add", "100%", "", "", True)
+        self.assertEqual([r["target"] for r in m.META.audit_list(q="a_b")], ["a_b"])
+        self.assertEqual([r["target"] for r in m.META.audit_list(q="100%")], ["100%"])
+        self.assertEqual(len(m.META.audit_list(q="a")), 3)   # actor «admin» هم می‌خورد
+
+    def test_prune_checkpoints_the_wal_without_error(self):
+        m = self.m
+        m.audit("admin", "peer", "peer.add", "x", "", "", True)
+        m.META.prune()
+        self.assertTrue(m.META.audit_list())
+
+    def test_warp_rank_pings_the_pool_in_parallel_with_one_packet(self):
+        m = self.m
+        seen = []
+        lock = threading.Lock()
+
+        def slow_ping(ip, count=2, timeout=4):
+            with lock:
+                seen.append((ip, count, threading.current_thread().name))
+            time.sleep(0.2)
+            return 10.0
+        m._ping_rtt = slow_ping
+        m.WARP_GUARD_STATE = os.path.join(self.tmp, "none")
+        t0 = time.time()
+        k = m.warp_rank_endpoints()
+        self.assertLess(time.time() - t0, 0.2 * len(m.WARP_EP_POOL) * 0.8)
+        self.assertEqual(sorted(ip for ip, _c, _t in seen), sorted(m.WARP_EP_POOL))
+        self.assertTrue(all(c == 1 for _ip, c, _t in seen))
+        self.assertEqual(len(k["endpoints"]), len(m.WARP_EP_POOL))
+
+
+class ProductUxI18nTests(unittest.TestCase):
+    """صفحه‌ی اشتراک، گیتِ چتِ خصوصیِ ربات، ترجمه‌های باقی‌مانده، traceroute، ifb."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="wgpanel-ux-")
+        self.m = load_module(self.tmp)
+        with open(os.path.join(self.tmp, "wgtest.conf"), "w",
+                  encoding="utf-8") as f:
+            f.write(FIXTURE_CONF)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    # ---- صفحه‌ی اشتراک -----------------------------------------------------------
+    def test_share_page_carries_link_validity_expiry_copy_and_a_safe_filename(self):
+        m = self.m
+        m.add_peer("wgtest", "a-very-long-device-name-here", use_psk=False)
+        tok, err = m.create_share("wgtest", "a-very-long-device-name-here", 30, False, "admin")
+        self.assertIsNone(err)
+        res = m.resolve_share(tok)
+        self.assertGreater(res["link_expires"], time.time())
+        res["expires"] = "2030-05-06"
+        html = m.render_share_page(res, None, "en")
+        self.assertIn('"link_expires": %d' % int(res["link_expires"]), html)
+        self.assertIn('"expires": "2030-05-06"', html)
+        self.assertIn('<meta name="robots" content="noindex, nofollow">', html)
+        self.assertIn('onclick="cp()"', html)
+        self.assertIn("Copy config", html)
+        self.assertIn("slice(0, 15)", html)
+        self.assertIn("ui.share.linkuntil", html)        # کلید در _T ِ تزریق‌شده
+
+    def test_share_rate_limit_message_is_translated(self):
+        m = self.m
+        m.share_rate_ok = lambda ip: False
+        for lang, word in (("en", "Too many"), ("fa", "بیش از حد")):
+            h = make_fake_handler(m, path="/s/abc?lang=" + lang, method="GET",
+                                  headers={"Cookie": ""})
+            h.do_GET()
+            self.assertEqual(dict(h.sent)["__code__"], 429)
+            self.assertIn(word, b"".join(h.body).decode())
+
+    # ---- ربات: چتِ خصوصی -----------------------------------------------------------
+    def _bot(self):
+        m = self.m
+        b = m.TelegramBot.__new__(m.TelegramBot)
+        b.convo = {}; b._edit = None; b._chat_type = None; b._lang = "en"
+        b._token = lambda: "T"
+        sent = []
+        m.tg_api = lambda tok, method, p=None, **kw: (sent.append((method, p)), (True, {}))[1]
+        return b, sent
+
+    def test_secrets_are_refused_outside_a_private_chat(self):
+        m = self.m
+        b, sent = self._bot()
+        m.META.proxy_user_upsert("pxu", {"pass_hash": "h", "pass_plain": "secret-pw",
+                                         "rate_kbit": 0, "quota_gb": 0, "expires": "",
+                                         "enabled": 1, "note": ""})
+        m.CONFIG["bot"] = {"enabled": True, "users": [{"id": "1", "role": "admin",
+                                                        "lang": "en"}]}
+        b._chat_type = "supergroup"
+        b._send_wg_conf(7, "u", "[Interface]\nPrivateKey = PRIV\n")
+        b._px_conf(7, "pxu")
+        b._apply(1, 7, {"kind": "px", "act": "pwd", "name": "pxu"})
+        joined = json.dumps([p for _mth, p in sent], ensure_ascii=False)
+        self.assertNotIn("PRIV", joined)
+        self.assertNotIn("secret-pw", joined)
+        self.assertEqual(len(sent), 3)
+        self.assertTrue(all("private chat" in p["text"] for _mth, p in sent))
+        self.assertEqual(m.META.proxy_user_get("pxu")["pass_plain"], "secret-pw")
+        # چتِ خصوصی: مثلِ قبل
+        sent.clear()
+        b._chat_type = "private"
+        b._px_conf(7, "pxu")
+        self.assertIn("secret-pw", json.dumps([p for _m, p in sent], ensure_ascii=False))
+
+    def test_bot_stays_silent_for_strangers_in_groups(self):
+        m = self.m
+        b, sent = self._bot()
+        m.CONFIG["bot"] = {"enabled": True, "users": [{"id": "1", "role": "admin"}]}
+        stranger = {"message": {"from": {"id": 999}, "chat": {"id": -5, "type": "supergroup"},
+                                "text": "/start"}}
+        b._dispatch_inner(stranger)
+        self.assertEqual(sent, [])
+        stranger["message"]["chat"] = {"id": 999, "type": "private"}
+        b._dispatch_inner(stranger)
+        self.assertEqual(len(sent), 1)          # در خصوصی: پیامِ «مجاز نیستید» + شناسه
+
+    # ---- i18n --------------------------------------------------------------------------
+    def test_audit_details_of_peer_and_user_edits_are_catalog_keys(self):
+        m = self.m
+        m.CONFIG["users"] = [{"username": "admin", "salt": "a" * 32, "hash": "h",
+                              "role": "admin", "totp": "", "stoken": "s"},
+                             {"username": "bob", "salt": "a" * 32, "hash": "h",
+                              "role": "viewer", "totp": "", "stoken": "s",
+                              "active": True}]
+        m.save_config = lambda: None
+
+        def post(path, body):
+            h = make_fake_handler(m, path=path, method="POST", body=body,
+                                  headers={"Cookie": "wgl=en"},
+                                  session={"u": "admin", "r": "admin"})
+            h.do_POST()
+            return json.loads(b"".join(h.body).decode())
+        self.assertTrue(post("/api/peer/add", {"iface": "wgtest", "name": "p1",
+                                               "quota_gb": 5, "rate_mbit": 10})["ok"])
+        self.assertTrue(post("/api/peer/meta", {"iface": "wgtest", "name": "p1",
+                                                "note": "hi", "quota_gb": 3})["ok"])
+        self.assertTrue(post("/api/users/edit", {"username": "bob", "role": "admin",
+                                                 "expires": "2030-01-01"})["ok"])
+        rows = {r["action"]: r["detail"] for r in m.META.audit_list(limit=20)}
+        for act in ("peer.add", "peer.edit", "pu.edit"):
+            with self.subTest(action=act):
+                self.assertTrue(rows[act].startswith('{"k":"ui.audit.det.'), rows[act])
+                self.assertFalse(re.search(r"[\u0600-\u06FF]", rows[act]), rows[act])
+        en = m.audit_detail_text(rows["peer.add"], "en")
+        o = json.loads(en)
+        self.assertEqual(o["p"]["quota"], 5.0)
+        self.assertEqual(o["p"]["psk"], "1")
+        o = json.loads(m.audit_detail_text(rows["pu.edit"], "en"))
+        self.assertEqual(o["p"]["role"], "viewer→admin")
+        self.assertEqual(o["p"]["exp"], "2030-01-01")
+        self.assertEqual(o["p"]["pw"], "0")
+
+    def test_digest_and_time_ago_follow_the_owner_language(self):
+        m = self.m
+        m.CONFIG["bot"] = {"enabled": True,
+                           "users": [{"id": "1", "role": "owner", "lang": "en"}]}
+        m.build_stats = lambda: {"users": []}
+        txt = m.build_digest_text()
+        self.assertIn("Status summary", txt)
+        self.assertIn("WireGuard", txt)
+        self.assertFalse(re.search(r"[\u0600-\u06FF]", txt), txt)
+        self.assertEqual(m._ago_srv(time.time() - 300, "en"), "5 min ago")
+        self.assertEqual(m._ago_srv(time.time() - 300, "fa"), "۵ دقیقه پیش")
+        self.assertEqual(m._ago_srv(time.time() - 300), "5 min ago")   # زبانِ مالک
+        m.CONFIG["bot"]["users"][0]["lang"] = "fa"
+        self.assertIn("خلاصهٔ وضعیت", m.build_digest_text())
+
+    def test_startup_alert_and_speedtest_busy_error_are_catalog_keys(self):
+        src = _read_panel_source()
+        self.assertIn("A('alert.startup'", src)
+        self.assertNotIn('ALERTS.emit("پنلِ', src)
+        self.assertIn('"api.err.speed.running"', src)
+        self.assertIn(m_key := "api.err.speed.running", self.m.I18N)
+
+    # ---- traceroute / ifb ---------------------------------------------------------------
+    def test_services_status_reports_traceroute_not_mtr(self):
+        m = self.m
+        m.shutil = types.SimpleNamespace(**{k: getattr(m.shutil, k) for k in dir(m.shutil)
+                                            if not k.startswith("__")})
+        m.shutil.which = lambda name: "/usr/bin/x" if name == "traceroute" else None
+        st = m.build_svc_status()
+        self.assertTrue(st["has_traceroute"])
+        self.assertNotIn("has_mtr", st)
+        self.assertIn("s.has_traceroute === false", _read_panel_source())
+
+    def test_shaper_loads_the_ifb_module_and_logs_when_it_is_missing(self):
+        m = self.m
+        del m._run_calls[:]
+        m.SHAPER._build("wgtest", {"10.0.0.5": 5})
+        self.assertIn(["modprobe", "ifb"], m._run_calls)
+        orig = m.run
+        m.run = lambda cmd, timeout=20: ((2, "", "RTNETLINK: Operation not supported")
+                                        if cmd[:3] == ["ip", "link", "add"]
+                                        else orig(cmd, timeout))
+        m.SHAPER._build("wgtest", {"10.0.0.5": 5})
+        with open(m.ACTION_LOG, encoding="utf-8") as f:
+            self.assertIn("upload limits on wgtest are NOT enforced", f.read())
 
 
 if __name__ == "__main__":
