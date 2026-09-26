@@ -17,6 +17,8 @@ prints as its version.
   `/var/folders`, so the demo moved the panel's own config path into its fake
   root a second time. A failed demo test also left the fake tools on `PATH`,
   which broke unrelated tests after it.
+- The Telegram bot's new-proxy-user wizard showed a raw key such as
+  `bot.proto.https` instead of the service type.
 
 ## [1.1.0] — 2026-09-26
 
