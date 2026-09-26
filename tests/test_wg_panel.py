@@ -644,6 +644,57 @@ class PanelTestCase(unittest.TestCase):
                         self.assertIn("ui.audit.act." + v, self.m.I18N,
                                       "کدِ اکشن بی‌ترجمه")
 
+    def test_server_labels_have_a_translation_keyed_by_their_code(self):
+        """برچسب‌هایی که سرور با کلیدِ پایدار می‌فرستد باید ترجمه داشته باشند.
+
+        مرورگر نقش‌ها، رویدادهای هشدار، اجزای بازیابی و سرویس‌های پیش‌فرض
+        را با `_tOr(پیشوند + کلید, برچسبِ سرور)` نشان می‌دهد؛ کلیدِ جاافتاده
+        بی‌صدا به برچسبِ فارسیِ سرور برمی‌گشت — همان نشتی که این گارد بست.
+        متنِ فارسیِ کاتالوگ هم باید با برچسبِ سرور یکی بماند.
+        """
+        m = self.m
+        pairs = [("ui.permgrp." + g, lbl) for g, lbl, _ in m.PERM_CATALOG]
+        pairs += [("ui.perm." + k, pl)
+                  for _, _, items in m.PERM_CATALOG for k, pl in items]
+        pairs += [("ui.alertev." + k, lbl) for k, lbl in m.ALERT_EVENTS]
+        pairs += [("ui.bk.comp." + k, lbl)
+                  for k, lbl in m.CLOUD_RESTORE_COMPONENTS]
+        pairs += [("ui.svc.name." + k, v["label"])
+                  for k, v in m.SVC_DEFAULTS.items()]
+        for key, fa in pairs:
+            with self.subTest(key=key):
+                self.assertIn(key, m.I18N, "برچسب بی‌ترجمه")
+                self.assertEqual(m.I18N[key][0], fa,
+                                 "متنِ فارسیِ کاتالوگ با برچسبِ سرور فرق دارد")
+        js = _read_panel_source()
+        for prefix in ("ui.permgrp.", "ui.perm.", "ui.alertev.",
+                       "ui.bk.comp.", "ui.svc.name."):
+            with self.subTest(prefix=prefix):
+                self.assertIn("_tOr('%s' + " % prefix, js,
+                              "مرورگر این برچسب‌ها را ترجمه نمی‌کند")
+
+    def test_auto_disable_reason_is_stored_as_a_catalog_key(self):
+        """دلیلِ قطع/حذفِ خودکار باید کلید ذخیره شود، نه متنِ فارسی.
+
+        ردیفِ تاریخچه داده است و ماندگار؛ متنِ فارسی در آن برای همیشه در
+        رابطِ en/ru/zh فارسی می‌ماند.
+        """
+        src = _read_panel_source()
+        self.assertIn('det = "ui.audit.reason." + reason', src)
+        for reason in ("expired", "quota", "total_cap"):
+            with self.subTest(reason=reason):
+                self.assertIn("ui.audit.reason." + reason, self.m.I18N)
+        self.assertIn("startsWith('ui.audit.reason.')", src,
+                      "auditDetail پارامترِ دلیل را ترجمه نمی‌کند")
+
+    def test_s4_errors_are_translatable_keys(self):
+        """خطای پیکربندیِ MEGA S4 کلیدِ api.* است تا به زبانِ درخواست برسد."""
+        from unittest import mock
+        with mock.patch("builtins.open", side_effect=OSError):
+            err = self.m._s4_target("panel")[3]
+        self.assertIn(err, self.m.I18N)
+        self.assertTrue(err.startswith("api."), err)
+
     def test_bot_has_no_hardcoded_persian(self):
         """هیچ رشتهٔ فارسیِ کاربر-روی نباید در کلاسِ ربات بماند.
 

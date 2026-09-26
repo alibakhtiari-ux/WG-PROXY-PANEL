@@ -8546,6 +8546,255 @@ I18N = {
                          "The manual backup “{p0}” failed: {p1}",
                          "Ручное резервное копирование «{p0}» не удалось: {p1}",
                          "手动备份“{p0}”失败：{p1}"),
+    # ── برچسب‌های داده‌ای که پیش‌تر فقط فارسی به مرورگر می‌رسیدند ──
+    "ui.permgrp.wg": ("کاربران وایرگارد",
+                    "WireGuard clients",
+                    "Клиенты WireGuard",
+                    "WireGuard 客户端"),
+    "ui.permgrp.proxy": ("کاربران پروکسی",
+                       "Proxy users",
+                       "Пользователи прокси",
+                       "代理用户"),
+    "ui.permgrp.tun": ("تونل‌های خروجی",
+                     "Egress tunnels",
+                     "Исходящие туннели",
+                     "出口隧道"),
+    "ui.permgrp.net": ("اینترفیس‌های شبکه",
+                     "Network interfaces",
+                     "Сетевые интерфейсы",
+                     "网络接口"),
+    "ui.permgrp.sys": ("وضعیت سرور (گیج‌ها)",
+                     "Server status (gauges)",
+                     "Состояние сервера (индикаторы)",
+                     "服务器状态（仪表）"),
+    "ui.permgrp.svc": ("تشخیص مسیر سرویس‌ها",
+                     "Service reachability",
+                     "Диагностика доступа к сервисам",
+                     "服务可达性诊断"),
+    "ui.permgrp.audit": ("تاریخچه و لاگ",
+                       "History and logs",
+                       "История и журналы",
+                       "历史与日志"),
+    "ui.permgrp.mgmt": ("مدیریت پنل",
+                      "Panel administration",
+                      "Управление панелью",
+                      "面板管理"),
+    "ui.perm.wg.view": ("دیدن و نمودار",
+                      "View and charts",
+                      "Просмотр и графики",
+                      "查看和图表"),
+    "ui.perm.wg.add": ("افزودن",
+                     "Add",
+                     "Добавление",
+                     "添加"),
+    "ui.perm.wg.edit": ("ویرایش و فعال/غیرفعال",
+                      "Edit and enable/disable",
+                      "Изменение и включение/отключение",
+                      "编辑和启用/停用"),
+    "ui.perm.wg.del": ("حذف",
+                     "Delete",
+                     "Удаление",
+                     "删除"),
+    "ui.perm.wg.conf": ("کانفیگ / QR / لینک اشتراک",
+                      "Config / QR / share link",
+                      "Конфигурация / QR / ссылка для передачи",
+                      "配置 / 二维码 / 分享链接"),
+    "ui.perm.proxy.view": ("دیدن، نمودار و لاگ",
+                         "View, charts and log",
+                         "Просмотр, графики и журнал",
+                         "查看、图表和日志"),
+    "ui.perm.proxy.add": ("افزودن",
+                        "Add",
+                        "Добавление",
+                        "添加"),
+    "ui.perm.proxy.edit": ("ویرایش",
+                         "Edit",
+                         "Изменение",
+                         "编辑"),
+    "ui.perm.proxy.del": ("حذف",
+                        "Delete",
+                        "Удаление",
+                        "删除"),
+    "ui.perm.proxy.conf": ("کانفیگ / QR (شاملِ رمز)",
+                         "Config / QR (includes the password)",
+                         "Конфигурация / QR (включая пароль)",
+                         "配置 / 二维码（含密码）"),
+    "ui.perm.tun.view": ("دیدن",
+                       "View",
+                       "Просмотр",
+                       "查看"),
+    "ui.perm.tun.toggle": ("روشن/خاموش",
+                         "Turn on/off",
+                         "Включение/выключение",
+                         "开启/关闭"),
+    "ui.perm.net.view": ("دیدن",
+                       "View",
+                       "Просмотр",
+                       "查看"),
+    "ui.perm.sys.view": ("دیدن",
+                       "View",
+                       "Просмотр",
+                       "查看"),
+    "ui.perm.svc.view": ("دیدن و تست",
+                       "View and test",
+                       "Просмотр и проверка",
+                       "查看和测试"),
+    "ui.perm.svc.edit": ("افزودن/ویرایش/حذف",
+                       "Add/edit/delete",
+                       "Добавление/изменение/удаление",
+                       "添加/编辑/删除"),
+    "ui.perm.audit.view": ("دیدن",
+                         "View",
+                         "Просмотр",
+                         "查看"),
+    "ui.perm.users.manage": ("کاربران پنل و نقش‌ها (هم‌ارزِ ادمینِ کامل)",
+                           "Panel users and roles (equivalent to a full admin)",
+                           "Пользователи панели и роли (равносильно полному администратору)",
+                           "面板用户和角色（等同于完整管理员）"),
+    "ui.perm.alerts.manage": ("تنظیماتِ هشدارِ تلگرام",
+                            "Telegram alert settings",
+                            "Настройки оповещений Telegram",
+                            "Telegram 告警设置"),
+    "ui.perm.bot.manage": ("کاربرانِ رباتِ تلگرام",
+                         "Telegram bot users",
+                         "Пользователи Telegram-бота",
+                         "Telegram 机器人用户"),
+    "ui.perm.ecmp.manage": ("گاردِ ECMP (ترمیمِ مسیرِ تونل‌های مرده)",
+                          "ECMP guard (repairs the routes of dead tunnels)",
+                          "Страж ECMP (восстановление маршрутов мёртвых туннелей)",
+                          "ECMP 守护（修复失效隧道的路由）"),
+    "ui.perm.warp.manage": ("مقصدهای مسیریابیِ WARP (افزودن/حذفِ سایت و IP)",
+                          "WARP routing destinations (add/remove sites and IPs)",
+                          "Направления маршрутизации WARP (добавление/удаление сайтов и IP)",
+                          "WARP 路由目标（添加/删除站点和 IP）"),
+    "ui.perm.settings.ips": ("محدودیت IP سراسری",
+                           "Global IP restriction",
+                           "Глобальное ограничение по IP",
+                           "全局 IP 限制"),
+    "ui.perm.backup.get": ("دانلود بکاپ",
+                         "Download backups",
+                         "Скачивание резервных копий",
+                         "下载备份"),
+    "ui.perm.backup.restore": ("بازیابی بکاپ",
+                             "Restore backups",
+                             "Восстановление из резервных копий",
+                             "恢复备份"),
+    "ui.alertev.tunnel": ("قطع/وصلِ تونل‌های خروجی",
+                        "Egress tunnels going down/up",
+                        "Падение и восстановление исходящих туннелей",
+                        "出口隧道断开/恢复"),
+    "ui.alertev.ecmp": ("ترمیمِ خودکارِ مسیرِ ECMP (حذف/بازگرداندنِ تونلِ مرده)",
+                      "Automatic ECMP route repair (removing/restoring a dead tunnel)",
+                      "Автоматическое восстановление маршрута ECMP (удаление/возврат мёртвого туннеля)",
+                      "ECMP 路由自动修复（移除/恢复失效隧道）"),
+    "ui.alertev.warp": ("مسیریابیِ WARP (قطعِ تونل، ناهمخوانیِ خروج، افتِ حساب)",
+                      "WARP routing (tunnel down, egress mismatch, account degraded)",
+                      "Маршрутизация WARP (обрыв туннеля, несовпадение выхода, деградация аккаунта)",
+                      "WARP 路由（隧道中断、出口不一致、账户降级）"),
+    "ui.alertev.peer": ("آفلاین‌شدنِ کاربرانِ نشان‌دار (وایرگارد)",
+                      "Flagged clients going offline (WireGuard)",
+                      "Отмеченные клиенты уходят в офлайн (WireGuard)",
+                      "被标记的客户端离线（WireGuard）"),
+    "ui.alertev.quota": ("رسیدن به سقفِ سهمیه (وایرگارد/پروکسی)",
+                       "Quota reached (WireGuard/proxy)",
+                       "Достигнута квота (WireGuard/прокси)",
+                       "达到配额（WireGuard/代理）"),
+    "ui.alertev.expiry": ("نزدیک‌شدنِ انقضای حساب‌ها",
+                        "Accounts about to expire",
+                        "Скорое истечение учётных записей",
+                        "账户即将到期"),
+    "ui.alertev.resource": ("بالا ماندنِ CPU/RAM/DISK سرور",
+                          "Sustained high server CPU/RAM/disk",
+                          "Долго высокая загрузка CPU/RAM/диска сервера",
+                          "服务器 CPU/内存/磁盘持续偏高"),
+    "ui.alertev.swap": ("مصرفِ Swap (خطرِ کمبودِ حافظه)",
+                      "Swap use (risk of running out of memory)",
+                      "Использование swap (риск нехватки памяти)",
+                      "使用 Swap（内存不足风险）"),
+    "ui.alertev.login": ("تلاش‌های ناموفقِ مکررِ ورود",
+                       "Repeated failed logins",
+                       "Повторные неудачные попытки входа",
+                       "多次登录失败"),
+    "ui.alertev.backup": ("شکستِ آپلودِ بکاپِ شبانه (MEGA S4)",
+                        "Nightly backup upload failed (MEGA S4)",
+                        "Сбой выгрузки ночной резервной копии (MEGA S4)",
+                        "夜间备份上传失败（MEGA S4）"),
+    "ui.alertev.speedtest": ("افتِ سرعتِ اینترنت (تستِ دوره‌ای)",
+                           "Internet speed drop (periodic test)",
+                           "Падение скорости интернета (периодическая проверка)",
+                           "网速下降（定期测试）"),
+    "ui.alertev.startup": ("راه‌اندازی/ری‌استارتِ پنل",
+                         "Panel start/restart",
+                         "Запуск/перезапуск панели",
+                         "面板启动/重启"),
+    "ui.bk.comp.wireguard": ("کانفیگ‌های WireGuard",
+                           "WireGuard configs",
+                           "Конфигурации WireGuard",
+                           "WireGuard 配置"),
+    "ui.bk.comp.clients": ("کانفیگ کلاینت‌ها",
+                         "Client configs",
+                         "Конфигурации клиентов",
+                         "客户端配置"),
+    "ui.bk.comp.db": ("دیتابیس حسابداری/تاریخچه",
+                    "Accounting/history database",
+                    "База учёта трафика и истории",
+                    "流量统计/历史数据库"),
+    "ui.svc.name.youtube": ("یوتیوب",
+                          "YouTube",
+                          "YouTube",
+                          "YouTube"),
+    "ui.svc.name.ytmusic": ("یوتیوب موزیک",
+                          "YouTube Music",
+                          "YouTube Music",
+                          "YouTube Music"),
+    "ui.svc.name.x": ("x.com (توییتر)",
+                    "x.com (Twitter)",
+                    "x.com (Twitter)",
+                    "x.com（Twitter）"),
+    "ui.svc.name.telegram": ("تلگرام",
+                           "Telegram",
+                           "Telegram",
+                           "Telegram"),
+    "ui.svc.name.tidal": ("Tidal",
+                        "Tidal",
+                        "Tidal",
+                        "Tidal"),
+    "ui.bk.unit.panel": ("بکاپِ محلیِ پنل",
+                       "Local panel backup",
+                       "Локальная копия панели",
+                       "本地面板备份"),
+    "ui.bk.unit.full": ("بکاپِ کاملِ سرور",
+                      "Full server backup",
+                      "Полная копия сервера",
+                      "整机备份"),
+    "ui.audit.reason.expired": ("رسیدن به تاریخ انقضا",
+                              "Expiry date reached",
+                              "Истёк срок действия",
+                              "已到期"),
+    "ui.audit.reason.quota": ("رسیدن به سقف سهمیه‌ی ماهانه",
+                            "Monthly quota reached",
+                            "Исчерпана месячная квота",
+                            "已达到月度配额"),
+    "ui.audit.reason.total_cap": ("رسیدن به سقف حجم کل",
+                                "Lifetime data cap reached",
+                                "Исчерпан общий лимит трафика",
+                                "已达到总流量上限"),
+    "api.err.s4.noenv": ("پرونده‌ی /etc/wg-panel-s4.env در دسترس نیست",
+                       "The file /etc/wg-panel-s4.env is not available",
+                       "Файл /etc/wg-panel-s4.env недоступен",
+                       "文件 /etc/wg-panel-s4.env 不可用"),
+    "api.err.s4.nobucket": ("REMOTE/BUCKET در env تنظیم نشده",
+                          "REMOTE/BUCKET is not set in the env file",
+                          "REMOTE/BUCKET не заданы в env-файле",
+                          "env 文件中未设置 REMOTE/BUCKET"),
+    "api.err.s4.badjson": ("پاسخ rclone قابلِ‌خواندن نبود",
+                         "The rclone response could not be read",
+                         "Не удалось разобрать ответ rclone",
+                         "无法解析 rclone 的响应"),
+    "api.err.s4.rclone": ("خطای rclone",
+                        "rclone error",
+                        "Ошибка rclone",
+                        "rclone 出错"),
 }
 
 
@@ -12999,9 +13248,9 @@ class Sampler(threading.Thread):
                 if not reason:
                     continue
                 action = meta.get("enforce_action") or "disable"
-                det = {"expired": "رسیدن به تاریخ انقضا",
-                       "quota": "رسیدن به سقف سهمیه‌ی ماهانه",
-                       "total_cap": "رسیدن به سقف حجم کل"}[reason]
+                # کلیدِ کاتالوگ، نه متنِ فارسی: مرورگر پارامترِ why را هنگامِ
+                # نمایش به زبانِ کاربر ترجمه می‌کند (auditDetail).
+                det = "ui.audit.reason." + reason
                 ALERTS.event("quota" if reason != "expired" else "expiry",
                              A('alert.enforce.1', p0=b['name'], p1=iface, p2=reason, p3=A('alert.lit.1') if action == 'delete' else A('alert.lit.2')))
                 if action == "delete":
@@ -13537,14 +13786,14 @@ def _s4_target(which="panel"):
                     k, _, v = ln.partition("=")
                     env[k.strip()] = v.strip().strip('"').strip("'")
     except OSError:
-        return "", "", 30, "پرونده‌ی /etc/wg-panel-s4.env در دسترس نیست"
+        return "", "", 30, "api.err.s4.noenv"
     remote, bucket = env.get("REMOTE", ""), env.get("BUCKET", "")
     if which == "full":
         prefix, keep = env.get("FULL_PREFIX", FULL_BACKUP_NAME), 14
     else:
         prefix, keep = env.get("PREFIX", "wg-panel"), 30
     if not (remote and bucket):
-        return "", "", keep, "REMOTE/BUCKET در env تنظیم نشده"
+        return "", "", keep, "api.err.s4.nobucket"
     # سرویسِ پنل ProtectHome=yes دارد و /root را نمی‌بیند؛ configِ
     # rclone در /etc نگه‌داری می‌شود (اگر نبود، مسیرِ سنتیِ root).
     conf = "/etc/wg-panel-rclone.conf"
@@ -13579,12 +13828,12 @@ def _s4_remote_status(force=False, which="panel"):
                     latest_bytes=(objs[0].get("Size", 0) if objs else 0),
                     latest_mod=(objs[0].get("ModTime", "") if objs else ""))
             except ValueError:
-                data["error"] = "پاسخ rclone قابلِ‌خواندن نبود"
+                data["error"] = "api.err.s4.badjson"
         else:
             data["error"] = ((err or out or "").strip()
-                             or "خطای rclone")[:160]
+                             or "api.err.s4.rclone")[:160]
     elif not data["error"]:
-        data["error"] = "REMOTE/BUCKET در env تنظیم نشده"
+        data["error"] = "api.err.s4.nobucket"
     _S4_CACHE[which] = {"ts": now, "data": data}
     return data
 
@@ -13621,10 +13870,10 @@ def s4_panel_versions(force=False):
                 vers.sort(key=lambda v: v["name"], reverse=True)
                 data.update(ok=True, versions=vers)
             except ValueError:
-                data["error"] = "پاسخ rclone قابلِ‌خواندن نبود"
+                data["error"] = "api.err.s4.badjson"
         else:
             data["error"] = ((err or out or "").strip()
-                             or "خطای rclone")[:160]
+                             or "api.err.s4.rclone")[:160]
     _S4_VER_CACHE.update(ts=now, data=data)
     return data
 
@@ -20713,6 +20962,7 @@ def build_svc_status():
         rows.append({
             "key": key,
             "label": svc["label"],
+            "custom": bool(svc.get("custom")),
             "probe_url": svc["probe"],
             "domains": svc["domains"],
             "ip_count": summary.get(key, {}).get("count", 0),
@@ -22835,7 +23085,7 @@ function renderSvc(s){
     return '<div class="svc-card" data-svc="' + esc(row.key) + '">' +
       '<div class="svc-head">' +
         '<div class="svc-ident">' +
-          '<div class="svc-name">' + esc(row.label) +
+          '<div class="svc-name">' + esc(svcLabel(row)) +
             ' <span class="svc-ipchip"><b>' + row.ip_count + '</b> IP</span></div>' +
           '<div class="svc-doms">' + esc(row.domains.join(' · ')) + '</div>' +
         '</div>' +
@@ -22849,7 +23099,7 @@ function renderSvc(s){
             '\')">' + _t('ui.js.renderSvc.14') + (open ? ' ▲' : ' ▼') + '</button>' : '') +
           (can('svc.edit') ?
           '<button class="svc-mtrbtn danger" onclick="deleteSvc(\'' +
-            esc(row.key) + '\',\'' + esc(row.label) + '\')">' + _t('ui.js.renderSvc.15') + '</button>' : '') +
+            esc(row.key) + '\',\'' + esc(svcLabel(row)) + '\')">' + _t('ui.js.renderSvc.15') + '</button>' : '') +
         '</div>' +
       '</div>' +
       '<div class="svc-ips-holder" data-ips="' + esc(row.key) + '"></div>' +
@@ -25167,8 +25417,9 @@ async function loadBackupStatus(){
   const units = {}; (r.units || []).forEach(u => units[u.unit] = u);
   const rows = [];
   // سیاست: بکاپ فقط روی MEGA می‌ماند؛ ملاکِ سلامت، آخرین آپلودِ تأییدشده است
-  [['wg-panel-backup', 0, r.s4], [r.full_unit || 'wg-panel-full-backup', 1, r.s4_full]]
-      .forEach(([un, i, rem]) => {
+  [['wg-panel-backup', 0, r.s4, 'ui.bk.unit.panel'],
+   [r.full_unit || 'wg-panel-full-backup', 1, r.s4_full, 'ui.bk.unit.full']]
+      .forEach(([un, i, rem, lk]) => {
     const a = (r.archives || [])[i] || {}, u = units[un] || {},
           e = a.remote || {};
     const fresh = e.verified && e.uploaded &&
@@ -25192,7 +25443,7 @@ async function loadBackupStatus(){
         ? ' · <b style="color:var(--amber)">' + _t('ui.js.loadBackupStatus.7') + '</b>'
         : ' <span class="mut">' + _t('ui.js.loadBackupStatus.8') + ')</span>');
     rows.push('<tr><td title="' + esc(e.target || a.path || '') + '">' +
-      esc(u.label || a.label || un) + '</td>' +
+      esc(_t(lk)) + '</td>' +
       '<td>' + lastCell + '</td>' +
       '<td>' + (e.size ? fmtBytes(e.size) : (a.exists ? fmtBytes(a.size) : '—')) + '</td>' +
       '<td>' + kept + '</td>' +
@@ -25203,7 +25454,7 @@ async function loadBackupStatus(){
   if(u4.result && u4.result !== 'success') s4st = badge(_t('ui.js.loadBackupStatus.9', {p0: esc(u4.result)}), 'red');
   else if(!s4.ok) s4st = badge(_t('ui.js.loadBackupStatus.10'), 'amber');
   else s4st = badge(_t('ui.js.ecmpBadge.1'), 'green');
-  rows.push('<tr><td title="' + esc(s4.target || '') + '">' + esc(u4.label || _t('ui.js.loadBackupStatus.12')) + '</td>' +
+  rows.push('<tr><td title="' + esc(s4.target || '') + '">' + esc(_t('ui.js.loadBackupStatus.12')) + '</td>' +
     '<td>' + when(u4.last) +
       (s4.ok && s4.latest ? '<div class="mut" style="font-size:11px" dir="ltr">' + esc(s4.latest) + '</div>' : '') + '</td>' +
     '<td>' + (s4.ok ? fmtBytes(s4.latest_bytes || 0) : '—') + '</td>' +
@@ -25212,7 +25463,7 @@ async function loadBackupStatus(){
       ' <span class="mut">(' + _t('ui.js.loadBackupStatus.14') + ' ' + faNum(s4.keep || 30) + ' ' + _t('ui.js.loadBackupStatus.15') + ')</span></td>' +
     '<td>' + when(u4.next) + '</td><td>' + s4st + '</td></tr>');
   const uv = units['wg-panel-verify-backup'] || {};
-  rows.push('<tr><td>' + esc(uv.label || _t('ui.js.loadBackupStatus.16')) + ' <span class="mut">(' + _t('ui.js.graphInner.16') + ')</span></td>' +
+  rows.push('<tr><td>' + esc(_t('ui.js.loadBackupStatus.16')) + ' <span class="mut">(' + _t('ui.js.graphInner.16') + ')</span></td>' +
     '<td>' + when(uv.last) + '</td><td>—</td><td>—</td>' +
     '<td>' + when(uv.next) + '</td>' +
     '<td>' + (uv.result === 'success' ? badge(_t('ui.js.ecmpBadge.1'), 'green') :
@@ -25290,7 +25541,7 @@ async function loadCloudVersions(force){
     el('bkr-comps').innerHTML = (r.components || []).map((c, i) =>
       '<label style="display:flex;gap:5px;align-items:center;font-size:12px">' +
       '<input type="checkbox" class="bkr-c" value="' + esc(c.key) + '"' +
-      (i === 0 ? ' checked' : '') + '>' + esc(c.label) + '</label>').join('');
+      (i === 0 ? ' checked' : '') + '>' + esc(_tOr('ui.bk.comp.' + c.key, c.label)) + '</label>').join('');
   bkrLoaded = true;
 }
 async function doCloudRestore(){
@@ -25371,6 +25622,12 @@ function _tOr(key, raw){
   return s === key ? raw : s;
 }
 function auditAction(a){ return _tOr('ui.audit.act.' + a, a); }
+// برچسب‌هایی که سرور با کلیدِ پایدار می‌فرستد (نقش‌ها، هشدارها، سرویس‌ها،
+// اجزای بازیابی) این‌جا به زبانِ کاربر برگردانده می‌شوند؛ متنِ سرور فقط
+// پشتیبان است. سرویسِ سفارشی نامی است که خودِ ادمین نوشته — ترجمه نمی‌شود.
+function svcLabel(row){
+  return row.custom ? row.label : _tOr('ui.svc.name.' + row.key, row.label);
+}
 function auditActor(a){
   return (a || '').startsWith('sys:') ? _tOr('ui.audit.actor.' + a, a) : a;
 }
@@ -25379,7 +25636,15 @@ function auditDetail(d){
   if(d.charCodeAt(0) !== 123) return d;      // با { شروع نشده ⇒ متنِ خام
   try{
     const o = JSON.parse(d);
-    if(o && typeof o.k === 'string') return _t(o.k, o.p || {});
+    if(o && typeof o.k === 'string'){
+      // پارامتری که خودش کلیدِ دلیل است (مثلِ why در قطعِ خودکار) هم ترجمه
+      // می‌شود؛ ردیف‌های قدیمی متنِ فارسی دارند و دست‌نخورده می‌مانند.
+      const p = Object.assign({}, o.p || {});
+      for(const k in p)
+        if(typeof p[k] === 'string' && p[k].startsWith('ui.audit.reason.'))
+          p[k] = _tOr(p[k], p[k]);
+      return _t(o.k, p);
+    }
   }catch(e){}
   return d;
 }
@@ -28166,7 +28431,8 @@ function renderRoles(){
   const tb = el('pu-roles').querySelector('tbody');
   const permLabel = {};
   (lastRoles.catalog || []).forEach(g =>
-    g.perms.forEach(p => permLabel[p.key] = g.label + ' · ' + p.label));
+    g.perms.forEach(p => permLabel[p.key] = _tOr('ui.permgrp.' + g.group, g.label) +
+                                  ' · ' + _tOr('ui.perm.' + p.key, p.label)));
   tb.innerHTML = (lastRoles.roles || []).map(function(r){
     const a = "'" + esc(r.name) + "'";
     const chips = r.name === 'admin'
@@ -28281,10 +28547,10 @@ function showRoleModal(name){
   openPlainModal(role ? _t('ui.js.showRoleModal.1', {p0: name}) : _t('ui.js.showRoleModal.2'));
   const have = new Set(role ? role.perms : []);
   const groups = (lastRoles.catalog || []).map(function(g){
-    return '<div class="perm-group"><b>' + esc(g.label) + '</b>' +
+    return '<div class="perm-group"><b>' + esc(_tOr('ui.permgrp.' + g.group, g.label)) + '</b>' +
       '<div class="perm-grid">' + g.perms.map(p =>
         '<label><input type="checkbox" class="perm-cb" value="' + esc(p.key) + '"' +
-        (have.has(p.key) ? ' checked' : '') + '> ' + esc(p.label) +
+        (have.has(p.key) ? ' checked' : '') + '> ' + esc(_tOr('ui.perm.' + p.key, p.label)) +
         (PERM_RISK[p.key] ? ' <span class="perm-warn" title="' +
           esc(PERM_RISK[p.key][1]) + '">⚠ ' + esc(PERM_RISK[p.key][0]) +
           '</span>' : '') + '</label>'
@@ -28586,7 +28852,7 @@ async function showAlertsModal(){
     return '<label class="perm-grid"><label style="display:flex;gap:6px;' +
       'align-items:center"><input type="checkbox" class="al-ev" data-k="' +
       esc(e.key) + '"' + (c.events[e.key] ? ' checked' : '') +
-      ' style="width:auto"> ' + esc(e.label) + '</label></label>';
+      ' style="width:auto"> ' + esc(_tOr('ui.alertev.' + e.key, e.label)) + '</label></label>';
   }).join('');
   el('modal-body').innerHTML =
     '<div class="msg" id="al-msg"></div>' +
@@ -29734,9 +30000,14 @@ class Handler(BaseHTTPRequestHandler):
             if self._perm_denied(path):
                 return
             st = backup_full_status()
+            # خطای S4 داخلِ یک dict ِ تو در تو است و _json فقط error ِ سطحِ
+            # بالا را ترجمه می‌کند. کپی، چون همین dict در _S4_CACHE می‌ماند.
+            lang = self._lang()
+            s4 = {k: dict(st[k], error=self._msg(st[k].get("error"), lang))
+                  for k in ("s4", "s4_full")}
             self._json({"ok": True, "archives": st["archives"],
-                        "units": st["units"], "s4": st["s4"],
-                        "s4_full": st["s4_full"],
+                        "units": st["units"], "s4": s4["s4"],
+                        "s4_full": s4["s4_full"],
                         "manual": manual_backup_state()})
         elif path == "/api/speedtest/status":
             if self._perm_denied(path):
