@@ -11149,13 +11149,6 @@ class ProductAuthTests(unittest.TestCase):
         base = json.loads(json.dumps(m.CONFIG))
         cases = {
             "users not a list": dict(base, users={"a": 1}),
-            "user not an object": dict(base, users=["admin"]),
-            "bad username": dict(base, users=[dict(base["users"][0], username="a b")]),
-            "duplicate": dict(base, users=base["users"] * 2),
-            "missing role": dict(base, users=[{k: v for k, v in base["users"][0].items()
-                                               if k != "role"}]),
-            "non-hex salt": dict(base, users=[dict(base["users"][0], salt="xyz")]),
-            "bad expires": dict(base, users=[dict(base["users"][0], expires="tomorrow")]),
             "bad port": dict(base, port="8787"),
             "tls half": dict(base, tls_cert="/x.pem"),
             "tls missing file": dict(base, tls_cert="/nope.pem", tls_key="/nope.key"),
@@ -11173,6 +11166,50 @@ class ProductAuthTests(unittest.TestCase):
         fatal, warn = m.validate_config(dict(base, users=[]))
         self.assertEqual(fatal, [])
         self.assertTrue(warn)
+
+    def test_one_broken_user_does_not_stop_the_panel(self):
+        """خرابیِ یک رکوردِ کاربر هشدار است، نه fatal؛ همان کاربر کنار
+        می‌رود و بقیه کار می‌کنند.
+
+        پیش از این یک salt ِ غلط در رکوردِ یک اپراتورِ فرعی کلِ پنل را —
+        با اعمالِ سهمیه و انقضا و ربات — بعد از ری‌استارت از کار می‌انداخت.
+        """
+        m = self.m
+        base = json.loads(json.dumps(m.CONFIG))
+        good = base["users"][0]
+        bad = {
+            "user not an object": "admin2",
+            "bad username": dict(good, username="a b"),
+            "duplicate": dict(good),
+            "missing role": {k: v for k, v in dict(good, username="nr").items()
+                             if k != "role"},
+            "non-hex salt": dict(good, username="hx", salt="xyz"),
+            "bad expires": dict(good, username="ex", expires="tomorrow"),
+        }
+        for label, rec in bad.items():
+            with self.subTest(case=label):
+                cfg = dict(base, users=[good, rec])
+                fatal, warn = m.validate_config(cfg)
+                self.assertEqual(fatal, [], label)
+                self.assertTrue(any("users[1] is ignored" in w for w in warn),
+                                warn)
+                self.assertEqual([i for i, _n, _e in m.invalid_users(cfg)], [1])
+        # قرنطینه: از حافظه بیرون، ولی در ذخیره‌ی بعدی دست‌نخورده برمی‌گردد
+        # (ماژولِ تازه، چون setUp ِ این کلاس save_config را خنثی کرده است)
+        m2 = load_module(self.tmp)
+        rec = bad["non-hex salt"]
+        m2.CONFIG["users"] = [good, rec]
+        got = m2.quarantine_invalid_users()
+        self.assertEqual([(i, n) for i, n, _e in got], [(1, "hx")])
+        self.assertIsNone(m2.find_user("hx"))
+        self.assertIsNotNone(m2.find_user("admin"))
+        m2.save_config()
+        with open(m2.CONFIG_PATH, encoding="utf-8") as f:
+            on_disk = json.load(f)
+        self.assertEqual([u["username"] for u in on_disk["users"]],
+                         ["admin", "hx"])
+        self.assertEqual(on_disk["users"][1]["salt"], "xyz")
+        self.assertEqual(len(m2.CONFIG["users"]), 1)
 
     # ---- TOTP recovery codes --------------------------------------------------
     def _enable_totp(self):

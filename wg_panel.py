@@ -9232,12 +9232,75 @@ def load_config():
 _USERNAME_RE = re.compile(r"[A-Za-z0-9_.\-]{1,32}\Z")
 
 
+def _user_problems(u, c):
+    """مشکلاتِ یک رکوردِ کاربر → (خطاها، هشدارها). خطا یعنی کاربر قابلِ
+    استفاده نیست (قرنطینه)، نه اینکه پنل نباید بالا بیاید."""
+    if not isinstance(u, dict):
+        return ["must be an object"], []
+    err, warn = [], []
+    name = u.get("username")
+    if not isinstance(name, str) or not _USERNAME_RE.match(name):
+        err.append("invalid \"username\" %r" % (name,))
+    role = u.get("role")
+    if not isinstance(role, str) or not role:
+        err.append("missing \"role\"")
+    elif role not in BUILTIN_ROLES and role not in (c.get("roles") or {}):
+        warn.append("role %r is not defined (user has no permissions)" % role)
+    salt = u.get("salt", "")
+    if salt:
+        try:
+            bytes.fromhex(salt)
+        except (ValueError, TypeError):
+            err.append("\"salt\" is not hex")
+    h = u.get("hash", "")
+    if h and not isinstance(h, str):
+        err.append("\"hash\" must be a string")
+    if bool(salt) != bool(h):
+        warn.append("one of salt/hash is empty — first login sets "
+                    "a new password")
+    exp = u.get("expires", "")
+    if exp and not (isinstance(exp, str)
+                    and re.fullmatch(r"\d{4}-\d{2}-\d{2}", exp)):
+        err.append("\"expires\" must be YYYY-MM-DD")
+    if u.get("allow_ips") is not None and not isinstance(u["allow_ips"], list):
+        err.append("\"allow_ips\" must be a list")
+    return err, warn
+
+
+def invalid_users(c):
+    """[(index, username_or_None, [errors])] برای رکوردهای کاربرِ خراب.
+    تکراری‌ها هم اینجا هستند: اولی می‌ماند، بعدی‌ها خراب‌اند (find_user
+    هم همیشه اولی را برمی‌گرداند)."""
+    out, seen = [], set()
+    users = c.get("users") if isinstance(c, dict) else None
+    if not isinstance(users, list):
+        return out
+    for i, u in enumerate(users):
+        err, _w = _user_problems(u, c)
+        name = u.get("username") if isinstance(u, dict) else None
+        if not err and name in seen:
+            err = ["duplicate username %r" % name]
+        if err:
+            out.append((i, name if isinstance(name, str) else None, err))
+        elif isinstance(name, str):
+            seen.add(name)
+    return out
+
+
 def validate_config(c):
     """بررسیِ شکلِ config.json → (fatal, warnings) — دو لیستِ پیام.
 
     بدونِ این، یک salt ِ غیرهگز یا رکوردِ کاربرِ بی‌نام تا وسطِ یک درخواست
     پنهان می‌ماند و آن‌جا به KeyError/ValueError می‌رسید — ۵۰۰ ِ بی‌توضیح.
     این در راه‌اندازی صدا زده می‌شود: fatal یعنی پنل نباید بالا بیاید.
+
+    خرابیِ **یک کاربر** fatal نیست: پیش از این یک salt ِ غلط یا تاریخِ
+    انقضای بدشکل در رکوردِ یک اپراتورِ فرعی کلِ پنل را از کار می‌انداخت —
+    اعمالِ سهمیه و انقضا، شیپر، ربات، هشدارها — آن هم معمولاً بعد از یک
+    ویرایشِ دستی و ری‌استارتِ شبانه. حالا آن رکورد هشدار می‌گیرد و
+    quarantine_invalid_users کنارش می‌گذارد؛ فقط همان کاربر نمی‌تواند
+    وارد شود. خرابیِ ساختاری (users ِ غیرِ لیست، پورت، TLS، شبکه‌ها) هنوز
+    fatal است.
     """
     fatal, warn = [], []
     if not isinstance(c, dict):
@@ -9246,43 +9309,12 @@ def validate_config(c):
     if users is not None and not isinstance(users, list):
         fatal.append("\"users\" must be a list")
         users = []
-    seen = set()
     for i, u in enumerate(users or []):
-        where = "users[%d]" % i
-        if not isinstance(u, dict):
-            fatal.append("%s must be an object" % where)
-            continue
-        name = u.get("username")
-        if not isinstance(name, str) or not _USERNAME_RE.match(name):
-            fatal.append("%s: invalid \"username\" %r" % (where, name))
-        elif name in seen:
-            fatal.append("%s: duplicate username %r" % (where, name))
-        else:
-            seen.add(name)
-        role = u.get("role")
-        if not isinstance(role, str) or not role:
-            fatal.append("%s: missing \"role\"" % where)
-        elif role not in BUILTIN_ROLES and role not in (c.get("roles") or {}):
-            warn.append("%s: role %r is not defined (user has no permissions)"
-                        % (where, role))
-        salt = u.get("salt", "")
-        if salt:
-            try:
-                bytes.fromhex(salt)
-            except (ValueError, TypeError):
-                fatal.append("%s: \"salt\" is not hex" % where)
-        h = u.get("hash", "")
-        if h and not isinstance(h, str):
-            fatal.append("%s: \"hash\" must be a string" % where)
-        if bool(salt) != bool(h):
-            warn.append("%s: one of salt/hash is empty — first login sets "
-                        "a new password" % where)
-        exp = u.get("expires", "")
-        if exp and not (isinstance(exp, str)
-                        and re.fullmatch(r"\d{4}-\d{2}-\d{2}", exp)):
-            fatal.append("%s: \"expires\" must be YYYY-MM-DD" % where)
-        if u.get("allow_ips") is not None and not isinstance(u["allow_ips"], list):
-            fatal.append("%s: \"allow_ips\" must be a list" % where)
+        _e, w = _user_problems(u, c)
+        warn += ["users[%d]: %s" % (i, x) for x in w]
+    for i, _name, errs in invalid_users(c):
+        warn.append("users[%d] is ignored until fixed: %s"
+                    % (i, "; ".join(errs)))
     for key in ("allow_ips", "trusted_proxies"):
         for e in (c.get(key) or []):
             try:
@@ -9303,7 +9335,29 @@ def validate_config(c):
         warn.append("\"secret\" is short; it will be regenerated on migration")
     if users == []:
         warn.append("no users defined — nobody can log in")
+    elif users and len(invalid_users(c)) == len(users):
+        warn.append("no valid users — nobody can log in until config.json "
+                    "is fixed")
     return fatal, warn
+
+
+# رکوردهای کاربرِ خراب که در راه‌اندازی از CONFIG["users"] کنار رفته‌اند.
+# در حافظه نیستند تا هیچ مسیری (ورود، فهرست، RBAC) به آن‌ها نرسد، ولی
+# save_config عیناً به فایل برشان می‌گرداند: ویرایشِ بعدیِ پنل نباید
+# رکوردی را که اپراتور می‌خواهد درست کند پاک کند.
+_QUARANTINED_USERS = []
+
+
+def quarantine_invalid_users():
+    """رکوردهای خرابِ CONFIG["users"] را به _QUARANTINED_USERS می‌برد."""
+    bad = invalid_users(CONFIG)
+    if not bad:
+        return []
+    idx = {i for i, _n, _e in bad}
+    users = CONFIG["users"]
+    _QUARANTINED_USERS[:] = [users[i] for i in sorted(idx)]
+    CONFIG["users"] = [u for i, u in enumerate(users) if i not in idx]
+    return bad
 
 
 # ضربانِ نخ‌های پس‌زمینه: هر حلقه در ابتدای هر دور خود را ثبت می‌کند و
@@ -9681,7 +9735,7 @@ def save_config():
     #
     # عمداً بیرونِ قفل: گرفتنِ قفل برای اینکه بلافاصله raise کنیم بی‌فایده
     # است و قصد را هم مبهم می‌کند.
-    if not CONFIG.get("users"):
+    if not (CONFIG.get("users") or _QUARANTINED_USERS):
         log_action("save_config REFUSED: CONFIG بدون users (بارگذاری‌نشده؟)")
         raise RuntimeError("refusing to save an unpopulated CONFIG")
     with _config_write_lock:
@@ -9692,7 +9746,11 @@ def save_config():
         try:
             os.fchmod(fd, 0o600)   # mkstemp معمولاً ۰۶۰۰ می‌دهد؛ صریح می‌کنیمش
             with os.fdopen(fd, "w", encoding="utf-8") as f:
-                json.dump(CONFIG, f, indent=2, ensure_ascii=False)
+                out = CONFIG
+                if _QUARANTINED_USERS:
+                    out = dict(CONFIG, users=list(CONFIG.get("users") or [])
+                               + _QUARANTINED_USERS)
+                json.dump(out, f, indent=2, ensure_ascii=False)
                 f.flush()
                 os.fsync(f.fileno())   # بدونِ این، قطعِ برق فایلِ صفرطول می‌گذارد
             os.replace(tmp, CONFIG_PATH)
@@ -34036,6 +34094,9 @@ def main():
         for f in fatal:
             log_action("config error: %s" % f)
         raise SystemExit("config.json is invalid:\n  - " + "\n  - ".join(fatal))
+    for i, name, errs in quarantine_invalid_users():
+        log_action("config: user %s (users[%d]) disabled until fixed: %s"
+                   % (name or "?", i, "; ".join(errs)))
     migrate_config()
     if CONFIG.get("trusted_proxies"):
         log_action("trusted proxies: %s (client IP from X-Forwarded-For)"
