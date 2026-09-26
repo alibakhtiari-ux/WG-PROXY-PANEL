@@ -27,21 +27,78 @@
 این پنل برای سروری ساخته شده که نه Docker دارد نه pip؛ پس نصبِ آن یعنی
 کپی‌کردنِ یک فایل.
 
+<p align="center">
+  <img src="docs/screenshots/rtl-fa.png" width="900"
+       alt="داشبوردِ WG-PROXY-PANEL به فارسی: گیج‌های سرور و جدولِ کاربرانِ WireGuard با ترافیکِ زنده، سهمیه و محدودیتِ سرعت">
+</p>
+<p align="center"><sub>همه‌ی تصاویرِ این صفحه داده‌ی ساختگیِ نمایشی دارند — بخشِ <a href="#screenshots">تصاویر</a> را ببینید.</sub></p>
+
 ## فهرست
 
+- [تصاویر](#screenshots)
 - [امکانات](#features)
 - [زبان‌ها](#languages)
 - [پیش‌نیازها](#requirements)
 - [شروعِ سریع با Docker](#quick-start-with-docker)
 - [نصب با systemd](#install-with-systemd)
+- [به‌روزرسانی](#upgrading)
 - [پیکربندی](#configuration)
 - [Prometheus](#prometheus)
 - [امنیت](#security)
+- [رفعِ اشکال](#troubleshooting)
 - [توسعه](#development)
 - [ساختارِ مخزن](#repository-layout)
 - [مشارکت](#contributing)
 - [حمایت از پروژه](#support)
 - [مجوز](#license)
+
+<a id="screenshots"></a>
+
+## تصاویر
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/client-chart.png"><img src="docs/screenshots/client-chart.png" alt="نمودارِ ترافیکِ ۳۰ روزه‌ی یک کاربر، با مجموع، میانگین، اوج، p95 و پیش‌بینیِ آخرِ ماه"></a>
+      <p align="center"><b>نمودارِ ترافیکِ هر کاربر</b><br><sub>مصرفِ روزانه‌ی ۳۰ روز با میانگین، اوج، p95، مقایسه با بازه‌ی قبل و پیش‌بینیِ آخرِ ماه</sub></p>
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/heatmap.png"><img src="docs/screenshots/heatmap.png" alt="نقشه‌ی حرارتیِ مصرفِ یک کاربر بر حسبِ روزِ هفته و ساعت"></a>
+      <p align="center"><b>نقشه‌ی حرارتیِ روزِ هفته × ساعت</b><br><sub>کاربر چه زمانی از اتصال استفاده می‌کند، و پرترافیک‌ترین ساعتش</sub></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/overview.png"><img src="docs/screenshots/overview.png" alt="پنل به انگلیسی، چپ‌به‌راست"></a>
+      <p align="center"><b>انگلیسی، چپ‌به‌راست</b><br><sub>همان پنل به انگلیسی — یکی از چهار زبانِ رابط</sub></p>
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/light.png"><img src="docs/screenshots/light.png" alt="پنل با تمِ روشن"></a>
+      <p align="center"><b>تمِ روشن</b><br><sub>تمِ تیره و روشن، با یک دکمه در نوارِ بالا</sub></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/config-qr.png"><img src="docs/screenshots/config-qr.png" alt="کانفیگِ WireGuard ِ یک کاربر همراه با کدِ QR"></a>
+      <p align="center"><b>کانفیگ و کدِ QR ِ کاربر</b><br><sub>کپی کنید، فایلِ <code>.conf</code> را دانلود کنید یا QR را اسکن کنید</sub></p>
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/telegram-chart.png"><img src="docs/screenshots/telegram-chart.png" alt="نمودارِ ترافیک به‌صورتِ تصویرِ PNG که رباتِ تلگرام کشیده است"></a>
+      <p align="center"><b>نمودار از رباتِ تلگرام</b><br><sub>ربات خودش PNG را می‌کشد، با پایتونِ خالص</sub></p>
+    </td>
+  </tr>
+</table>
+
+<p align="center">
+  <a href="docs/screenshots/share-mobile.png"><img src="docs/screenshots/share-mobile.png" width="260" alt="صفحه‌ی اشتراک روی گوشی: کانفیگ، کدِ QR، دکمه‌ی دانلود و نمودارِ مصرف"></a><br>
+  <b>صفحه‌ی اشتراک روی گوشی</b><br><sub>آنچه گیرنده‌ی لینکِ اشتراک می‌بیند: کانفیگ، کدِ QR، دکمه‌ی دانلود و مصرفِ خودش</sub>
+</p>
+
+> [!NOTE]
+> این تصاویر از یک پنلِ واقعیِ در حالِ اجرا گرفته شده‌اند که با **داده‌ی
+> ساختگی** پر شده است: نام‌های ساختگی برای کاربران، کلیدهای تولیدشده، دامنه‌ی
+> نمونه‌ی `vpn.example.com` و آدرس‌های IP از بازه‌های مستندسازیِ RFC 5737. هیچ
+> سرور، کاربر یا کلیدِ واقعی‌ای در آن‌ها نیست.
 
 <a id="features"></a>
 
@@ -241,6 +298,32 @@ sudo systemctl enable --now wg-panel
 یونیت‌های اختیاری برای بکاپ، چرخشِ لاگ، محافظت در برابرِ OOM و قاعده‌ی fail2ban
 در پوشه‌ی [deploy/](deploy/) هستند.
 
+<a id="upgrading"></a>
+
+## به‌روزرسانی
+
+پنل یک فایل است، پس به‌روزرسانی یعنی جایگزین‌کردنِ همان فایل. تنظیماتِ
+`config.json` و داده‌های `traffic.db` حفظ می‌شوند؛ پیکربندی‌های قدیمی‌تر هنگامِ
+شروعِ پنل خودکار به‌روز می‌شوند.
+
+**با systemd:**
+
+```bash
+sudo install -m600 -o root -g root wg_panel.py /opt/wg-panel/wg_panel.py
+sudo systemctl restart wg-panel
+```
+
+**با Docker:** کدِ جدید را روی سرور بیاورید (`git pull`)، سپس در پوشه‌ی
+`docker/`:
+
+```bash
+docker compose up -d --build
+```
+
+> [!TIP]
+> پیش از به‌روزرسانی بکاپ بگیرید — با دکمه‌ی **بکاپ/بازیابی** در پنل، یا با
+> کپی‌گرفتن از `/opt/wg-panel/` (در Docker، `docker/data/`).
+
 <a id="configuration"></a>
 
 ## پیکربندی
@@ -302,6 +385,56 @@ scrape_configs:
 
 برای گزارشِ آسیب‌پذیری، [SECURITY.md](SECURITY.md) را ببینید.
 
+<a id="troubleshooting"></a>
+
+## رفعِ اشکال
+
+<details>
+<summary><b>رمزِ ادمین را فراموش کرده‌ام یا دستگاهِ ورودِ دومرحله‌ای را گم کرده‌ام</b></summary>
+
+<br>
+
+پنل را متوقف کنید و `config.json` را باز کنید (`/opt/wg-panel/config.json`، یا
+در Docker `docker/data/panel/config.json`). حساب را در `users` پیدا کنید و
+`salt` و `hash` آن را رشته‌ی خالی بگذارید — برای خاموش‌کردنِ ورودِ دومرحله‌ای ِ
+آن حساب، `totp` را هم `""` کنید. پنل را دوباره اجرا کنید: اولین رمزی که برای
+آن حساب در صفحه‌ی ورود وارد شود رمزِ جدیدش می‌شود؛ پس این کار را وقتی انجام
+دهید که کسِ دیگری به پنل دسترسی ندارد.
+
+</details>
+
+<details>
+<summary><b>سرویس اجرا نمی‌شود</b></summary>
+
+<br>
+
+لاگ را با `journalctl -u wg-panel -n 50` بخوانید. رایج‌ترین علت نبودن یا
+نامعتبربودنِ `config.json` است: پنل هرگز این فایل را خودش نمی‌سازد (بخشِ
+[نصب با systemd](#install-with-systemd) را ببینید) و باید JSON ِ معتبر باشد.
+
+</details>
+
+<details>
+<summary><b>لینکِ اشتراک می‌گوید نامعتبر یا منقضی است</b></summary>
+
+<br>
+
+لینکِ اشتراک وقتی منقضی شود، اگر یک‌بارمصرف باشد پس از اولین استفاده، یا
+وقتی لغو شود از کار می‌افتد. صفحه عمداً نمی‌گوید کدام‌یک رخ داده است. از ردیفِ
+همان کاربر یک لینکِ تازه بسازید.
+
+</details>
+
+<details>
+<summary><b>بعد از تغییرِ کد صفحه سفید است</b></summary>
+
+<br>
+
+تقریباً همیشه یعنی یک خطای JavaScript داخلِ رشته‌های پایتون — یادداشتِ بخشِ
+[توسعه](#development) را ببینید و کنسولِ مرورگر را بررسی کنید.
+
+</details>
+
 <a id="development"></a>
 
 ## توسعه
@@ -337,6 +470,7 @@ python3 -m py_compile wg_panel.py
 | `docker/` | نصب با Docker Compose و سازنده‌ی بسته‌ی آفلاین |
 | `deploy/` | یونیت‌های اختیاریِ systemd، قاعده‌ی fail2ban، اسکریپت‌های بکاپ، تفکیک‌کننده‌ی SNI |
 | `tests/` | مجموعه‌ی تست‌ها |
+| `docs/screenshots/` | تصاویرِ استفاده‌شده در READMEها |
 | `fonts/` | زیرمجموعه‌ی فونتِ وزیرمتن |
 | `qr.js` · `three.*.min.js.gz` | کتابخانه‌های همراهِ کدِ QR و three.js |
 

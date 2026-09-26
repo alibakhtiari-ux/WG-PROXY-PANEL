@@ -29391,6 +29391,9 @@ class Handler(BaseHTTPRequestHandler):
                 "Content-Security-Policy",
                 "default-src 'self'; style-src 'self' 'unsafe-inline'; "
                 "script-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+                # وزیرمتن به‌صورتِ data: داخلِ CSS جاسازی شده؛ بدونِ font-src
+                # مرورگر به default-src 'self' می‌افتد و فونت را رد می‌کند.
+                "font-src 'self' data:; "
                 "connect-src 'self'; frame-ancestors 'none'; "
                 "base-uri 'none'; form-action 'self'")
         for k, v in (extra_headers or {}).items():
