@@ -1,0 +1,49 @@
+# Publishes a GitHub release when a version tag is pushed:
+#
+#   git tag v1.1.0 && git push origin v1.1.0
+#
+# The tag must have a "## [1.1.0]" section in CHANGELOG.md; its text becomes
+# the release notes. The same checks as the verify workflow run first, so a
+# broken build is never released. Assets: wg_panel.py, wg-panel.service and
+# SHA256SUMS — a server can install the panel with one download.
+name: release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: tests
+        run: |
+          python3 -m unittest discover -s tests
+          python3 -m py_compile wg_panel.py
+          python3 tests/check_js.py
+
+      - name: release notes
+        run: python3 .github/release_notes.py "$GITHUB_REF_NAME" > notes.md
+
+      - name: assets
+        run: |
+          mkdir dist
+          cp wg_panel.py wg-panel.service dist/
+          (cd dist && sha256sum wg_panel.py wg-panel.service > SHA256SUMS)
+          cat dist/SHA256SUMS
+
+      - name: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --verify-tag --title "$GITHUB_REF_NAME" --notes-file notes.md
