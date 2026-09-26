@@ -30198,6 +30198,14 @@ class Handler(BaseHTTPRequestHandler):
         دادهٔ زنده را عوض می‌کنند. `PostWarpGroupTests` همان مرز را پین
         می‌کند.
         """
+        # `sess` محلیِ do_POST است و با استخراج همراه نیامد — بدونِ این
+        # خط، status و هر چهار شاخه‌ی تغییر (preset/target/quic) با
+        # NameError اتصال را می‌انداختند. do_POST نشست را پیش‌تر تأیید
+        # کرده؛ None فقط در مسابقه با حذف/غیرفعال‌شدنِ کاربر ممکن است.
+        sess = self._session()
+        if sess is None:
+            self._json({"ok": False, "error": "unauthorized"}, 401)
+            return True
         if path == "/api/warp/status":
             # روت با tun.view باز است؛ داده‌ی شخصی جدا گیت می‌شود
             # (رجوع به warp_status_redacted).

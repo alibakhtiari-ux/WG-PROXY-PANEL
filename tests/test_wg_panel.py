@@ -5386,6 +5386,58 @@ class PostWarpGroupTests(unittest.TestCase):
         self.assertEqual(self._code("/api/warp/nope", "tunview"), 403)
         self.assertEqual(self._code("/api/warp/nope", "admin"), 404)
 
+    # --- رفتار، بدونِ بلعیدنِ استثنا
+    #
+    # `_code` عمداً استثنا را می‌بلعد، و همین بود که `NameError: sess` در
+    # `_post_warp` (از استخراجِ پلنِ ۰۶۳) را پنهان کرد: هر POST به
+    # /api/warp/status اتصال را می‌انداخت (ERR_EMPTY_RESPONSE) و تست سبز
+    # بود. این‌ها وابستگی‌های زنده را stub می‌کنند و اجازه می‌دهند استثنا
+    # بالا بیاید.
+
+    def _post(self, path, body, role="admin"):
+        h = make_fake_handler(self.m, path=path, method="POST", body=body,
+                              headers={"Cookie": "wgl=en"},
+                              session={"u": role, "r": role})
+        h.do_POST()
+        return (dict(h.sent).get("__code__"),
+                json.loads(b"".join(h.body).decode("utf-8") or "{}"))
+
+    def _stub_live(self):
+        self.m.warp_status = lambda force=False: {
+            "src_labels": {"10.0.0.2": "x"}, "autodetect": {"a": 1},
+            "stats": {}}
+        self.m.warp_apply = lambda: (True, "applied")
+        self.m.warp_targets_read = lambda: ["a.example"]
+        self.m.warp_validate_target = lambda raw: ("domain", raw, None)
+        self.actors = []
+        self.m.warp_targets_write = \
+            lambda entries, by: (self.actors.append(by), (True, None))[1]
+        self.m.warp_event = lambda kind, detail="", actor="": \
+            self.actors.append(actor)
+
+    def test_status_returns_json_instead_of_dropping_the_connection(self):
+        self._stub_live()
+        code, obj = self._post("/api/warp/status", {"force": True})
+        self.assertEqual(code, 200)
+        self.assertTrue(obj["ok"])
+        self.assertEqual(obj["warp"]["src_labels"], {"10.0.0.2": "x"})
+
+    def test_status_is_still_redacted_for_a_tun_view_role(self):
+        self._stub_live()
+        code, obj = self._post("/api/warp/status", {}, role="tunview")
+        self.assertEqual(code, 200)
+        self.assertEqual(obj["warp"]["src_labels"], {})
+        self.assertEqual(obj["warp"]["autodetect"], {})
+
+    def test_mutating_branches_record_the_session_user_as_actor(self):
+        """preset/target/quic هم `sess["u"]` را می‌خوانند — همان NameError."""
+        self._stub_live()
+        code, obj = self._post("/api/warp/target/add",
+                               {"target": "b.example"})
+        self.assertEqual(code, 200)
+        self.assertTrue(obj["ok"], obj)
+        self.assertEqual(self.actors, ["admin", "admin"])
+
 
 class PostRouteInventoryTests(unittest.TestCase):
     """فهرستِ مسیرهای POST پین می‌شود (پلنِ ۰۶۳).
@@ -5511,6 +5563,43 @@ class PostRouteInventoryTests(unittest.TestCase):
             with self.subTest(fn=n.name):
                 self.assertEqual(tail, ["else:", "return False", "return True"],
                                  "%s قراردادِ عبور را ندارد" % n.name)
+
+    def test_no_extracted_group_reads_an_unbound_name(self):
+        """متدِ گروه نباید نامی بخواند که نه محلی است، نه سراسری، نه builtin.
+
+        استخراج از `do_POST` محلی‌هایش (`sess`، `me`، ...) را با خود
+        نمی‌آورد، و پایتون این را فقط در زمانِ اجرا می‌گیرد — `NameError`
+        وسطِ درخواست، یعنی اتصالِ افتاده. دقیقاً همین برای `sess` در
+        `_post_warp` رخ داد و تستِ رفتاری (که استثنا را می‌بلعد) ندید.
+        """
+        import ast, builtins
+        tmp = tempfile.mkdtemp(prefix="wgpanel-names-")
+        self.addCleanup(shutil.rmtree, tmp, True)
+        m = load_module(tmp)
+        src = _read_panel_source()
+        bad = []
+        for n in ast.walk(ast.parse(src)):
+            if not (isinstance(n, ast.FunctionDef)
+                    and n.name.startswith("_post_")):
+                continue
+            bound = {a.arg for a in ast.walk(n) if isinstance(a, ast.arg)}
+            for x in ast.walk(n):
+                if isinstance(x, ast.Name) and isinstance(x.ctx, ast.Store):
+                    bound.add(x.id)
+                elif isinstance(x, ast.ExceptHandler) and x.name:
+                    bound.add(x.name)
+                elif isinstance(x, (ast.Import, ast.ImportFrom)):
+                    bound.update((a.asname or a.name).split(".")[0]
+                                 for a in x.names)
+                elif isinstance(x, (ast.FunctionDef, ast.ClassDef)) \
+                        and x is not n:
+                    bound.add(x.name)
+            for x in ast.walk(n):
+                if (isinstance(x, ast.Name) and isinstance(x.ctx, ast.Load)
+                        and x.id not in bound and not hasattr(m, x.id)
+                        and not hasattr(builtins, x.id)):
+                    bad.append("%s:%d %s" % (n.name, x.lineno, x.id))
+        self.assertEqual(bad, [], "نامِ بی‌مقدار در متدِ گروه: %s" % bad)
 
     def test_the_scan_covers_do_post_and_every_extracted_group(self):
         """گاردِ خودِ گارد: اگر پویش متدی را جا بیندازد بی‌صدا سست می‌شود."""
