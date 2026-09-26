@@ -11,15 +11,6 @@ prints as its version.
 
 ## [Unreleased]
 
-### Fixed
-
-- Demo mode did not start on macOS: the temporary folder lives under
-  `/var/folders`, so the demo moved the panel's own config path into its fake
-  root a second time. A failed demo test also left the fake tools on `PATH`,
-  which broke unrelated tests after it.
-- The Telegram bot's new-proxy-user wizard showed a raw key such as
-  `bot.proto.https` instead of the service type.
-
 ## [1.1.0] — 2026-09-26
 
 ### Fixed
@@ -28,10 +19,19 @@ prints as its version.
   so every page fell back to a system font.
 - The WARP section never finished loading: its status request failed on the
   server with a `NameError`. Changing WARP presets, targets and the QUIC
-  setting failed the same way.
+  setting failed the same way. A WARP request from a user who is removed or
+  disabled while it runs now gets a 401 answer instead of a dropped
+  connection.
+- Some invalid requests crashed on the server instead of returning an error,
+  for example an invalid bot ID when saving the Telegram bot settings.
+- When applying a changed config or generating keys failed, the error showed
+  a raw key such as `api.err.apply.edited` instead of the message.
 - Chart event markers (🚩) showed raw action codes and raw JSON in their
   tooltip, were always blue, and the red band for a tunnel's downtime was
   never drawn.
+- The Telegram bot's charts lost letters in titles, legends and user names
+  ("DOWN" showed as "D W"), and speed-test charts labelled the Y axis in bytes
+  ("95 B") instead of bit/s.
 - In English, Russian and Chinese, many labels still appeared in Persian:
   - names of the built-in services
   - backup rows, restore components and MEGA S4 errors
@@ -39,6 +39,11 @@ prints as its version.
   - permissions in the role editor
   - alert event names
   - WARP event names, in the panel and in the Telegram bot
+  - error and success messages from the panel, the Telegram bot and the
+    audit log, such as the "sending…" message of the report test and the
+    confirmation after enabling or disabling a client
+- The Telegram bot's new-proxy-user wizard showed a raw key such as
+  `bot.proto.https` instead of the service type.
 - The share page's usage chart was scaled to the daily quota share, so with a
   large quota the bars were only a few pixels tall. The chart now scales to
   the usage. The quota line is drawn only when it fits; otherwise the daily
@@ -55,7 +60,7 @@ prints as its version.
 ### Added
 
 - `demo/`: runs the panel with synthetic data and no real server, as a normal
-  user, without touching anything outside its own folder.
+  user on Linux or macOS, without touching anything outside its own folder.
   `python3 demo/screenshots.py` regenerates every screenshot in the READMEs,
   and `docs/social-preview.png` for the repository's social preview.
 - `tests/check_js.py`: a JavaScript syntax check for the scripts inside

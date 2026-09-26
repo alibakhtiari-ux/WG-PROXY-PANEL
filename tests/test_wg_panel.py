@@ -2489,13 +2489,14 @@ class BotTests(unittest.TestCase):
         sp = os.path.join(self.tmp, "bstate.json")
         m.BACKUP_STATE_PATH = sp
         now = m.time.time()
-        _json.dump({"panel": {"object": "wg-panel-x.tar.gz",
-                              "sha256": "ab" * 32, "size": 336278,
-                              "uploaded": now - 3600, "verified": True},
-                    "full": {"object": "myserver-y.tar.gz",
-                             "sha256": "cd" * 32, "size": 300000000,
-                             "uploaded": now - 40 * 3600, "verified": True}},
-                   open(sp, "w"))
+        with open(sp, "w") as f:
+            _json.dump({"panel": {"object": "wg-panel-x.tar.gz",
+                                  "sha256": "ab" * 32, "size": 336278,
+                                  "uploaded": now - 3600, "verified": True},
+                        "full": {"object": "myserver-y.tar.gz",
+                                 "sha256": "cd" * 32, "size": 300000000,
+                                 "uploaded": now - 40 * 3600, "verified": True}},
+                       f)
         bot._backup_page(1, m.bot_perms("1"))
         txt, kb = sent[-1]
         self.assertIn("وضعیتِ پشتیبان‌گیری", txt)
@@ -2648,11 +2649,12 @@ class BotTests(unittest.TestCase):
         import json as _json
         sp = os.path.join(self.tmp, "bstate.json")
         m.BACKUP_STATE_PATH = sp
-        _json.dump({"panel": {"uploaded": m.time.time() - 3600,
-                              "verified": True, "sha256": "aa", "size": 5,
-                              "object": "wg-panel-x.tar.gz"},
-                    "full": {"uploaded": m.time.time() - 40 * 3600,
-                             "verified": True}}, open(sp, "w"))
+        with open(sp, "w") as f:
+            _json.dump({"panel": {"uploaded": m.time.time() - 3600,
+                                  "verified": True, "sha256": "aa", "size": 5,
+                                  "object": "wg-panel-x.tar.gz"},
+                        "full": {"uploaded": m.time.time() - 40 * 3600,
+                                 "verified": True}}, f)
         rows = m._backup_status()
         self.assertIn("MEGA", rows[0][1])
         self.assertFalse(rows[0][2])          # تازه → سالم
@@ -2663,7 +2665,7 @@ class BotTests(unittest.TestCase):
                          "wg-panel-x.tar.gz")
         self.assertIn("s4_full", st2)
         # بدونِ state (فایلِ خراب) → fallback بدونِ خطا
-        open(sp, "w").write("{bad json")
+        pathlib.Path(sp).write_text("{bad json")
         self.assertEqual(m._backup_state(), {})
         # SHA256 با کش (کلید mtime/size) + مسیرِ نبودِ فایل
         p = os.path.join(self.tmp, "x.bin")
@@ -3562,7 +3564,7 @@ class WarpGuardTests(unittest.TestCase):
         self.assertTrue(any(c[:3] == ["ip", "route", "replace"]
                             and "wg21" in c for c in calls))
         # state فایل egress=wg21 دارد
-        st = open(m.WARP_GUARD_STATE).read()
+        st = pathlib.Path(m.WARP_GUARD_STATE).read_text()
         self.assertIn("egress=wg21", st)
         self.assertIn("rule=on", st)
 
@@ -3599,7 +3601,7 @@ class WarpGuardTests(unittest.TestCase):
                          [c[3] for c in calls if len(c) > 3])
         # state هم endpointِ زنده را اعلام می‌کند (مصرفِ sync.sh)
         self.assertIn("endpoint=188.114.97.1",
-                      open(m.WARP_GUARD_STATE).read())
+                      pathlib.Path(m.WARP_GUARD_STATE).read_text())
 
     def test_graceful_degradation_and_recovery(self):
         """wgwarp مرده چند چرخه → قاعده برداشته شود؛ سالم شد → برگردد."""
@@ -3634,7 +3636,7 @@ class WarpGuardTests(unittest.TestCase):
         g.reconcile()
         self.assertTrue(g.degraded)
         self.assertGreaterEqual(deleted["n"], 1)
-        self.assertIn("rule=off", open(m.WARP_GUARD_STATE).read())
+        self.assertIn("rule=off", pathlib.Path(m.WARP_GUARD_STATE).read_text())
         # wgwarp سالم شد → قاعده برمی‌گردد
         m.live_interfaces = lambda: ["wg22", "wgwarp"]
         m.tunnel_handshake_age = lambda i: 10
@@ -3773,7 +3775,7 @@ class WarpRotationTests(unittest.TestCase):
         self.assertLess(pin_i, set_i)
         # state باید endpointِ جدید را داشته باشد (برای pinِ sync.sh)
         self.assertIn("endpoint=" + ep,
-                      open(m.WARP_GUARD_STATE).read())
+                      pathlib.Path(m.WARP_GUARD_STATE).read_text())
         # streak=4: چرخشِ جدید نه (هر ۲ چرخه یکی)؛ streak=5: بعدی
         g.reconcile()
         self.assertEqual(len(self._rotations()), 1)
@@ -3810,7 +3812,7 @@ class WarpRotationTests(unittest.TestCase):
         sw = self._key_sets()
         self.assertEqual(len(sw), 1)
         self.assertIn(m.WARP_STANDBY_KEY, sw[0])
-        self.assertEqual(open(m.WARP_ACCOUNT_FILE).read().strip(),
+        self.assertEqual(pathlib.Path(m.WARP_ACCOUNT_FILE).read_text().strip(),
                          "standby")
 
     # ---- خانواده‌ی باگ: «وضعیتی که باید آینه‌ی واقعیت باشد، در حافظه
@@ -4428,8 +4430,8 @@ class WarpTargetTests(unittest.TestCase):
         self.assertEqual(m.warp_targets_read(),
                          ["gemini.google.com", "1.2.3.4/32"])   # بدونِ تکرار
         # فایل فقط داده باشد — هیچ متاکاراکترِ شل بیرونِ کامنت‌ها
-        body = "\n".join(l for l in
-                         open(m.WARP_TARGETS, encoding="utf-8").read().splitlines()
+        text = pathlib.Path(m.WARP_TARGETS).read_text(encoding="utf-8")
+        body = "\n".join(l for l in text.splitlines()
                          if not l.startswith("#"))
         for ch in ("$", "`", ";", "|", "&", "("):
             self.assertNotIn(ch, body)
@@ -4848,14 +4850,13 @@ class CloudRestoreTests(unittest.TestCase):
         m = self.m
         with open(os.path.join(self.tmp, "wgtest.conf"), "w") as f:
             f.write("OLD")
-        db_before = open(m.DB_PATH, "rb").read()
+        db_before = pathlib.Path(m.DB_PATH).read_bytes()
         raw = self._nightly_tar(self._full_files())
         ok, msg = m.restore_from_nightly_tar(raw, ["wireguard"])
         self.assertTrue(ok, msg)
-        self.assertIn("# NEW", open(os.path.join(self.tmp,
-                                                 "wgtest.conf")).read())
+        self.assertIn("# NEW", pathlib.Path(self.tmp, "wgtest.conf").read_text())
         # دیتابیس (انتخاب‌نشده) دست نخورد؛ config.json/کد هرگز نوشته نشدند
-        self.assertEqual(open(m.DB_PATH, "rb").read(), db_before)
+        self.assertEqual(pathlib.Path(m.DB_PATH).read_bytes(), db_before)
         self.assertFalse(os.path.exists(
             os.path.join(self.tmp, "wg-panel", "config.json")))
         self.assertFalse(os.path.exists(
@@ -4870,7 +4871,7 @@ class CloudRestoreTests(unittest.TestCase):
             self._nightly_tar(self._full_files()),
             ["wireguard", "clients", "db"])
         self.assertTrue(ok, msg)
-        self.assertEqual(open(m.DB_PATH, "rb").read(), b"NEWDB")
+        self.assertEqual(pathlib.Path(m.DB_PATH).read_bytes(), b"NEWDB")
         self.assertTrue(os.path.exists(
             os.path.join(self.tmp, "clients", "wgtest", "u1.conf")))
 
@@ -4931,8 +4932,8 @@ class CloudRestoreTests(unittest.TestCase):
                                         ["wireguard"], "admin")
         self.assertFalse(ok)
         self.assertIn("sha256", m.api_text(msg, "en"))
-        self.assertEqual(open(os.path.join(self.tmp,
-                                           "wgtest.conf")).read(), "KEEP")
+        self.assertEqual(
+            pathlib.Path(self.tmp, "wgtest.conf").read_text(), "KEEP")
         # sha درست → بازیابی + یادداشتِ تأیید؛ قفل هم آزاد شده باشد
         self._mock_rclone(raw, sha=good)
         ok, msg = m.cloud_restore_panel("wg-panel-20260720-124925.tar.gz",
@@ -4940,8 +4941,7 @@ class CloudRestoreTests(unittest.TestCase):
         self.assertTrue(ok, msg)
         self.assertIn("sha256 تأیید شد", m.api_text(msg, "fa"))
         self.assertIn("sha256 verified", m.api_text(msg, "en"))
-        self.assertIn("# NEW", open(os.path.join(self.tmp,
-                                                 "wgtest.conf")).read())
+        self.assertIn("# NEW", pathlib.Path(self.tmp, "wgtest.conf").read_text())
         self.assertFalse(m.CLOUD_RESTORE["running"])
         # بدونِ sidecar → انجام می‌شود ولی با هشدارِ «بدونِ هش»
         self._mock_rclone(raw, sha=None)
@@ -7645,7 +7645,7 @@ class SaveConfigConcurrencyTests(unittest.TestCase):
         """اگر json.dump شکست بخورد، فایلِ قبلی باید دست‌نخورده بماند."""
         m = self.m
         m.save_config()
-        before = open(m.CONFIG_PATH, encoding="utf-8").read()
+        before = pathlib.Path(m.CONFIG_PATH).read_text(encoding="utf-8")
 
         class Unserializable:
             pass
@@ -7653,7 +7653,8 @@ class SaveConfigConcurrencyTests(unittest.TestCase):
         m.CONFIG["bad"] = Unserializable()
         with self.assertRaises(TypeError):
             m.save_config()
-        self.assertEqual(open(m.CONFIG_PATH, encoding="utf-8").read(), before)
+        self.assertEqual(
+            pathlib.Path(m.CONFIG_PATH).read_text(encoding="utf-8"), before)
         self.assertEqual([f for f in os.listdir(self.tmp) if ".tmp" in f], [],
                          "شکستِ سریال‌سازی فایلِ موقت جا گذاشت")
 

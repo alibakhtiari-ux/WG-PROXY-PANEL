@@ -15,6 +15,7 @@
 ⚠️ خودِ publish/ منتشر نمی‌شود؛ در مخزنِ عمومی این تست skip می‌شود.
 """
 import os
+import pathlib
 import re
 import unittest
 
@@ -334,7 +335,8 @@ class PublishToolingTests(unittest.TestCase):
             dep = os.path.join(REPO, "deploy", name)
             self.assertTrue(os.path.isfile(dep),
                             "دگرگونی به deploy/%s اشاره می‌کند ولی نیست" % name)
-            h = lambda p: hashlib.sha256(open(p, "rb").read()).hexdigest()
+            h = lambda p: hashlib.sha256(
+                pathlib.Path(p).read_bytes()).hexdigest()
             self.assertEqual(h(os.path.join(REPO, full)), h(dep),
                              "deploy/%s با نسخه‌ی ansible یکی نیست — "
                              "درختِ عمومی فایلِ متفاوتی می‌گیرد" % name)

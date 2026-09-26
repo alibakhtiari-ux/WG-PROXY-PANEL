@@ -1016,9 +1016,10 @@ class FdHeadroomTests(unittest.TestCase):
         خطوطِ کامنت پیش از تطبیق حذف می‌شوند: این مخزن دو بار گاردی
         فرستاده که کامنتِ توصیفِ تله را می‌گرفته، نه خودِ کد را.
         """
-        src = open(os.path.join(os.path.dirname(__file__), "..", "deploy",
-                                "warp-sni-splitter.py"),
-                   encoding="utf-8").read()
+        with open(os.path.join(os.path.dirname(__file__), "..", "deploy",
+                               "warp-sni-splitter.py"),
+                  encoding="utf-8") as f:
+            src = f.read()
         body = "\n".join(l for l in src.splitlines()
                          if not l.lstrip().startswith("#"))
         for needle in ("self._hb_block = True",
