@@ -37,6 +37,7 @@ means copying one file.
 
 - [Screenshots](#screenshots)
 - [Features](#features)
+- [The chart engine](#chart-engine)
 - [Languages](#languages)
 - [Requirements](#requirements)
 - [Quick start with Docker](#quick-start-with-docker)
@@ -127,6 +128,8 @@ means copying one file.
 - Live gauges for CPU, memory and disk; latency and routing charts for WARP
 - A usage chart on every share page, so the client can see their own usage
 
+How it works, and everything it can do: [The chart engine](#chart-engine).
+
 ### Advanced Telegram bot
 
 The bot runs inside the panel process, so it needs no extra service. It is a
@@ -185,6 +188,119 @@ complete second way to manage the server — no SSH, no browser:
   panel login from Telegram
 - Signed session cookies, login rate limiting, optional IP allowlist
 - Prometheus metrics at `/metrics`, protected by a bearer token
+
+<a id="chart-engine"></a>
+
+## The chart engine
+
+Every chart in the panel comes from a small drawing engine written from
+scratch for this project: plain Canvas 2D in about two thousand lines of
+JavaScript inside `wg_panel.py`. It uses no chart library and no CDN, so it
+works on a server with no internet access, and it knows the data it draws.
+It knows what a quota is, when a client was disabled, and how many bytes a
+tunnel moved in the last ten seconds.
+
+### What it draws
+
+| Chart | Where | What it shows |
+|---|---|---|
+| Traffic | Every client, interface and egress tunnel | Received and sent traffic plus a dashed total line; lines for Live and 1 hour, bars from 24 hours up |
+| Heat map | Any traffic chart, 7 or 30 days | Average use for each weekday × hour, and the busiest hour |
+| Per-client split | Every WireGuard interface | How the interface's traffic divides between its clients: the top 7, with the rest grouped as "Others" |
+| Compare | Any set of charts you pick | Several clients, tunnels or interfaces as lines on one shared axis |
+| Usage overview | The WireGuard clients section | Stacked usage of all clients of an interface over time |
+| Server gauges | CPU, RAM, disk, panel CPU and panel RAM | The history behind each gauge |
+| Speed test | The speed test section | Download and upload in Mbit/s, with ping on a second axis |
+| WARP | The WARP section | Response time direct vs. through WARP, and the share of traffic routed to AI services |
+| Route quality | Service reachability | Call quality (MOS) and round-trip time for each measured route |
+| Share page | The page behind a share link | The recipient's own last 30 days, with their daily budget if they have a quota |
+
+### Where the numbers come from
+
+| Range | One point is | Kept |
+|---|---|---|
+| Live | a 2-second sample | the last 3 minutes, in memory |
+| 1 hour | a 10-second average | the last hour, in memory (starts again after a restart) |
+| 24 hours | one hour | about 21 days, in SQLite |
+| 7 days · 30 days · 6 months | one day | about 400 days, in SQLite; the 6-month view can group days into weeks |
+
+Proxy users are measured from Squid's access log and start at the 24-hour
+view. The heat map is built from the hourly rows, so it can look back about
+21 days.
+
+### The figures above each chart
+
+- **In, Out, Total**: the current rate on Live and 1 hour; the total for the
+  range on the longer views.
+- **Average** and **Peak**, and **p95**: the value that 95% of the hours or
+  days in the range stay under. A single spike therefore does not dominate it.
+- **vs previous range**: the change against the equally long period just
+  before it. ▲ amber is more, ▼ green is less.
+- **Month-end forecast**, for clients with a monthly quota. It takes this
+  month's use so far, spreads it over the whole month, and warns
+  "~N days until the quota runs out" when the pace is too high.
+- **Recorded since**: the first day with data, so a short history is not
+  mistaken for low use.
+
+On the chart itself, a gold dot marks the peak, and clients with a quota get
+a dashed line at their daily share of it.
+
+### Working with a chart
+
+- **Hover** shows every series at that moment. With several charts open,
+  they all follow the same point in time.
+- **Zoom**: drag across the chart to select a time span, or use the mouse
+  wheel. On a phone, pinch with two fingers. Once zoomed in, drag to move
+  along the time axis. Double-click or **↺ Whole range** zooms back out.
+  The vertical scale fits whatever is visible.
+- **Click a legend item** to hide or show that series.
+- **log** switches to a logarithmic scale, so a quiet client and a heavy one
+  can be read on the same chart.
+- **🚩** marks changes from the audit log on the time axis: red when a
+  client is disabled or a tunnel goes down, green when something comes back,
+  blue for other changes. On a tunnel's chart, the time it was down is also
+  shaded red. Hover near a flag to see what happened, who did it and why.
+  The WARP interface's chart also shows WARP's own events, such as a switch
+  to the standby key.
+- **⛶ Enlarge** opens the chart full screen, and **＋ Compare** adds it to
+  the comparison.
+- **🔗** copies a link to exactly this view: the chart, the range, the zoom,
+  and log, heat-map or per-client mode.
+- **PNG** saves the chart at full screen resolution with its title. **CSV**
+  saves the raw rows in UTF-8, ready for a spreadsheet.
+
+Each open chart's range, scale and hidden series are remembered in the
+browser.
+
+### Honest by design
+
+- From the 1-hour view up, the time axis is real time: a missing hour is
+  left empty, and a line breaks where data is missing instead of drawing
+  across the gap.
+- In the 1-hour view, a silent client is a real zero line, not a gap: the
+  panel records the silence too.
+- The axes use round steps (1, 2, 2.5 or 5 × 10ⁿ) and scale bytes in powers
+  of 1024. Rates are bytes per second; speed tests are in Mbit/s.
+- Charts are drawn at the screen's real pixel density, so they stay sharp on
+  high-resolution screens, and are redrawn when the window changes size.
+- Updates arrive every 2 seconds but pause while you hover, so the chart does
+  not move under the cursor.
+
+### Colours and languages
+
+The charts take their colours from the page theme, so they follow the dark
+and light themes. The **🎨** button switches to a colour-blind-safe palette
+(Okabe–Ito), which also draws the sent line dashed so the series differ in
+shape as well as colour. In Persian the charts use Persian digits, and the
+speed test, route and WARP charts give dates in the Solar Hijri calendar.
+
+### Charts in Telegram
+
+The Telegram bot cannot run a browser, so the panel also draws charts on the
+server, in pure Python. It fills a pixel buffer, draws lines and bars into
+it, writes the labels with a built-in bitmap font, and packs the result into
+a PNG with `zlib`. The PNG is 900 × 400, bars or lines. These images go into
+the client and proxy graphs in the bot and into the periodic report.
 
 ## Languages
 
