@@ -1248,9 +1248,34 @@ class PanelTestCase(unittest.TestCase):
         m.run = lambda cmd, timeout=20: ((1, "", "Invalid length key")
                                         if "preshared-key" in cmd
                                         else orig(cmd, timeout))
+        resynced = []
+        m.WATCHER = types.SimpleNamespace(resync=lambda: resynced.append(1))
         ok, msg = m.set_peer_psk("wgtest", "rmf", False)
         self.assertFalse(ok)
         self.assertIn("Invalid length key", m.api_text(msg, "en"))
+        # بدونِ resync: ناظر باید همین دلتا را دوباره امتحان کند
+        self.assertEqual(resynced, [])
+
+    def test_a_failed_live_enable_toggle_leaves_the_watcher_to_retry(self):
+        """شکستِ wg set نباید حالتِ ناظر را «اعمال‌شده» ثبت کند.
+
+        resync پیش از بازگشتِ خطا، snapshot ِ فایلِ تازه را به ناظر می‌داد؛
+        ناظر دیگر تفاوتی نمی‌دید و کرنل تا ری‌استارت ناهمخوان می‌ماند.
+        """
+        m = self.m
+        m.add_peer("wgtest", "tgf", use_psk=False)
+        resynced = []
+        m.WATCHER = types.SimpleNamespace(resync=lambda: resynced.append(1))
+        orig = m.run
+        m.run = lambda cmd, timeout=20: ((1, "", "boom") if "remove" in cmd
+                                        else orig(cmd, timeout))
+        ok, _msg = m.set_peer_enabled("wgtest", "tgf", False)
+        self.assertFalse(ok)
+        self.assertEqual(resynced, [])
+        m.run = orig
+        ok, _msg = m.set_peer_enabled("wgtest", "tgf", True)
+        self.assertTrue(ok)
+        self.assertEqual(resynced, [1])
 
     def test_rotate_applies_psk_and_keepalive_with_new_key(self):
         m = self.m
@@ -1290,7 +1315,7 @@ class PanelTestCase(unittest.TestCase):
         self.assertEqual(b[b.index("allowed-ips") + 1], "10.0.0.9/32")
         d = self._set_calls_for("D")[0]
         self.assertIn("preshared-key", d)
-        self.assertNotIn("persistent-keepalive", d)
+        self.assertEqual(d[d.index("persistent-keepalive") + 1], "0")
         self.assertEqual(self._set_calls_for("C"), [["wg", "set", "wgtest",
                                                      "peer", "C", "remove"]])
         self.assertEqual(seen, [b"P2\n", b"P4\n"])
@@ -1299,6 +1324,27 @@ class PanelTestCase(unittest.TestCase):
         del m._run_calls[:]
         self.assertEqual(m.apply_conf_delta("wgtest", old, new), 0)
         self.assertEqual(m._run_calls, [])
+
+    def test_apply_conf_delta_clears_keepalive_and_allowed_ips(self):
+        """حذفِ PersistentKeepalive یا خالی‌کردنِ AllowedIPs باید به کرنل برسد.
+
+        `if keepalive:` و `if allowed:` مقدارِ خالی را دور می‌انداختند و
+        کرنل مقدارِ کهنه را تا ری‌استارتِ wg-quick نگه می‌داشت.
+        """
+        m = self.m
+        old = {"A": ("10.0.0.2/32", "", 25)}
+        new = {"A": ("", "", 0)}
+        del m._run_calls[:]
+        m.apply_conf_delta("wgtest", old, new)
+        a = self._set_calls_for("A")[0]
+        self.assertEqual(a[a.index("persistent-keepalive") + 1], "0")
+        self.assertEqual(a[a.index("allowed-ips") + 1], "")
+        # None یعنی دست نزن
+        del m._run_calls[:]
+        m._wg_set_peer("wgtest", "Z", psk="")
+        z = self._set_calls_for("Z")[0]
+        self.assertNotIn("allowed-ips", z)
+        self.assertNotIn("persistent-keepalive", z)
 
     def test_parse_client_overrides_validation(self):
         f = self.m.parse_client_overrides

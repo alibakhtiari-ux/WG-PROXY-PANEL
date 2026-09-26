@@ -10996,6 +10996,12 @@ def _wg_set_peer(iface, pub, allowed=None, psk=None, keepalive=None):
     psk: None = دست نزن، "" = حذف، رشته = ست. wg کلید را از فایل می‌خواند و
     «حذف» را فقط از فایلِ **صفر بایتی** می‌فهمد — یک `\\n` تنها «Invalid
     length key» است. خروجی: (ok, پیامِ خطا).
+
+    allowed و keepalive هم همین قرارداد را دارند: None = دست نزن، و مقدارِ
+    «خالی» (رشته‌ی "" / عددِ 0) یعنی **پاک کن**. پیش از این هر دو با
+    `if allowed:` / `if keepalive:` فیلتر می‌شدند، پس حذفِ PersistentKeepalive
+    یا خالی‌کردنِ AllowedIPs در فایل هیچ‌وقت به کرنل نمی‌رسید و مقدارِ کهنه
+    تا ری‌استارتِ wg-quick زنده می‌ماند.
     """
     args = ["wg", "set", iface, "peer", pub]
     tmp = None
@@ -11006,10 +11012,10 @@ def _wg_set_peer(iface, pub, allowed=None, psk=None, keepalive=None):
             os.close(fd)
             os.chmod(tmp, 0o600)
             args += ["preshared-key", tmp]
-        if allowed:
+        if allowed is not None:
             args += ["allowed-ips", allowed.replace(" ", "")]
-        if keepalive:
-            args += ["persistent-keepalive", str(int(keepalive))]
+        if keepalive is not None:
+            args += ["persistent-keepalive", str(int(keepalive or 0))]
         rc, out, err = run(args)
         return rc == 0, (err or out)
     finally:
@@ -11124,9 +11130,13 @@ def set_peer_enabled(iface, name, enable):
             rc, out, err = run(["wg", "set", iface, "peer",
                                 blk["public_key"], "remove"])
             ok, err = rc == 0, (err or out)
-    WATCHER.resync()
     if not ok:
+        # بدونِ resync: ناظر هنوز حالتِ قبلیِ فایل را دارد، پس در دورِ بعد
+        # همین دلتا را دوباره با wg set امتحان می‌کند. resync ِ پیش از این
+        # بازگشت، حالتِ «اعمال‌نشده» را «اعمال‌شده» ثبت می‌کرد و کرنل تا
+        # ری‌استارت با فایل ناهمخوان می‌ماند — همان الگوی rotate.
         return False, aerr("api.err.apply.edited", v=err)
+    WATCHER.resync()
     log_action("peer %s@%s -> %s" % (name, iface,
                                      "enabled" if enable else "disabled"))
     return True, ("api.ok.done" if live else "api.ok.saved.offline")
@@ -11591,7 +11601,9 @@ def set_peer_psk(iface, name, enable):
     aok, aerr_msg = True, ""
     if iface in live_interfaces() and blk["enabled"]:
         aok, aerr_msg = apply_preshared_key(iface, blk["public_key"], psk)  # psk="" ⇒ حذف
-    WATCHER.resync()
+    if aok:
+        # شکست → بدونِ resync تا ناظر دوباره اعمالش کند (مثلِ set_peer_enabled)
+        WATCHER.resync()
     regen_client_conf(iface, name)
     log_action("peer %s@%s psk %s (%s)"
                % (name, iface, "on" if enable else "off",
