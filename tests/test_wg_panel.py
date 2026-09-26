@@ -5436,6 +5436,22 @@ class PostWarpGroupTests(unittest.TestCase):
             pass
         return dict(h.sent).get("__code__")
 
+    def test_status_body_runs_for_a_signed_in_user(self):
+        """بدنه‌ی وضعیت باید واقعاً اجرا شود، نه فقط از گیت رد شود.
+
+        _code استثنای بدنه را عمداً می‌بلعد؛ همین پوشش NameError ِ sess را
+        پنهان کرد، چون استخراجِ گروه متغیرِ محلیِ do_POST را جا انداخته
+        بود. این‌جا بخشِ شبکه‌ای جایگزین می‌شود تا خودِ بدنه سنجیده شود.
+        """
+        m = self.m
+        m.warp_status = lambda force=False: {"ok": True}
+        m.warp_status_redacted = lambda st, perms: dict(st, perms=len(perms))
+        h = make_fake_handler(m, path="/api/warp/status", method="POST",
+                              body={}, headers={"Cookie": "wgl=en"},
+                              session={"u": "admin", "r": "admin"})
+        h.do_POST()
+        self.assertEqual(dict(h.sent).get("__code__"), 200)
+
     def test_the_two_permission_levels_are_what_the_code_says(self):
         for p in self.VIEW:
             with self.subTest(path=p):

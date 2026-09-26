@@ -30532,6 +30532,11 @@ class Handler(BaseHTTPRequestHandler):
         دادهٔ زنده را عوض می‌کنند. `PostWarpGroupTests` همان مرز را پین
         می‌کند.
         """
+        # sess در do_POST یک متغیرِ محلی است و با استخراجِ این گروه جا ماند؛
+        # بدونِ این خط هر شاخه‌ای که sess می‌خواند NameError می‌داد — از جمله
+        # وضعیتِ WARP، که بخشِ WARP را برای همیشه روی «در حال بارگذاری» نگه
+        # می‌داشت. do_POST پیش از رسیدن به این‌جا نشست را تأیید کرده است.
+        sess = self._session()
         if path == "/api/warp/status":
             # روت با tun.view باز است؛ داده‌ی شخصی جدا گیت می‌شود
             # (رجوع به warp_status_redacted).
