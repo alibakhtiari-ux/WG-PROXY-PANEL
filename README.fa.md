@@ -390,7 +390,8 @@ cd docker/airgap && bash build-offline-bundle.sh --arch amd64
 ```bash
 base=https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/releases/latest/download
 curl -fLO "$base/wg_panel.py" -O "$base/wg-panel.service" -O "$base/qr.js" \
-     -O "$base/three.module.min.js.gz" -O "$base/three.core.min.js.gz" -O "$base/SHA256SUMS"
+     -O "$base/three.module.min.js.gz" -O "$base/three.core.min.js.gz" \
+     -O "$base/three.LICENSE.txt" -O "$base/SHA256SUMS"
 sha256sum -c SHA256SUMS
 ```
 

@@ -99,6 +99,19 @@ class ReleaseAssetTests(unittest.TestCase):
                 # `sha256sum -c` ِ خطِ بعد رد می‌شود
                 self.assertIn('-O "$base/SHA256SUMS"', text)
 
+    def test_readme_downloads_every_asset_listed_in_sha256sums(self):
+        """`sha256sum -c SHA256SUMS` برای هر فایلِ فهرست‌شده‌ای که دانلود نشده
+        «No such file» می‌دهد و با کدِ غیرصفر بیرون می‌آید — حتی وقتی بقیه
+        سالم‌اند. پس دستورِ curl ِ README باید همه‌ی ASSETS را بگیرد."""
+        wf = _read(".github", "workflows", "release.yml")
+        assets = re.search(r'ASSETS="([^"]+)"', wf).group(1).split()
+        for name in READMES:
+            text = _read(name)
+            for fn in assets:
+                with self.subTest(readme=name, file=fn):
+                    self.assertRegex(
+                        text, r'(?:-fLO|-O) "\$base/%s"' % re.escape(fn))
+
 
 if __name__ == "__main__":
     unittest.main()

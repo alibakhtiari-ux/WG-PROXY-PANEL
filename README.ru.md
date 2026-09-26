@@ -409,7 +409,8 @@ cd docker/airgap && bash build-offline-bundle.sh --arch amd64
 ```bash
 base=https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/releases/latest/download
 curl -fLO "$base/wg_panel.py" -O "$base/wg-panel.service" -O "$base/qr.js" \
-     -O "$base/three.module.min.js.gz" -O "$base/three.core.min.js.gz" -O "$base/SHA256SUMS"
+     -O "$base/three.module.min.js.gz" -O "$base/three.core.min.js.gz" \
+     -O "$base/three.LICENSE.txt" -O "$base/SHA256SUMS"
 sha256sum -c SHA256SUMS
 ```
 
@@ -517,6 +518,7 @@ scrape_configs:
 `tls_config: {insecure_skip_verify: true}` или передайте сертификат Prometheus.
 
 `GET /api/health` (тот же Bearer-токен или пользователь с `sys.view`) сообщает о heartbeat каждого фонового потока и отвечает `503`, если один из них остановился — подходит для внешнего мониторинга или healthcheck Docker.
+
 <a id="security"></a>
 
 ## Безопасность
