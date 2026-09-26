@@ -73,6 +73,23 @@ class DemoToolsTests(unittest.TestCase):
                 self.assertEqual(fake_tools.main(["x", tool, "-v"]), 1)
 
 
+class DemoSandboxTests(unittest.TestCase):
+
+    def test_paths_already_inside_a_var_state_dir_are_not_remapped(self):
+        # macOS: پوشه‌ی موقت زیرِ ‎/var/folders است؛ CONFIG_PATH ِ کپی که از
+        # قبل داخلِ پوشه‌ی دموست نباید دوباره زیرِ root برود.
+        import types
+        state = "/var/folders/xx/T/wg-panel-demo"
+        m = types.SimpleNamespace(
+            CONFIG_PATH=state + "/panel/config.json",
+            SQUID_PASSWD="/etc/squid/passwd",
+            SOME_VAR="/var/lib/wg-panel/x")
+        demo.sandbox(m, state)
+        self.assertEqual(m.CONFIG_PATH, state + "/panel/config.json")
+        self.assertEqual(m.SQUID_PASSWD, state + "/root/etc/squid/passwd")
+        self.assertEqual(m.SOME_VAR, state + "/root/var/lib/wg-panel/x")
+
+
 class DemoSeedTests(unittest.TestCase):
     """دمو را واقعاً می‌سازد (بدونِ بالا آوردنِ سرور)."""
 
@@ -81,11 +98,14 @@ class DemoSeedTests(unittest.TestCase):
         cls.saved_env = dict(os.environ)
         cls.saved_mod = sys.modules.get("wg_panel")
         cls.tmp = tempfile.mkdtemp(prefix="wgpanel-demo-test-")
+        # cleanup حتی اگر prepare شکست بخورد اجرا می‌شود (tearDownClass نه)؛
+        # وگرنه PATH ِ ابزارهای ساختگی به تست‌های بعدی نشت می‌کند.
+        cls.addClassCleanup(cls._restore)
         cls.state = os.path.join(cls.tmp, "demo")
         cls.m = demo.prepare(cls.state, reset=True)
 
     @classmethod
-    def tearDownClass(cls):
+    def _restore(cls):
         os.environ.clear()
         os.environ.update(cls.saved_env)
         if cls.saved_mod is None:

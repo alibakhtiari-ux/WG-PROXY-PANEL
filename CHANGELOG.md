@@ -11,6 +11,13 @@ prints as its version.
 
 ## [Unreleased]
 
+### Fixed
+
+- Demo mode did not start on macOS: the temporary folder lives under
+  `/var/folders`, so the demo moved the panel's own config path into its fake
+  root a second time. A failed demo test also left the fake tools on `PATH`,
+  which broke unrelated tests after it.
+
 ## [1.1.0] — 2026-09-26
 
 ### Fixed

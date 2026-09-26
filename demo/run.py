@@ -147,8 +147,14 @@ def load(state_dir):
 def sandbox(m, state_dir):
     """هر مسیرِ ثابتِ سیستمی را به داخلِ پوشه‌ی دمو می‌برد."""
     root = os.path.join(state_dir, "root")
+    # مسیرهایی که از BASE_DIR ِ خودِ کپی می‌آیند از قبل داخلِ پوشه‌ی دمو‌اند؛
+    # در macOS پوشه‌ی موقت زیرِ ‎/var/folders است و بدونِ این استثنا دوباره
+    # به root برده می‌شدند. realpath برای ‎/var → ‎/private/var.
+    local = tuple({os.path.join(d, "") for d in
+                   (os.path.abspath(state_dir), os.path.realpath(state_dir))})
     for name, val in list(vars(m).items()):
-        if isinstance(val, str) and val.startswith(SYSTEM_PREFIXES):
+        if isinstance(val, str) and val.startswith(SYSTEM_PREFIXES) and \
+                not val.startswith(local):
             setattr(m, name, root + val)
 
 
