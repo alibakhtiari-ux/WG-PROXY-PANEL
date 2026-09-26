@@ -445,6 +445,7 @@ JavaScript) داخلِ رشته‌های پایتون است. اجرای تست�
 ```bash
 python3 -m unittest discover -s tests -v
 python3 -m py_compile wg_panel.py
+python3 tests/check_js.py      # نحوِ JavaScript، نیازمندِ Node.js
 ```
 
 تست‌ها از جمله این‌ها را می‌سنجند: هر کلیدِ ترجمه در هر چهار زبان با
@@ -456,8 +457,9 @@ python3 -m py_compile wg_panel.py
 
 > [!IMPORTANT]
 > پایتون خطاهای داخلِ رشته‌های JavaScript را نمی‌بیند — `py_compile` روی
-> JavaScript ِ خراب هم موفق می‌شود و نتیجه‌اش یک صفحه‌ی سفید در مرورگر است. بعد
-> از تغییرِ رابط، پنل را باز کنید و کنسولِ مرورگر را ببینید.
+> JavaScript ِ خراب هم موفق می‌شود و نتیجه‌اش یک صفحه‌ی سفید در مرورگر است.
+> `tests/check_js.py` (که CI هم اجرایش می‌کند) خطاهای نحوی را می‌گیرد؛ با این
+> حال بعد از تغییرِ رابط، پنل را باز کنید و کنسولِ مرورگر را ببینید.
 
 <a id="repository-layout"></a>
 

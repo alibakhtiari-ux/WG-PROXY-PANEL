@@ -418,6 +418,7 @@ Python 字符串的形式包含在其中。运行测试：
 ```bash
 python3 -m unittest discover -s tests -v
 python3 -m py_compile wg_panel.py
+python3 tests/check_js.py      # JavaScript 语法检查，需要 Node.js
 ```
 
 测试会检查的内容包括：每个翻译键在四种语言中都存在且占位符一致；翻译后的文本
@@ -427,8 +428,8 @@ Docker 构建上下文；测试数据使用 RFC 5737 文档地址。本仓库中
 
 > [!IMPORTANT]
 > Python 看不到 JavaScript 字符串内部的错误——即使 JavaScript 有错，
-> `py_compile` 依然通过，结果是浏览器中出现空白页。修改界面后，请打开面板并
-> 检查浏览器控制台。
+> `py_compile` 依然通过，结果是浏览器中出现空白页。`tests/check_js.py`（CI 也会
+> 运行）可以发现语法错误；但修改界面后，仍请打开面板并检查浏览器控制台。
 
 <a id="repository-layout"></a>
 

@@ -424,6 +424,7 @@ the note under [Development](#development) and check the browser console.
 ```bash
 python3 -m unittest discover -s tests -v
 python3 -m py_compile wg_panel.py
+python3 tests/check_js.py      # JavaScript syntax, needs Node.js
 ```
 
 The tests check, among other things, that every translation key exists in all
@@ -436,7 +437,8 @@ they check deployment tooling that is not published here.
 > [!IMPORTANT]
 > Python cannot see errors inside the JavaScript strings — `py_compile`
 > passes on broken JavaScript, and the result is a blank page in the browser.
-> After changing the interface, open the panel and check the browser console.
+> `tests/check_js.py` (also run by CI) catches syntax errors; after changing
+> the interface, still open the panel and check the browser console.
 
 ## Repository layout
 

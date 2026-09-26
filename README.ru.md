@@ -461,6 +461,7 @@ JavaScript) внутри строк Python. Запуск тестов:
 ```bash
 python3 -m unittest discover -s tests -v
 python3 -m py_compile wg_panel.py
+python3 tests/check_js.py      # синтаксис JavaScript, нужен Node.js
 ```
 
 Среди прочего тесты проверяют, что каждый ключ перевода есть на всех четырёх
@@ -473,8 +474,9 @@ python3 -m py_compile wg_panel.py
 
 > [!IMPORTANT]
 > Python не видит ошибок внутри строк JavaScript — `py_compile` проходит и на
-> сломанном JavaScript, а в браузере получается пустая страница. После
-> изменения интерфейса откройте панель и проверьте консоль браузера.
+> сломанном JavaScript, а в браузере получается пустая страница.
+> `tests/check_js.py` (его запускает и CI) ловит синтаксические ошибки; и всё
+> же после изменения интерфейса откройте панель и проверьте консоль браузера.
 
 <a id="repository-layout"></a>
 
