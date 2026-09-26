@@ -5190,6 +5190,10 @@ I18N = {
                                        "System (speed test)",
                                        "Система (тест скорости)",
                                        "系统（测速）"),
+    "ui.audit.actor.sys:restore": ("سیستم (بازیابی بکاپ)",
+                                     "System (backup restore)",
+                                     "Система (восстановление из бэкапа)",
+                                     "系统（备份恢复）"),
     # ── اکشن ──
     "ui.audit.act.alert.report": ("گزارش دوره‌ای تصویری",
                                     "Periodic visual report",
@@ -5652,6 +5656,14 @@ I18N = {
                                    "The peer was removed from the interface",
                                    "Peer удалён с интерфейса",
                                    "该 peer 已从接口移除"),
+    "ui.audit.det.peeradded": ("peer از فایل به اینترفیس افزوده شد → AllowedIPs={ips}",
+                                 "Peer from the file was added to the interface → AllowedIPs={ips}",
+                                 "Peer из файла добавлен на интерфейс → AllowedIPs={ips}",
+                                 "已按文件将 peer 加入接口 → AllowedIPs={ips}"),
+    "ui.audit.det.peerchanged": ("peer از فایل به‌روز شد → AllowedIPs={ips}",
+                                   "Peer updated from the file → AllowedIPs={ips}",
+                                   "Peer обновлён из файла → AllowedIPs={ips}",
+                                   "已按文件更新 peer → AllowedIPs={ips}"),
     "ui.audit.det.prevrole": ("نقش قبلی: {role}",
                                 "Previous role: {role}",
                                 "Прежняя роль: {role}",
@@ -6492,6 +6504,16 @@ I18N = {
                            "This service is already in the list",
                            "Этот сервис уже есть в списке",
                            "该服务已在列表中"),
+    "api.err.svc.label_bad": ("برچسب فقط می‌تواند حرف، عدد، فاصله، نقطه، "
+                              "خطِ تیره و پرانتز داشته باشد (تا ۴۰ نویسه)",
+                              "The label may only contain letters, digits, "
+                              "spaces, dots, dashes and parentheses (up to "
+                              "40 characters)",
+                              "Метка может содержать только буквы, цифры, "
+                              "пробелы, точки, дефисы и скобки (до 40 "
+                              "символов)",
+                              "标签只能包含字母、数字、空格、点、连字符和括号"
+                              "（最多 40 个字符）"),
     "api.err.svc.max": ("سقفِ سرویس‌های سفارشی (۳۰) پر است",
                         "The custom-service limit (30) has been reached",
                         "Достигнут лимит пользовательских сервисов (30)",
@@ -9172,6 +9194,7 @@ ACTOR_GUARD = "sys:guard"        # نگهبانِ مسیر
 ACTOR_POLICY = "sys:policy"      # اعمالِ سیاستِ سهمیه/انقضا
 ACTOR_MONITOR = "sys:monitor"    # پایشِ تونل
 ACTOR_MANUAL = "sys:manual"      # ویرایشِ دستیِ فایلِ کانفیگ
+ACTOR_RESTORE = "sys:restore"    # اعمالِ زنده‌ی کانفیگِ بازیابی‌شده از بکاپ
 ACTOR_SPEEDTEST = "sys:speedtest"
 
 
@@ -10319,16 +10342,28 @@ def parse_user_blocks(iface, lines=None):
         end = last_content
         block_lines = lines[start:end + 1]
         enabled = any(l.strip().startswith("[Peer]") for l in block_lines)
-        pub, allowed = "", ""
+        pub, allowed, psk, keepalive = "", "", "", 0
         for l in block_lines:
             s = l.strip().lstrip("#").strip()
+            val = s.split("=", 1)[1].strip() if "=" in s else ""
             if s.startswith("PublicKey"):
-                pub = s.split("=", 1)[1].strip() if "=" in s else ""
+                pub = val
             elif s.startswith("AllowedIPs"):
-                allowed = s.split("=", 1)[1].strip() if "=" in s else ""
+                allowed = val
+            elif s.lower().startswith("presharedkey"):
+                psk = val
+            elif s.lower().startswith("persistentkeepalive"):
+                try:
+                    keepalive = int(val)
+                except ValueError:
+                    keepalive = 0
+        # psk و keepalive هم خوانده می‌شوند تا اعمالِ زنده (wg set) بعد از
+        # remove ِ کاملِ peer بتواند همان چیزی را برگرداند که فایل می‌گوید،
+        # نه فقط allowed-ips.
         blocks.append({"name": name, "start": start, "end": end,
                        "enabled": enabled, "public_key": pub,
-                       "allowed_ips": allowed})
+                       "allowed_ips": allowed, "psk": psk,
+                       "keepalive": keepalive})
         i = end + 1
     return blocks
 
@@ -10377,6 +10412,89 @@ def _valid_iface(iface):
         os.path.exists(conf_path(iface))
 
 
+def _wg_set_peer(iface, pub, allowed=None, psk=None, keepalive=None):
+    """یک peer را زنده با **یک** فراخوانیِ `wg set` هم‌شکلِ فایل می‌کند.
+
+    psk: None = دست نزن، "" = حذف، رشته = ست. wg کلید را از فایل می‌خواند و
+    «حذف» را فقط از فایلِ **صفر بایتی** می‌فهمد — یک `\\n` تنها «Invalid
+    length key» است. خروجی: (ok, پیامِ خطا).
+    """
+    args = ["wg", "set", iface, "peer", pub]
+    tmp = None
+    try:
+        if psk is not None:
+            fd, tmp = tempfile.mkstemp(prefix="wgpsk-")
+            os.write(fd, (psk + "\n").encode() if psk else b"")
+            os.close(fd)
+            os.chmod(tmp, 0o600)
+            args += ["preshared-key", tmp]
+        if allowed:
+            args += ["allowed-ips", allowed.replace(" ", "")]
+        if keepalive:
+            args += ["persistent-keepalive", str(int(keepalive))]
+        rc, out, err = run(args)
+        return rc == 0, (err or out)
+    finally:
+        if tmp:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+
+
+def _peer_live_state(iface, lines=None):
+    """{public_key: (allowed_ips, psk, keepalive)} برای بلوک‌های **فعال**.
+
+    همان چیزی که کرنل باید داشته باشد؛ مبنای مقایسه‌ی ناظرِ فایل و
+    بازیابیِ بکاپ. فایلِ ناموجود = هیچ peer ای.
+    """
+    try:
+        blocks = parse_user_blocks(iface, lines)
+    except OSError:
+        return {}
+    return {b["public_key"]: (b["allowed_ips"].replace(" ", ""),
+                              b["psk"], b["keepalive"])
+            for b in blocks if b["enabled"] and b["public_key"]}
+
+
+def apply_conf_delta(iface, old, new, actor=ACTOR_MANUAL):
+    """تفاوتِ دو وضعیتِ فایل (خروجیِ _peer_live_state) را با wg set روی
+    اینترفیسِ زنده اعمال می‌کند. peerهایی که فقط در runtime هستند دست
+    نمی‌خورند. خروجی: تعدادِ تغییرهای اعمال‌شده."""
+    if iface not in live_interfaces():
+        return 0
+    n = 0
+    for pub, (allowed, psk, keep) in new.items():
+        if old.get(pub) == (allowed, psk, keep):
+            continue
+        prev = old.get(pub)
+        # PSK فقط وقتی فرستاده می‌شود که تازه/تغییرکرده باشد — «"" = حذف»
+        # وقتی قبلاً PSK داشت و حالا ندارد.
+        psk_arg = None
+        if prev is None or prev[1] != psk:
+            psk_arg = psk
+        ok, err = _wg_set_peer(iface, pub, allowed, psk=psk_arg, keepalive=keep)
+        n += 1
+        log_action("autosync %s: peer %s… set %s (%s)"
+                   % (iface, pub[:8], allowed, "ok" if ok else err.strip()))
+        audit(actor, "peer", "peer.sync.auto",
+              "%s @ %s" % (pub[:12] + "…", iface),
+              adet("ui.audit.det.peeradded" if prev is None
+                   else "ui.audit.det.peerchanged", ips=allowed), ok=ok)
+    for pub in old:
+        if pub in new:
+            continue
+        rc, _, err = run(["wg", "set", iface, "peer", pub, "remove"])
+        ok = rc == 0
+        n += 1
+        log_action("autosync %s: peer %s… removed (%s)"
+                   % (iface, pub[:8], "ok" if ok else err.strip()))
+        audit(actor, "peer", "peer.sync.auto",
+              "%s @ %s" % (pub[:12] + "…", iface),
+              adet("ui.audit.det.peerremoved"), ok=ok)
+    return n
+
+
 def set_peer_enabled(iface, name, enable):
     """کامنت/آن‌کامنت بلوک peer در فایل + اعمال زنده با wg set."""
     if not _valid_iface(iface):
@@ -10412,19 +10530,25 @@ def set_peer_enabled(iface, name, enable):
 
     # اعمال زنده (فقط اگر اینترفیس بالا باشد؛ در غیر این صورت با wg-quick up اعمال می‌شود)
     live = iface in live_interfaces()
-    rc = 0
-    out = err = ""
+    ok, err = True, ""
     if live:
         if enable:
-            allowed = blk["allowed_ips"].replace(" ", "")
-            rc, out, err = run(["wg", "set", iface, "peer", blk["public_key"],
-                                "allowed-ips", allowed])
+            # 🪤 غیرفعال‌کردن peer را **کامل** از کرنل برمی‌دارد (PSK و
+            # keepalive هم می‌روند). پیش از این فعال‌کردن فقط allowed-ips
+            # را ست می‌کرد؛ کاربرِ PSK‌دار — پیش‌فرضِ همه‌ی کاربران — تا
+            # ری‌استارتِ wg-quick هندشیک نمی‌کرد. حالا همان چیزی که فایل
+            # می‌گوید یک‌جا اعمال می‌شود.
+            ok, err = _wg_set_peer(iface, blk["public_key"],
+                                   blk["allowed_ips"],
+                                   psk=(blk["psk"] or None),
+                                   keepalive=blk["keepalive"])
         else:
             rc, out, err = run(["wg", "set", iface, "peer",
                                 blk["public_key"], "remove"])
+            ok, err = rc == 0, (err or out)
     WATCHER.resync()
-    if rc != 0:
-        return False, aerr("api.err.apply.edited", v=(err or out))
+    if not ok:
+        return False, aerr("api.err.apply.edited", v=err)
     log_action("peer %s@%s -> %s" % (name, iface,
                                      "enabled" if enable else "disabled"))
     return True, ("api.ok.done" if live else "api.ok.saved.offline")
@@ -10527,22 +10651,11 @@ def gen_psk():
 
 
 def apply_preshared_key(iface, pub, psk):
-    """اعمال زنده‌ی PSK با فایل موقت 0600 (wg set از فایل می‌خواند، نه آرگومان)."""
+    """اعمال زنده‌ی PSK با فایل موقت 0600 (wg set از فایل می‌خواند، نه آرگومان).
+    psk خالی = حذف (فایلِ صفر بایتی — رجوع به _wg_set_peer)."""
     if iface not in live_interfaces():
         return True, ""
-    fd, tmp = tempfile.mkstemp(prefix="wgpsk-")
-    try:
-        os.write(fd, ((psk or "") + "\n").encode())
-        os.close(fd)
-        os.chmod(tmp, 0o600)
-        rc, out, err = run(["wg", "set", iface, "peer", pub,
-                            "preshared-key", tmp])
-        return rc == 0, (err or out)
-    finally:
-        try:
-            os.remove(tmp)
-        except OSError:
-            pass
+    return _wg_set_peer(iface, pub, psk=(psk or ""))
 
 
 PSK_RE = re.compile(r"^#?\s*PresharedKey\s*=", re.IGNORECASE)
@@ -10806,13 +10919,13 @@ def rotate_peer_key(iface, name):
             rc, out, err = run(["wg", "set", iface, "peer", old_pub, "remove"])
             if rc != 0:
                 return None, aerr("api.err.apply.changed", v=(err or out))
-            allowed = blk["allowed_ips"].replace(" ", "")
-            rc, out, err = run(["wg", "set", iface, "peer", new_pub,
-                                "allowed-ips", allowed])
-            if rc != 0:
-                return None, aerr("api.err.apply.changed", v=(err or out))
-            if psk:
-                apply_preshared_key(iface, new_pub, psk)
+            # allowed-ips + PSK + keepalive در یک فراخوانی؛ پیش از این PSK
+            # جدا و بی‌بررسیِ rc اعمال می‌شد و keepalive اصلاً نه.
+            ok, err = _wg_set_peer(iface, new_pub, blk["allowed_ips"],
+                                   psk=(psk or None),
+                                   keepalive=blk["keepalive"])
+            if not ok:
+                return None, aerr("api.err.apply.changed", v=err)
     WATCHER.resync()
 
     ip = blk["allowed_ips"].split(",")[0].strip().split("/")[0]
@@ -10865,11 +10978,18 @@ def set_peer_psk(iface, name, enable):
                              and PSK_RE.match(ln.strip()))]
         write_conf_atomic(path, lines)
 
+    aok, aerr_msg = True, ""
     if iface in live_interfaces() and blk["enabled"]:
-        apply_preshared_key(iface, blk["public_key"], psk)  # psk="" ⇒ حذف
+        aok, aerr_msg = apply_preshared_key(iface, blk["public_key"], psk)  # psk="" ⇒ حذف
     WATCHER.resync()
     regen_client_conf(iface, name)
-    log_action("peer %s@%s psk %s" % (name, iface, "on" if enable else "off"))
+    log_action("peer %s@%s psk %s (%s)"
+               % (name, iface, "on" if enable else "off",
+                  "ok" if aok else aerr_msg.strip()))
+    if not aok:
+        # فایل و کانفیگِ کلاینت عوض شده‌اند ولی کرنل نه؛ اپراتور باید بداند،
+        # وگرنه «انجام شد» می‌بیند و کلاینت تا ری‌استارت وصل نمی‌شود.
+        return False, aerr("api.err.apply.changed", v=aerr_msg)
     return True, "api.ok.done"
 
 
@@ -11153,7 +11273,33 @@ def restore_from_tar(raw):
         if not ok:
             return False, snap_err
 
-        restored = 0
+        restored, synced = _restore_write_planned(tar, planned)
+
+    if SAMPLER:
+        SAMPLER.refresh_meta()
+    log_action("restore: %d file(s) restored, %d live peer change(s)"
+               % (restored, synced))
+    return True, aerr("api.ok.restore", n=restored)
+
+
+def _restore_write_planned(tar, planned):
+    """فایل‌های برنامه‌ریزی‌شده‌ی بازیابی را می‌نویسد و کانفیگ‌های WireGuard
+    را روی اینترفیس‌های زنده اعمال می‌کند. خروجی: (restored, synced).
+
+    🪤 پیش از این فقط WATCHER.resync() صدا می‌شد، که فایلِ تازه را «قبلاً
+    اعمال‌شده» ثبت می‌کند و هیچ wg set نمی‌زند: peerهای حذف‌شده در بکاپ وصل
+    می‌ماندند، peerهای برگشته کار نمی‌کردند و ناظر هم دیگر هرگز آن‌ها را
+    همگام نمی‌کرد. حالا وضعیتِ قبل/بعدِ هر کانفیگ مقایسه و تفاوت اعمال
+    می‌شود — همان مسیرِ ویرایشِ دستی. کلِ نوشتن زیرِ _conf_lock است تا یک
+    add_peer هم‌زمان نسخه‌ی کهنه‌اش را روی فایلِ بازیابی‌شده ننویسد.
+    """
+    wg_ifaces = {}
+    for _mem, dest in planned:
+        if os.path.dirname(dest) == WG_DIR and dest.endswith(".conf"):
+            wg_ifaces[dest] = os.path.basename(dest)[:-5]
+    restored = 0
+    with _conf_lock:
+        before = {ifc: _peer_live_state(ifc) for ifc in wg_ifaces.values()}
         for mem, dest in planned:
             src = tar.extractfile(mem)
             if src is None:
@@ -11171,12 +11317,17 @@ def restore_from_tar(raw):
                 _db_sidecars_clear()      # پیش از جایگزینی، نه بعدش
             os.replace(tmp, dest)
             restored += 1
-
+        after = {ifc: _peer_live_state(ifc) for ifc in wg_ifaces.values()}
+    synced = 0
+    for ifc in wg_ifaces.values():
+        try:
+            synced += apply_conf_delta(ifc, before.get(ifc, {}),
+                                       after.get(ifc, {}),
+                                       actor=ACTOR_RESTORE)
+        except Exception as e:      # اعمالِ زنده نباید خودِ بازیابی را بشکند
+            log_action("restore: live apply failed on %s: %r" % (ifc, e))
     WATCHER.resync()
-    if SAMPLER:
-        SAMPLER.refresh_meta()
-    log_action("restore: %d file(s) restored" % restored)
-    return True, aerr("api.ok.restore", n=restored)
+    return restored, synced
 
 
 # ---- بازیابیِ انتخابی از آرشیوِ شبانه (فرمتِ wg-panel-backup.sh روی MEGA)
@@ -11242,29 +11393,12 @@ def restore_from_nightly_tar(raw, components, ok_key="api.ok.restore.parts"):
         ok, snap_err = _write_pre_restore_snapshot()
         if not ok:
             return False, snap_err
-        restored = 0
-        for mem, dest in planned:
-            src = tar.extractfile(mem)
-            if src is None:
-                continue
-            data = src.read()
-            os.makedirs(os.path.dirname(dest), exist_ok=True)
-            tmp = dest + ".restore-tmp"
-            # مود در خودِ os.open — محتوا کانفیگِ WireGuard و traffic.db
-            # است و پیش از این بینِ ساخت و chmod با umask نوشته می‌شد.
-            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-            with os.fdopen(fd, "wb") as f:
-                f.write(data)
-            os.chmod(tmp, 0o600)
-            if dest == DB_PATH:
-                _db_sidecars_clear()      # ← همان دلیلِ restore_from_tar
-            os.replace(tmp, dest)
-            restored += 1
-    WATCHER.resync()
+        restored, synced = _restore_write_planned(tar, planned)
     if SAMPLER:
         SAMPLER.refresh_meta()
-    log_action("cloud restore: %d restored, %d skipped (%s)"
-               % (restored, skipped, ",".join(components)))
+    log_action("cloud restore: %d restored, %d skipped, %d live peer "
+               "change(s) (%s)"
+               % (restored, skipped, synced, ",".join(components)))
     return True, aerr(ok_key, n=restored, skipped=skipped)
 
 
@@ -12239,9 +12373,9 @@ class ConfWatcher(threading.Thread):
 
     @staticmethod
     def _snapshot(iface):
-        blocks = parse_user_blocks(iface)
-        return {b["public_key"]: b["allowed_ips"].replace(" ", "")
-                for b in blocks if b["enabled"] and b["public_key"]}
+        # {pub: (allowed, psk, keepalive)} — تغییرِ PSK یا keepalive در
+        # فایل هم باید اعمال شود، نه فقط AllowedIPs.
+        return _peer_live_state(iface)
 
     def resync(self):
         """بعد از هر نوشتنِ خود پنل صدا زده می‌شود تا همان تغییر دوباره اعمال نشود."""
@@ -12285,28 +12419,9 @@ class ConfWatcher(threading.Thread):
             self.mtimes[iface] = m
             self.pendings.pop(iface, None)
             self.states[iface] = new
-        if iface not in live_interfaces():
-            return  # اینترفیس خاموش؛ فایل با wg-quick up اعمال خواهد شد
-        for pub, allowed in new.items():
-            if old.get(pub) != allowed:
-                rc, _, err = run(["wg", "set", iface, "peer", pub,
-                                  "allowed-ips", allowed])
-                ok = rc == 0
-                log_action("autosync %s: peer %s… set %s (%s)"
-                           % (iface, pub[:8], allowed, "ok" if ok else err.strip()))
-                verb = "افزوده/تغییر" if pub not in old else "تغییر AllowedIPs"
-                audit("sys:manual", "peer", "peer.sync.auto",
-                      "%s @ %s" % (pub[:12] + "…", iface),
-                      "%s → AllowedIPs=%s" % (verb, allowed), ok=ok)
-        for pub in old:
-            if pub not in new:
-                rc, _, err = run(["wg", "set", iface, "peer", pub, "remove"])
-                ok = rc == 0
-                log_action("autosync %s: peer %s… removed (%s)"
-                           % (iface, pub[:8], "ok" if ok else err.strip()))
-                audit("sys:manual", "peer", "peer.sync.auto",
-                      "%s @ %s" % (pub[:12] + "…", iface),
-                      adet("ui.audit.det.peerremoved"), ok=ok)
+        # اینترفیسِ خاموش: فایل با wg-quick up اعمال خواهد شد (apply_conf_delta
+        # خودش بررسی می‌کند). همان تابعی که بازیابیِ بکاپ استفاده می‌کند.
+        apply_conf_delta(iface, old, new, actor=ACTOR_MANUAL)
 
 
 WATCHER = ConfWatcher()
@@ -15175,7 +15290,10 @@ class AlertMonitor(threading.Thread):
 
     def _check_resources(self):
         c = alert_cfg()
-        snap = SYSMON.snapshot()
+        # snapshot() = {"cur": {metric: value}, "extra": {...}} — پیش از این
+        # snap.get("cpu") روی همین پوشش خوانده می‌شد و همیشه None بود، پس
+        # هشدارِ CPU/RAM/DISK هرگز ارسال نمی‌شد.
+        snap = (SYSMON.snapshot() or {}).get("cur") or {}
         need = max(1, int(c["sustain_min"] * 60 / self.INTERVAL))
         for m, lbl, thr in (("cpu", "CPU", c["cpu_pct"]),
                             ("ram", "RAM", c["ram_pct"]),
@@ -16610,18 +16728,29 @@ def warp_status_redacted(w, perms):
     """
     if not isinstance(w, dict) or "warp.manage" in (perms or ()):
         return w
-    out = dict(w)
-    out["src_labels"] = {}
+
+    def _strip(d):
+        d = dict(d)
+        d["src_labels"] = {}
+        st = d.get("stats")
+        if isinstance(st, dict):
+            st = dict(st)
+            for k in WARP_PRIVATE_STATS:
+                st.pop(k, None)
+            d["stats"] = st
+        return d
+
+    out = _strip(w)
     # کشفِ خودکار هم نامِ دامنه‌هایی است که کاربران رفته‌اند (همان طبقه‌ی
     # top_sni)، پس همان گیت را می‌گیرد. ربات هم کلِ بخشِ WARP را پشتِ
     # warp.manage گذاشته؛ بدونِ این خط، پنل همان نشت را از نو باز می‌کرد.
     out["autodetect"] = {}
-    st = out.get("stats")
-    if isinstance(st, dict):
-        st = dict(st)
-        for k in WARP_PRIVATE_STATS:
-            st.pop(k, None)
-        out["stats"] = st
+    # 🪤 داده‌ی واقعی زیرِ d["sni"] است (warp_sni_status)، نه سطحِ بالا؛
+    # رابط هم از w.sni.stats.top_sni می‌خواند. پیش از این فقط سطحِ بالا
+    # پاک می‌شد — که هیچ‌وقت این کلیدها را نداشت — و top_sni/top_src و
+    # نگاشتِ IP→کاربر برای هر دارنده‌ی tun.view (نقشِ viewer) می‌رفت.
+    if isinstance(out.get("sni"), dict):
+        out["sni"] = _strip(out["sni"])
     return out
 
 
@@ -20827,6 +20956,11 @@ def svc_services():
     return out
 
 
+# حرف/عدد (هر زبانی)، فاصله، نقطه، خطِ تیره، پرانتز — بدونِ کوتیشن، < > & و
+# کاراکترِ کنترلی؛ اولین نویسه حرف یا عدد.
+_SVC_LABEL_RE = re.compile(r"[^\W_][\w .\-()]{0,39}")
+
+
 def svc_add_custom(domain, label):
     """افزودنِ سرویسِ سفارشی از یک دامنه (ضدِ SSRF). خروجی: (key, error)."""
     domain = (domain or "").strip().lower()
@@ -20836,6 +20970,12 @@ def svc_add_custom(domain, label):
     domain = domain.split("/")[0].split("?")[0].split(":")[0].strip().strip(".")
     if not _DOMAIN_RE.match(domain):
         return None, "api.err.svc.domain_bad"
+    # برچسب در رابط داخلِ HTML و آرگومانِ handler می‌رود؛ سمتِ سرور هم
+    # محدود می‌شود تا یک svc.edit نتواند متنِ دلخواه به همه‌ی ادمین‌ها برساند
+    # (دفاعِ دوم؛ اولی escape ِ درستِ سمتِ کلاینت است).
+    label = (label or "").strip()
+    if label and not _SVC_LABEL_RE.fullmatch(label):
+        return None, "api.err.svc.label_bad"
     try:
         ipaddress.ip_address(domain)
         return None, "api.err.svc.ip_not_domain"
@@ -22921,6 +23061,11 @@ let busy = false;
 function el(id){ return document.getElementById(id); }
 function esc(s){ return String(s).replace(/[&<>"']/g,
   c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+// آرگومانِ رشته‌ای برای handler ِ درون‌خطی (onclick="f(' + jsArg(v) + ')").
+// 🪤 esc تنها کافی نیست: مرورگر entityها را **پیش از** JS parser برمی‌گرداند،
+// پس &#39; دوباره ' می‌شود و رشته‌ی JS را می‌شکند (XSS ِ ذخیره‌شده از
+// برچسبِ سرویسِ سفارشی). اول JSON (escape ِ JS)، بعد HTML.
+function jsArg(v){ return esc(JSON.stringify(String(v))); }
 
 // ===== i18n — کاتالوگِ زبانِ فعال را سرور در <head> تزریق کرده (window.__T).
 // متنِ ثابتِ نشانه‌گذاری سمتِ سرور جایگزین شده؛ t() برای رشته‌هایی است که JS
@@ -23515,14 +23660,14 @@ function renderSvc(s){
         '<div class="svc-status">' + chips + '</div>' +
         '<div class="svc-actions">' +
           '<button class="svc-mtrbtn' + (svcOpenIps.has(row.key) ? ' open' : '') +
-            '" onclick="toggleSvcIps(\'' + esc(row.key) + '\')">' + _t('ui.js.renderSvc.13') +
+            '" onclick="toggleSvcIps(' + jsArg(row.key) + ')">' + _t('ui.js.renderSvc.13') +
             (svcOpenIps.has(row.key) ? ' ▲' : ' ▼') + '</button>' +
           (gif ? '<button class="svc-mtrbtn' + (open ? ' open' : '') +
-            '" onclick="toggleMtr(\'' + esc(row.key) + '\',\'' + esc(gif) +
-            '\')">' + _t('ui.js.renderSvc.14') + (open ? ' ▲' : ' ▼') + '</button>' : '') +
+            '" onclick="toggleMtr(' + jsArg(row.key) + ',' + jsArg(gif) +
+            ')">' + _t('ui.js.renderSvc.14') + (open ? ' ▲' : ' ▼') + '</button>' : '') +
           (can('svc.edit') ?
-          '<button class="svc-mtrbtn danger" onclick="deleteSvc(\'' +
-            esc(row.key) + '\',\'' + esc(svcLabel(row)) + '\')">' + _t('ui.js.renderSvc.15') + '</button>' : '') +
+          '<button class="svc-mtrbtn danger" onclick="deleteSvc(' +
+            jsArg(row.key) + ',' + jsArg(svcLabel(row)) + ')">' + _t('ui.js.renderSvc.15') + '</button>' : '') +
         '</div>' +
       '</div>' +
       '<div class="svc-ips-holder" data-ips="' + esc(row.key) + '"></div>' +

@@ -1146,6 +1146,158 @@ class PanelTestCase(unittest.TestCase):
         ok, _ = m.set_peer_psk("wgtest", "u", False)
         self.assertTrue(ok and not m.block_psk("wgtest", "u"))
 
+    # ---- اعمالِ زنده‌ی PSK/keepalive ------------------------------------------
+    # 🪤 غیرفعال‌کردن peer را کامل از کرنل برمی‌دارد؛ فعال‌کردنِ دوباره
+    # باید PSK و keepalive را هم برگرداند، نه فقط allowed-ips — وگرنه
+    # کاربرِ PSK‌دار (پیش‌فرض) تا ری‌استارتِ wg-quick هندشیک نمی‌کند.
+    def _spy_psk_files(self):
+        """run را می‌پوشاند و محتوای فایلِ preshared-key را در لحظه‌ی
+        فراخوانی می‌خواند (فایل بعد از run حذف می‌شود)."""
+        m = self.m
+        orig = m.run
+        seen = []
+
+        def spy(cmd, timeout=20):
+            if "preshared-key" in cmd:
+                with open(cmd[cmd.index("preshared-key") + 1], "rb") as f:
+                    seen.append(f.read())
+            return orig(cmd, timeout)
+        m.run = spy
+        return seen
+
+    def _set_calls_for(self, pub):
+        return [c for c in self.m._run_calls
+                if c[:2] == ["wg", "set"] and len(c) > 4 and c[4] == pub]
+
+    def test_parse_user_blocks_exposes_psk_and_keepalive(self):
+        m = self.m
+        m.add_peer("wgtest", "pk", use_psk=True)
+        blk = next(b for b in m.parse_user_blocks("wgtest") if b["name"] == "pk")
+        self.assertTrue(blk["psk"].startswith("FAKE_PSK_"))
+        self.assertEqual(blk["keepalive"], 25)
+        # بلوکِ کامنت‌شده هم خوانده می‌شود (برای فعال‌کردنِ دوباره)
+        m.set_peer_enabled("wgtest", "pk", False)
+        blk = next(b for b in m.parse_user_blocks("wgtest") if b["name"] == "pk")
+        self.assertFalse(blk["enabled"])
+        self.assertTrue(blk["psk"] and blk["keepalive"] == 25)
+
+    def test_enable_reapplies_psk_and_keepalive_in_one_wg_set(self):
+        m = self.m
+        res, err = m.add_peer("wgtest", "re", use_psk=True)
+        self.assertIsNone(err)
+        pub = next(b for b in m.parse_user_blocks("wgtest")
+                   if b["name"] == "re")["public_key"]
+        psk = m.block_psk("wgtest", "re")
+        m.set_peer_enabled("wgtest", "re", False)
+        self.assertEqual(self._set_calls_for(pub)[-1][-1], "remove")
+        seen = self._spy_psk_files()
+        del m._run_calls[:]
+        ok, _ = m.set_peer_enabled("wgtest", "re", True)
+        self.assertTrue(ok)
+        calls = self._set_calls_for(pub)
+        self.assertEqual(len(calls), 1, calls)
+        c = calls[0]
+        self.assertIn("preshared-key", c)
+        self.assertIn("allowed-ips", c)
+        self.assertEqual(c[c.index("allowed-ips") + 1], res["ip"] + "/32")
+        self.assertIn("persistent-keepalive", c)
+        self.assertEqual(c[c.index("persistent-keepalive") + 1], "25")
+        self.assertEqual(seen, [(psk + "\n").encode()])
+
+    def test_enable_without_psk_sends_no_preshared_key(self):
+        m = self.m
+        m.add_peer("wgtest", "nopsk", use_psk=False)
+        pub = next(b for b in m.parse_user_blocks("wgtest")
+                   if b["name"] == "nopsk")["public_key"]
+        m.set_peer_enabled("wgtest", "nopsk", False)
+        del m._run_calls[:]
+        m.set_peer_enabled("wgtest", "nopsk", True)
+        c = self._set_calls_for(pub)[0]
+        self.assertNotIn("preshared-key", c)
+        self.assertIn("persistent-keepalive", c)
+
+    def test_enable_reports_live_apply_failure(self):
+        m = self.m
+        m.add_peer("wgtest", "fail", use_psk=True)
+        m.set_peer_enabled("wgtest", "fail", False)
+        orig = m.run
+        m.run = lambda cmd, timeout=20: ((1, "", "boom")
+                                        if "allowed-ips" in cmd
+                                        else orig(cmd, timeout))
+        ok, msg = m.set_peer_enabled("wgtest", "fail", True)
+        self.assertFalse(ok)
+        self.assertIn("boom", m.api_text(msg, "en"))
+
+    def test_psk_removal_writes_an_empty_keyfile(self):
+        """wg «حذفِ کلید» را فقط از فایلِ صفر بایتی می‌فهمد؛ یک \\n تنها
+        «Invalid length key» است و پیش از این rc هم نادیده گرفته می‌شد."""
+        m = self.m
+        m.add_peer("wgtest", "rm", use_psk=True)
+        seen = self._spy_psk_files()
+        ok, _ = m.set_peer_psk("wgtest", "rm", False)
+        self.assertTrue(ok)
+        self.assertEqual(seen, [b""])
+        self.assertFalse(m.block_psk("wgtest", "rm"))
+
+    def test_psk_toggle_reports_live_apply_failure(self):
+        m = self.m
+        m.add_peer("wgtest", "rmf", use_psk=True)
+        orig = m.run
+        m.run = lambda cmd, timeout=20: ((1, "", "Invalid length key")
+                                        if "preshared-key" in cmd
+                                        else orig(cmd, timeout))
+        ok, msg = m.set_peer_psk("wgtest", "rmf", False)
+        self.assertFalse(ok)
+        self.assertIn("Invalid length key", m.api_text(msg, "en"))
+
+    def test_rotate_applies_psk_and_keepalive_with_new_key(self):
+        m = self.m
+        m.add_peer("wgtest", "rot", use_psk=True)
+        psk = m.block_psk("wgtest", "rot")
+        seen = self._spy_psk_files()
+        # calls را خالی نمی‌کنیم: genkey ِ ساختگی از len(calls) شماره
+        # می‌سازد و با شمارنده‌ی صفر همان کلیدِ قبلی را می‌داد.
+        start = len(m._run_calls)
+        res, err = m.rotate_peer_key("wgtest", "rot")
+        self.assertIsNone(err)
+        new_pub = next(b for b in m.parse_user_blocks("wgtest")
+                       if b["name"] == "rot")["public_key"]
+        c = [x for x in m._run_calls[start:]
+             if x[:2] == ["wg", "set"] and x[4] == new_pub]
+        self.assertEqual(len(c), 1, c)
+        self.assertIn("preshared-key", c[0])
+        self.assertIn("persistent-keepalive", c[0])
+        self.assertEqual(seen, [(psk + "\n").encode()])
+        self.assertIn("PresharedKey = " + psk, res["client_conf"])
+
+    def test_apply_conf_delta_sends_psk_only_when_it_changed(self):
+        m = self.m
+        old = {"A": ("10.0.0.2/32", "P1", 25), "B": ("10.0.0.3/32", "", 0),
+               "C": ("10.0.0.4/32", "P3", 25)}
+        new = {"A": ("10.0.0.2/32", "P2", 25),      # PSK عوض شد
+               "B": ("10.0.0.9/32", "", 25),         # فقط allowed/keepalive
+               "D": ("10.0.0.5/32", "P4", 0)}        # تازه؛ C حذف
+        seen = self._spy_psk_files()
+        del m._run_calls[:]
+        n = m.apply_conf_delta("wgtest", old, new)
+        self.assertEqual(n, 4)
+        a = self._set_calls_for("A")[0]
+        self.assertIn("preshared-key", a)
+        b = self._set_calls_for("B")[0]
+        self.assertNotIn("preshared-key", b)
+        self.assertEqual(b[b.index("allowed-ips") + 1], "10.0.0.9/32")
+        d = self._set_calls_for("D")[0]
+        self.assertIn("preshared-key", d)
+        self.assertNotIn("persistent-keepalive", d)
+        self.assertEqual(self._set_calls_for("C"), [["wg", "set", "wgtest",
+                                                     "peer", "C", "remove"]])
+        self.assertEqual(seen, [b"P2\n", b"P4\n"])
+        # اینترفیسِ خاموش: هیچ wg set
+        m.live_interfaces = lambda: []
+        del m._run_calls[:]
+        self.assertEqual(m.apply_conf_delta("wgtest", old, new), 0)
+        self.assertEqual(m._run_calls, [])
+
     def test_parse_client_overrides_validation(self):
         f = self.m.parse_client_overrides
         self.assertEqual(f({})[0]["c_mtu"], None)
@@ -1225,6 +1377,102 @@ class PanelTestCase(unittest.TestCase):
             info.size = len(d)
             t.addfile(info, _io.BytesIO(d))
         self.assertFalse(m.restore_from_tar(bad.getvalue())[0])
+
+    def _tar_with_conf(self, conf_text):
+        import io as _io
+        import tarfile as _tf
+        buf = _io.BytesIO()
+        with _tf.open(fileobj=buf, mode="w:gz") as t:
+            d = conf_text.encode()
+            info = _tf.TarInfo("wgtest.conf")
+            info.size = len(d)
+            t.addfile(info, _io.BytesIO(d))
+        return buf.getvalue()
+
+    # فیکسچر: user02 فعال، user01/user03 غیرفعال. آرشیو: user02 غیرفعال،
+    # user01 فعال با PSK و keepalive.
+    RESTORE_CONF = FIXTURE_CONF.replace(
+        "#!!!user01\n#[Peer]\n#PublicKey = PUB_USER01_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx=\n"
+        "#AllowedIPs = 192.168.188.14/32\n",
+        "#!!!user01\n[Peer]\nPublicKey = PUB_USER01_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx=\n"
+        "PresharedKey = RESTORED_PSK=\nAllowedIPs = 192.168.188.14/32\n"
+        "PersistentKeepalive = 25\n"
+    ).replace(
+        "#!!!user02\n[Peer]\nPublicKey = PUB_USER02_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx=\n"
+        "AllowedIPs = 192.168.188.20/32,149.154.166.110\n",
+        "#!!!user02\n#[Peer]\n#PublicKey = PUB_USER02_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx=\n"
+        "#AllowedIPs = 192.168.188.20/32,149.154.166.110\n")
+
+    def test_restore_applies_the_restored_conf_to_the_live_interface(self):
+        """🪤 پیش از این بازیابی فقط WATCHER.resync() می‌زد: peerِ حذف‌شده در
+        بکاپ وصل می‌ماند و peerِ برگشته کار نمی‌کرد — و ناظر هم دیگر هرگز
+        آن‌ها را همگام نمی‌کرد، چون فایلِ تازه «اعمال‌شده» ثبت شده بود."""
+        m = self.m
+        self.assertNotEqual(self.RESTORE_CONF, FIXTURE_CONF)
+        resynced = []
+        m.WATCHER = types.SimpleNamespace(resync=lambda: resynced.append(1))
+        seen = []
+        orig = m.run
+
+        def spy(cmd, timeout=20):
+            if "preshared-key" in cmd:
+                with open(cmd[cmd.index("preshared-key") + 1], "rb") as f:
+                    seen.append(f.read())
+            return orig(cmd, timeout)
+        m.run = spy
+        del m._run_calls[:]
+        ok, msg = m.restore_from_tar(self._tar_with_conf(self.RESTORE_CONF))
+        self.assertTrue(ok, msg)
+        sets = [c for c in m._run_calls if c[:2] == ["wg", "set"]]
+        pub1 = "PUB_USER01_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx="
+        pub2 = "PUB_USER02_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx="
+        self.assertIn(["wg", "set", "wgtest", "peer", pub2, "remove"], sets)
+        add = next(c for c in sets if c[4] == pub1)
+        self.assertIn("preshared-key", add)
+        self.assertEqual(add[add.index("allowed-ips") + 1], "192.168.188.14/32")
+        self.assertEqual(add[add.index("persistent-keepalive") + 1], "25")
+        self.assertEqual(seen, [b"RESTORED_PSK=\n"])
+        self.assertEqual(len(sets), 2)
+        self.assertEqual(resynced, [1])
+        # فایل هم واقعاً بازیابی شده
+        self.assertIn("PresharedKey = RESTORED_PSK=", self.read_conf())
+        # ردِ ممیزی با کنشگرِ بازیابی
+        rows = m.META.audit_list(category="peer", limit=10)
+        self.assertTrue(any(r["actor"] == m.ACTOR_RESTORE for r in rows))
+
+    def test_restore_of_an_identical_conf_touches_nothing_live(self):
+        m = self.m
+        del m._run_calls[:]
+        ok, _ = m.restore_from_tar(self._tar_with_conf(FIXTURE_CONF))
+        self.assertTrue(ok)
+        self.assertEqual([c for c in m._run_calls if c[:2] == ["wg", "set"]], [])
+
+    def test_restore_on_a_down_interface_only_writes_the_file(self):
+        m = self.m
+        m.live_interfaces = lambda: []
+        del m._run_calls[:]
+        ok, _ = m.restore_from_tar(self._tar_with_conf(self.RESTORE_CONF))
+        self.assertTrue(ok)
+        self.assertEqual([c for c in m._run_calls if c[:2] == ["wg", "set"]], [])
+        self.assertIn("PresharedKey = RESTORED_PSK=", self.read_conf())
+
+    def test_restore_writes_under_the_conf_lock(self):
+        """یک add_peer هم‌زمان نباید نسخه‌ی کهنه‌اش را روی فایلِ بازیابی‌شده
+        بنویسد؛ قفل باید در طولِ نوشتن گرفته باشد."""
+        m = self.m
+        held = []
+        real_replace = m.os.replace
+
+        def spy_replace(src, dst):
+            if dst.endswith("wgtest.conf"):
+                held.append(m._conf_lock.locked())
+            return real_replace(src, dst)
+        m.os = types.SimpleNamespace(**{k: getattr(m.os, k) for k in dir(m.os)
+                                        if not k.startswith("__")})
+        m.os.replace = spy_replace
+        ok, _ = m.restore_from_tar(self._tar_with_conf(self.RESTORE_CONF))
+        self.assertTrue(ok)
+        self.assertEqual(held, [True])
 
     def test_usage_matrix(self):
         m = self.m
@@ -1671,9 +1919,18 @@ class PanelTestCase(unittest.TestCase):
             # دامنه‌ی معتبرِ عمومی → پذیرفته
             m.socket.getaddrinfo = lambda *a, **k: [
                 (2, 1, 6, "", ("72.163.4.185", 443))]
+            # برچسب با کوتیشن/تگ رد شود: در رابط داخلِ onclick می‌رود و یک
+            # svc.edit نباید متنِ دلخواه به همه‌ی ادمین‌ها برساند
+            for bad in ("x');alert(1);//", "<b>x</b>", 'a"b', "a&b",
+                        "x\ny", "_x", "a" * 41):
+                with self.subTest(label=bad):
+                    self.assertEqual(m.svc_add_custom("cisco.com", bad),
+                                     (None, "api.err.svc.label_bad"))
+            self.assertNotIn("c_cisco_com", m.svc_services())
             key, err = m.svc_add_custom("cisco.com", "سیسکو")
             self.assertIsNone(err)
             self.assertEqual(key, "c_cisco_com")
+            self.assertEqual(m.svc_services()["c_cisco_com"]["label"], "سیسکو")
             self.assertIn("c_cisco_com", m.svc_services())
             self.assertEqual(m.svc_services()["c_cisco_com"]["probe"],
                              "https://cisco.com/")
@@ -1945,37 +2202,71 @@ class RbacTests(unittest.TestCase):
     # /api/warp/status عمداً با tun.view باز است (viewer هم داردش) ولی بارش
     # نامِ سایت‌های کاربران و نگاشتِ IP→کاربر دارد. رابط آن‌ها را پنهان
     # می‌کند؛ این تست تضمین می‌کند پنهان‌سازی فقط سمتِ کلاینت نماند.
+    # 🪤 شکلِ payload باید همان شکلِ warp_status باشد: آمار و نگاشتِ
+    # IP→کاربر زیرِ d["sni"] است (warp_sni_status)، نه سطحِ بالا. نسخه‌ی
+    # قبلیِ این تست payload ِ تخت می‌داد و سبز می‌ماند در حالی که تابع
+    # کلیدهای تو‌در‌تو را دست نمی‌زد و همه‌چیز به viewer می‌رفت.
+    def _warp_stats(self):
+        return {"ai_conns": 5,
+                "top_sni": [["gemini.google.com", 9, 2, 1]],
+                "top_sni_conns": [["notebook.google.com", 4, 90, 0]],
+                "top_src": [["192.168.188.11", 1, 2, 3, 4]]}
+
     def _warp_payload(self):
         return {"healthy": True,
-                "src_labels": {"192.168.188.11": "wg1udp/abab"},
                 "autodetect": {"ts": 111, "checked": 3,
                                "added": ["labs.google"],
                                "blocked": [{"sni": "x.google.com",
                                             "iran": "403", "warp": "404",
                                             "conns": 90, "bytes": 400}]},
-                "stats": {"ai_conns": 5,
-                          "top_sni": [["gemini.google.com", 9, 2, 1]],
-                          "top_sni_conns": [["notebook.google.com", 4, 90, 0]],
-                          "top_src": [["192.168.188.11", 1, 2, 3, 4]]}}
+                "sni": {"enabled": True, "healthy": True,
+                        "src_labels": {"192.168.188.11": "wg1udp/abab"},
+                        "stats": self._warp_stats()}}
 
     def test_warp_status_redacted_hides_personal_data(self):
         m = self.m
         out = m.warp_status_redacted(self._warp_payload(),
                                      m.role_perms("viewer"))
-        self.assertEqual(out["src_labels"], {})
+        self.assertEqual(out["sni"]["src_labels"], {})
         for k in ("top_sni", "top_sni_conns", "top_src"):
-            self.assertNotIn(k, out["stats"])
+            self.assertNotIn(k, out["sni"]["stats"])
         # کشفِ خودکار هم نامِ دامنه‌های کاربران است ⇒ همان گیت
         self.assertEqual(out["autodetect"], {})
-        self.assertEqual(out["stats"]["ai_conns"], 5)   # غیرشخصی می‌ماند
+        self.assertEqual(out["sni"]["stats"]["ai_conns"], 5)   # غیرشخصی می‌ماند
+        self.assertTrue(out["sni"]["healthy"])
         self.assertTrue(out["healthy"])
+
+    def test_warp_status_redacted_handles_flat_payload_too(self):
+        """سازگاریِ عقب‌رو/دفاعِ عمقی: اگر روزی آمار در سطحِ بالا هم بیاید."""
+        m = self.m
+        p = {"healthy": True, "src_labels": {"1.1.1.1": "x"},
+             "stats": self._warp_stats()}
+        out = m.warp_status_redacted(p, m.role_perms("viewer"))
+        self.assertEqual(out["src_labels"], {})
+        self.assertNotIn("top_sni", out["stats"])
+        self.assertEqual(out["stats"]["ai_conns"], 5)
+
+    def test_warp_status_redacted_matches_the_real_payload_shape(self):
+        """گاردِ شکل: خروجیِ واقعیِ warp_status باید همان جایی داده داشته
+        باشد که این تست‌ها پاک می‌کنند — وگرنه تستِ بالا دوباره بی‌اثر است."""
+        m = self.m
+        m._WARP_CACHE.update(ts=0, data=None)
+        m.warp_sni_status = lambda: {"enabled": True, "healthy": True,
+                                     "src_labels": {"10.0.0.2": "u"},
+                                     "stats": self._warp_stats()}
+        w = m.warp_status(force=True)
+        self.assertIn("sni", w)
+        self.assertIn("top_sni", w["sni"]["stats"])
+        out = m.warp_status_redacted(w, m.role_perms("viewer"))
+        self.assertNotIn("top_sni", out["sni"]["stats"])
+        self.assertEqual(out["sni"]["src_labels"], {})
 
     def test_warp_status_redacted_passes_manager_through(self):
         m = self.m
         p = self._warp_payload()
         out = m.warp_status_redacted(p, m.role_perms("admin"))
         self.assertIs(out, p)
-        self.assertIn("top_sni_conns", out["stats"])
+        self.assertIn("top_sni_conns", out["sni"]["stats"])
         self.assertEqual(out["autodetect"]["added"], ["labs.google"])
 
     def test_warp_status_carries_autodetect_for_panel(self):
@@ -1993,9 +2284,11 @@ class RbacTests(unittest.TestCase):
         m = self.m
         p = self._warp_payload()
         m.warp_status_redacted(p, m.role_perms("viewer"))
-        self.assertIn("top_sni", p["stats"])
-        self.assertIn("top_sni_conns", p["stats"])
-        self.assertEqual(p["src_labels"], {"192.168.188.11": "wg1udp/abab"})
+        self.assertIn("top_sni", p["sni"]["stats"])
+        self.assertIn("top_sni_conns", p["sni"]["stats"])
+        self.assertEqual(p["sni"]["src_labels"],
+                         {"192.168.188.11": "wg1udp/abab"})
+        self.assertEqual(p["autodetect"]["added"], ["labs.google"])
 
     def test_warp_private_stats_matches_ui_gate(self):
         """هر کلیدی که رابط پشتِ warp.manage می‌گذارد باید در فهرستِ حذف
@@ -2154,6 +2447,37 @@ class AlertTests(unittest.TestCase):
         self.assertEqual(sent, [])
         m.ALERTS.edge("k", False, "down")  # تغییر → صدا
         self.assertEqual(sent, ["down"])
+
+    def test_resource_alert_reads_the_current_metrics(self):
+        """🪤 SYSMON.snapshot() = {"cur": {...}, "extra": {...}}. پیش از این
+        snap.get("cpu") روی پوشش خوانده می‌شد → همیشه None → هشدارِ
+        CPU/RAM/DISK هرگز ارسال نمی‌شد."""
+        m = self.m
+        m.CONFIG["alerts"] = {"enabled": True, "cpu_pct": 80,
+                              "sustain_min": 1}
+        cur = {"cpu": 95.0, "ram": 10.0, "disk": 10.0}
+        m.SYSMON = types.SimpleNamespace(
+            snapshot=lambda: {"cur": dict(cur), "extra": {}})
+        events = []
+        m.ALERTS.event = lambda key, text: events.append((key, text))
+        m.ALERTS.state.clear()
+        mon = m.AlertMonitor()
+        need = max(1, int(60 / mon.INTERVAL))
+        for _ in range(need):
+            mon._check_resources()
+        self.assertEqual(len(events), 1, events)
+        self.assertEqual(events[0][0], "resource")
+        self.assertIn("CPU", events[0][1])
+        # بالا ماندن: بدونِ تکرار
+        mon._check_resources()
+        self.assertEqual(len(events), 1)
+        # برگشت به زیرِ آستانه → پیامِ رفعِ هشدار
+        cur["cpu"] = 20.0
+        mon._check_resources()
+        self.assertEqual(len(events), 2)
+        # snapshot ِ خالی/ناقص نباید exception بدهد
+        m.SYSMON = types.SimpleNamespace(snapshot=lambda: {})
+        mon._check_resources()
 
     def test_warp_alerts(self):
         """هشدارِ WARP: قطعِ تونل، ناهمخوانیِ خروج، افتِ حساب — لبه‌یاب."""
@@ -10037,6 +10361,73 @@ class LoginApprovalDocstringTests(unittest.TestCase):
                 self.assertIn(knob, src.replace(doc, ""),
                               "داک‌استرینگ از %s می‌گوید ولی چنین کلیدی "
                               "در کد نیست." % knob)
+
+
+class InlineHandlerArgTests(unittest.TestCase):
+    """آرگومانِ داده در onclick ِ درون‌خطی (XSS ِ ذخیره‌شده از برچسبِ سرویس).
+
+    🪤 esc() به‌تنهایی کافی نیست: مرورگر entityهای صفتِ HTML را **پیش از**
+    اجرای JS برمی‌گرداند، پس &#39; دوباره ' می‌شود و رشته‌ی JS را می‌بندد.
+    jsArg اول JSON.stringify (escape ِ JS) و بعد esc (HTML) می‌کند.
+    """
+
+    def _helpers_js(self):
+        src = pathlib.Path(PANEL).read_text(encoding="utf-8")
+        m = re.search(r"(function el\(id\).*?)// ===== i18n", src, re.S)
+        self.assertIsNotNone(m, "بلوکِ el/esc/jsArg در PAGE_HTML پیدا نشد")
+        js = m.group(1)
+        self.assertIn("function jsArg(v)", js)
+        return js
+
+    def test_svc_card_handlers_do_not_embed_raw_data(self):
+        """کارتِ سرویس‌ها باید از jsArg استفاده کند، نه esc در کوتیشنِ تکی."""
+        src = pathlib.Path(PANEL).read_text(encoding="utf-8")
+        ok = re.search(r"deleteSvc\(' \+\s*jsArg\(row\.key\) \+ ',' \+ "
+                       r"jsArg\(svcLabel\(row\)\) \+ '\)", src)
+        self.assertTrue(ok, "deleteSvc باید آرگومان‌ها را با jsArg بسازد")
+        for pat in (r"esc\(svcLabel\(row\)\) \+ '\\'\)",
+                    r"onclick=\"deleteSvc\(\\'",
+                    r"onclick=\"toggleMtr\(\\'",
+                    r"onclick=\"toggleSvcIps\(\\'"):
+            self.assertFalse(re.search(pat, src),
+                             "الگویِ قدیمیِ esc در کوتیشنِ تکی: %s" % pat)
+
+    @unittest.skipUnless(shutil.which("node"), "node نصب نیست")
+    def test_jsarg_survives_html_attribute_decoding(self):
+        """شبیه‌سازیِ مرورگر: onclick ساخته می‌شود، entityها باز می‌شوند،
+        و کدِ حاصل باید دقیقاً همان رشته‌ی ورودی را به تابع بدهد."""
+        js = self._helpers_js() + r"""
+const payloads = ["x');alert(1);//", "a\"b", "a&amp;b", "</script><script>",
+                  "a\\b", "line\nbreak", " sep", "سیسکو (Cisco)", ""];
+function decodeAttr(s){ return s.replace(/&#39;/g,"'").replace(/&quot;/g,'"')
+  .replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&amp;/g,"&"); }
+let bad = 0;
+for (const p of payloads){
+  const html = '<button onclick="f(' + jsArg(p) + ',' + jsArg('k') + ')">';
+  const attr = decodeAttr(html.match(/onclick="([^"]*)"/)[1]);
+  let got = null, alerted = false;
+  const f = (a, b) => { got = [a, b]; };
+  const alert = () => { alerted = true; };
+  try { new Function('f', 'alert', attr)(f, alert); }
+  catch (e) { console.log('THROW', JSON.stringify(p), e.message); bad++; continue; }
+  if (alerted || !got || got[0] !== p || got[1] !== 'k'){
+    console.log('MISMATCH', JSON.stringify(p), JSON.stringify(got), alerted); bad++; }
+}
+// و برایِ مقایسه: الگویِ قدیمی باید واقعاً می‌شکست (وگرنه این تست بی‌معناست)
+const old = decodeAttr("f('" + esc("x');alert(1);//") + "')");
+let oldAlerted = false;
+try { new Function('f', 'alert', old)(() => {}, () => { oldAlerted = true; }); } catch (e) {}
+console.log(oldAlerted ? 'OLD_PATTERN_VULNERABLE' : 'OLD_PATTERN_SAFE');
+console.log('BAD=' + bad);
+"""
+        with tempfile.TemporaryDirectory() as tmp:
+            p = os.path.join(tmp, "t.js")
+            with open(p, "w", encoding="utf-8") as f:
+                f.write(js)
+            r = real_subprocess.run(["node", p], capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("BAD=0", r.stdout, r.stdout)
+        self.assertIn("OLD_PATTERN_VULNERABLE", r.stdout)
 
 
 if __name__ == "__main__":

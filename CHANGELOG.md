@@ -4,12 +4,49 @@ All notable changes to WG-PROXY-PANEL are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
-Each release on GitHub attaches `wg_panel.py`, `wg-panel.service` and a
-`SHA256SUMS` file. The release notes also give the **build id**: the first 12
+Each release on GitHub attaches `wg_panel.py`, `wg-panel.service`, the bundled
+`qr.js` and three.js files, and a `SHA256SUMS` file. The release notes also give the **build id**: the first 12
 characters of the SHA-256 of `wg_panel.py`, the same value a Docker install
 prints as its version.
 
 ## [Unreleased]
+
+### Fixed
+
+- Re-enabling a WireGuard client did not restore its preshared key and
+  keepalive on the running interface, so a client that had been disabled
+  (by hand, or automatically after reaching its quota) could not connect again
+  until the interface was restarted. Disabling removes the peer from the
+  kernel completely; enabling now applies the preshared key, keepalive and
+  AllowedIPs from the file in one step. Key rotation applies them the same
+  way.
+- Removing a client's preshared key while the interface was up silently did
+  nothing in the kernel: the config and the client's file lost the key, the
+  kernel still required it, and the panel reported success. The kernel now
+  gets the removal, and a failed live change is reported as an error.
+- Restoring a backup only rewrote the config files; the running interface was
+  never updated, so clients removed by the restore stayed connected and
+  clients brought back could not connect, and the config watcher never caught
+  up. The restore now applies the differences live and holds the config lock
+  while writing.
+- The CPU, RAM and disk alerts were never sent: the monitor read the metrics
+  from the wrong level of the snapshot and always saw nothing.
+- The WARP status API leaked the per-user SNI tables and the IP-to-user map to
+  every user with the `tun.view` permission (including the built-in `viewer`
+  role); the redaction only looked at the top level of the payload.
+- A custom service's label was placed unescaped into an inline `onclick`
+  handler, so a user with `svc.edit` could store a label that runs JavaScript
+  in every administrator's browser. Handler arguments are now JSON-escaped
+  before HTML-escaping, and labels are limited to letters, digits, spaces,
+  dots, dashes and parentheses.
+- `wg-panel.service` made `/etc/squid` read-only (`ProtectSystem=full`), so the
+  panel could not write the Squid password file or `squid.conf`; the error
+  went only to `actions.log`. The unit now lists `/etc/squid` in
+  `ReadWritePaths` (ignored when Squid is not installed).
+- Releases and the systemd install steps shipped only `wg_panel.py`; without
+  `qr.js` and the three.js files next to it, QR codes, the share page and the
+  TV 3D view failed. The release now attaches those files and the install
+  steps copy them.
 
 ## [1.1.0] — 2026-09-26
 

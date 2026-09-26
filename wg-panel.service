@@ -14,7 +14,10 @@ NoNewPrivileges=yes
 ProtectHome=yes
 PrivateTmp=yes
 ProtectSystem=full
-ReadWritePaths=/etc/wireguard /opt/wg-panel
+# /etc/squid: پنل passwd و squid.conf ِ پروکسی را می‌نویسد؛ بدونِ این ورودی
+# نوشتن با EROFS شکست می‌خورد و فقط در actions.log دیده می‌شود. پیشوندِ «-»
+# یعنی اگر squid نصب نیست، نبودنِ مسیر مانعِ راه‌اندازی نشود.
+ReadWritePaths=/etc/wireguard /opt/wg-panel -/etc/squid
 ProtectKernelModules=yes
 ProtectKernelTunables=yes
 ProtectControlGroups=yes
