@@ -473,7 +473,7 @@ docker compose up -d --build
 | `client_dns` · `client_mtu` · `client_allowed` | مقادیرِ پیش‌فرضِ کانفیگِ کاربران |
 | `allow_ips` | فهرستِ مجازِ IP، اختیاری (`127.0.0.1` همیشه مجاز است) |
 | `metrics_token` | توکن Bearer برای `/metrics` و `/api/health` |
-| `trusted_proxies` | IP/CIDR ِ reverse proxy ِ جلوی پنل؛ فقط در این حالت IP کلاینت از `X-Forwarded-For` خوانده می‌شود |
+| `trusted_proxies` | IP/CIDR ِ reverse proxy ِ جلوی پنل؛ فقط در این حالت IP کلاینت از `X-Forwarded-For` / `X-Real-IP` خوانده و `X-Forwarded-Proto: https` پذیرفته می‌شود (لینکِ اشتراکِ https و کوکیِ `Secure`) |
 | `session_idle_min` | خروجِ خودکار پس از این‌قدر دقیقه بی‌کاری (`0`/نبود = فقط سقفِ مطلقِ ۱۲ ساعت) |
 | `bot` | توکنِ رباتِ تلگرام و کاربرانِ مجاز |
 | `alerts` | هشدارهای تلگرام و آستانه‌هایشان |

@@ -11042,6 +11042,35 @@ class ProductAuthTests(unittest.TestCase):
         self.assertEqual(f("127.0.0.1", {"X-Real-IP": "127.0.0.1"}),
                          m.UNKNOWN_CLIENT_IP)
 
+    def test_forwarded_proto_makes_https_links_and_secure_cookies(self):
+        """پشتِ proxy ِ TLS‌دار لینکِ اشتراک https و کوکی Secure باشد —
+        ولی X-Forwarded-Proto فقط از proxy ِ معتمد."""
+        m = self.m
+        m.CONFIG.pop("tls_cert", None)
+        m.CONFIG["trusted_proxies"] = ["127.0.0.1"]
+        f = m.request_is_https
+        self.assertTrue(f("127.0.0.1", {"X-Forwarded-Proto": "https"}))
+        self.assertTrue(f("127.0.0.1", {"X-Forwarded-Proto": "HTTPS, http"}))
+        self.assertFalse(f("127.0.0.1", {"X-Forwarded-Proto": "http"}))
+        self.assertFalse(f("127.0.0.1", {}))
+        self.assertFalse(f("198.51.100.1", {"X-Forwarded-Proto": "https"}))
+        m.CONFIG.pop("trusted_proxies")
+        self.assertFalse(f("127.0.0.1", {"X-Forwarded-Proto": "https"}))
+        m.CONFIG["trusted_proxies"] = ["127.0.0.1"]
+        m.add_peer("wgtest", "shr", use_psk=False)
+        hdr = {"X-Forwarded-Proto": "https", "Host": "panel.example",
+               "X-Forwarded-For": "203.0.113.9"}
+        code, obj, _h = self._post("/api/peer/share",
+                                   {"iface": "wgtest", "name": "shr"},
+                                   headers=hdr)
+        self.assertTrue(obj["url"].startswith("https://panel.example/s/"), obj)
+        h = make_fake_handler(m, path="/api/logout", method="POST",
+                              headers=hdr, session={"u": "admin", "r": "admin"})
+        h.do_POST()
+        self.assertIn("Secure", dict(h.sent).get("Set-Cookie", ""))
+        u = m.CONFIG["users"][0]
+        self.assertIn("Secure", h._session_cookie_header(u))
+
     def test_every_forwarded_for_line_is_read(self):
         """HAProxy XFF را سطرِ جدا اضافه می‌کند؛ سطرِ اول مالِ مهاجم است."""
         import email.message

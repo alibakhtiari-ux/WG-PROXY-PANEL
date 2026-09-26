@@ -10397,6 +10397,25 @@ def client_ip_from(peer_ip, headers):
     return client
 
 
+def request_is_https(peer_ip, headers):
+    """آیا مرورگر پنل را با https می‌بیند؟
+
+    با tls_cert ِ خودِ پنل، بله. پشتِ reverse proxy ای که TLS را خاتمه
+    می‌دهد، پنل http سرو می‌کند و قبلاً لینکِ اشتراک را http:// می‌ساخت
+    (مرورگر روی سایتِ https به http می‌افتاد یا اصلاً باز نمی‌کرد) و کوکیِ
+    سشن را بدونِ Secure می‌داد. X-Forwarded-Proto فقط از proxy ِ **معتمد**
+    خوانده می‌شود — همان قاعده‌ی client_ip_from؛ از کلاینتِ مستقیم، جعل است.
+    اولین مقدار (proxy ِ لبه) ملاک است.
+    """
+    if CONFIG.get("tls_cert"):
+        return True
+    nets = trusted_proxies()
+    if not nets or not _ip_in_nets(peer_ip, nets):
+        return False
+    proto = (headers.get("X-Forwarded-Proto") or "").split(",")[0]
+    return proto.strip().lower() == "https"
+
+
 def ip_allowed(ip):
     allow = CONFIG.get("allow_ips") or []
     if not allow:
@@ -31790,9 +31809,12 @@ class Handler(BaseHTTPRequestHandler):
         """
         return client_ip_from(self.client_address[0], self.headers)
 
+    def _is_https(self):
+        return request_is_https(self.client_address[0], self.headers)
+
     def _session_cookie_header(self, user):
         cookie = make_session_cookie(user)
-        secure = "; Secure" if CONFIG.get("tls_cert") else ""
+        secure = "; Secure" if self._is_https() else ""
         return ("wgs=%s; HttpOnly; SameSite=Strict; Path=/; Max-Age=%d%s"
                 % (cookie, SESSION_TTL, secure))
 
@@ -33605,7 +33627,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._audit("auth", "auth.logout", "", "", ok=True)
             # کوکیِ پاک‌کننده باید همان صفت‌های کوکیِ واقعی را داشته باشد؛
             # بعضی مرورگرها بدونِ تطابقِ صفت‌ها اصلاً بازنویسی‌اش نمی‌کنند.
-            secure = "; Secure" if CONFIG.get("tls_cert") else ""
+            secure = "; Secure" if self._is_https() else ""
             self._json({"ok": True}, extra_headers={
                 "Set-Cookie": "wgs=; HttpOnly; SameSite=Strict; Path=/; "
                               "Max-Age=0" + secure})
@@ -33744,9 +33766,10 @@ class Handler(BaseHTTPRequestHandler):
                     self._json({"ok": False, "error": err})
                 else:
                     host = self.headers.get("Host", "")
-                    # همان schemeی که پنل واقعاً سرو می‌کند؛ لینکِ https برای
-                    # پنلِ بدونِ TLS (docker با WG_TLS_ENABLED=false) کار نمی‌کرد.
-                    scheme = "https" if CONFIG.get("tls_cert") else "http"
+                    # همان schemeی که مرورگر می‌بیند؛ لینکِ https برای پنلِ
+                    # بدونِ TLS (docker با WG_TLS_ENABLED=false) کار نمی‌کرد و
+                    # لینکِ http پشتِ proxy ِ TLS‌دار هم (request_is_https).
+                    scheme = "https" if self._is_https() else "http"
                     url = "%s://%s/s/%s" % (scheme, host, token)
                     self._audit("peer", "peer.share.new",
                                 "%s @ %s" % (name, iface),

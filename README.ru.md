@@ -492,7 +492,7 @@ docker compose up -d --build
 | `client_dns` · `client_mtu` · `client_allowed` | Значения по умолчанию для конфигураций клиентов |
 | `allow_ips` | Необязательный список разрешённых IP (`127.0.0.1` разрешён всегда) |
 | `metrics_token` | Bearer-токен для `/metrics` и `/api/health` |
-| `trusted_proxies` | IP/CIDR обратного прокси перед панелью; только тогда IP клиента берётся из `X-Forwarded-For` |
+| `trusted_proxies` | IP/CIDR обратного прокси перед панелью; только тогда IP клиента берётся из `X-Forwarded-For` / `X-Real-IP` и учитывается `X-Forwarded-Proto: https` (https-ссылки для раздачи, cookie с `Secure`) |
 | `session_idle_min` | Выход из сессии после стольких минут бездействия (`0`/нет = только абсолютный лимит 12 ч) |
 | `bot` | Токен Telegram-бота и разрешённые пользователи |
 | `alerts` | Оповещения в Telegram и их пороги |

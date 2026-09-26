@@ -435,7 +435,7 @@ docker compose up -d --build
 | `client_dns` · `client_mtu` · `client_allowed` | 生成客户端配置时的默认值 |
 | `allow_ips` | 可选的 IP 白名单（`127.0.0.1` 始终允许） |
 | `metrics_token` | `/metrics` 与 `/api/health` 的 Bearer 令牌 |
-| `trusted_proxies` | 面板前置反向代理的 IP/CIDR；仅此时才从 `X-Forwarded-For` 读取客户端 IP |
+| `trusted_proxies` | 面板前置反向代理的 IP/CIDR；仅此时才从 `X-Forwarded-For` / `X-Real-IP` 读取客户端 IP，并采纳 `X-Forwarded-Proto: https`（https 分享链接、`Secure` Cookie） |
 | `session_idle_min` | 空闲多少分钟后自动登出（`0`/未设置 = 仅 12 小时绝对上限） |
 | `bot` | Telegram 机器人令牌和授权用户 |
 | `alerts` | Telegram 告警及其阈值 |
