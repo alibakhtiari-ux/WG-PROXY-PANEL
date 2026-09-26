@@ -355,7 +355,8 @@ cd docker/airgap && bash build-offline-bundle.sh --arch amd64
 ```bash
 base=https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/releases/latest/download
 curl -fLO "$base/wg_panel.py" -O "$base/wg-panel.service" -O "$base/qr.js" \
-     -O "$base/three.module.min.js.gz" -O "$base/three.core.min.js.gz" -O "$base/SHA256SUMS"
+     -O "$base/three.module.min.js.gz" -O "$base/three.core.min.js.gz" -O "$base/three.LICENSE.txt" \
+     -O "$base/SHA256SUMS"
 sha256sum -c SHA256SUMS
 ```
 
@@ -364,7 +365,8 @@ sha256sum -c SHA256SUMS
 
 ```bash
 sudo install -D -m600 -o root -g root wg_panel.py /opt/wg-panel/wg_panel.py
-sudo install -m644 -t /opt/wg-panel qr.js three.module.min.js.gz three.core.min.js.gz
+sudo install -m644 -t /opt/wg-panel qr.js three.module.min.js.gz three.core.min.js.gz \
+     three.LICENSE.txt
 sudo install -m644 wg-panel.service /etc/systemd/system/
 ```
 
@@ -573,7 +575,7 @@ Docker 构建上下文；测试数据使用 RFC 5737 文档地址。本仓库中
 | `demo/` | 演示模式与截图生成器 |
 | `CHANGELOG.md` | 各版本的变更 |
 | `fonts/` | Vazirmatn 字体子集 |
-| `qr.js` · `three.*.min.js.gz` | 随附的二维码库和 three.js |
+| `qr.js` · `three.*.min.js.gz` · `three.LICENSE.txt` | 随附的二维码库和 three.js |
 
 <a id="contributing"></a>
 

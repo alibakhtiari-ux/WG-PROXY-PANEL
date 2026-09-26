@@ -390,7 +390,8 @@ cd docker/airgap && bash build-offline-bundle.sh --arch amd64
 ```bash
 base=https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/releases/latest/download
 curl -fLO "$base/wg_panel.py" -O "$base/wg-panel.service" -O "$base/qr.js" \
-     -O "$base/three.module.min.js.gz" -O "$base/three.core.min.js.gz" -O "$base/SHA256SUMS"
+     -O "$base/three.module.min.js.gz" -O "$base/three.core.min.js.gz" -O "$base/three.LICENSE.txt" \
+     -O "$base/SHA256SUMS"
 sha256sum -c SHA256SUMS
 ```
 
@@ -400,7 +401,8 @@ sha256sum -c SHA256SUMS
 
 ```bash
 sudo install -D -m600 -o root -g root wg_panel.py /opt/wg-panel/wg_panel.py
-sudo install -m644 -t /opt/wg-panel qr.js three.module.min.js.gz three.core.min.js.gz
+sudo install -m644 -t /opt/wg-panel qr.js three.module.min.js.gz three.core.min.js.gz \
+     three.LICENSE.txt
 sudo install -m644 wg-panel.service /etc/systemd/system/
 ```
 
@@ -619,7 +621,7 @@ Pillow نصب باشد تصاویر را فشرده می‌کند.
 | `demo/` | حالتِ دمو و سازنده‌ی اسکرین‌شات‌ها |
 | `CHANGELOG.md` | تغییراتِ هر نسخه |
 | `fonts/` | زیرمجموعه‌ی فونتِ وزیرمتن |
-| `qr.js` · `three.*.min.js.gz` | کتابخانه‌های همراهِ کدِ QR و three.js |
+| `qr.js` · `three.*.min.js.gz` · `three.LICENSE.txt` | کتابخانه‌های همراهِ کدِ QR و three.js |
 
 <a id="contributing"></a>
 

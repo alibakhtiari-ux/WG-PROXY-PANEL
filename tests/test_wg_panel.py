@@ -10860,6 +10860,59 @@ class RequestHardeningTests(unittest.TestCase):
             self.assertTrue(obj.get("totp_required"), obj)
         self.assertEqual(m._login_attempts.get("127.0.0.1", []), [])
 
+    def test_a_negative_content_length_does_not_read_to_eof(self):
+        """rfile.read(-1) تا EOF می‌خواند: یک هدر، یک نخِ قفل‌شده."""
+        h = make_fake_handler(self.m, path="/api/login", method="POST",
+                              body=b'{"username": "admin"}',
+                              headers={"Content-Length": "-5"})
+        reads = []
+        orig = h.rfile.read
+        h.rfile.read = lambda n=-1: (reads.append(n), orig(n))[1]
+        h.do_POST()
+        self.assertEqual(dict(h.sent).get("__code__"), 400)
+        self.assertTrue(h.close_connection)
+        self.assertNotIn(-5, reads)
+        self.assertNotIn(-1, reads)
+
+    def test_the_login_sweep_drops_stale_reservations(self):
+        """رزروِ بازِ درخواستی که وسطِ ورود به ۵۰۰ خورد نباید بماند —
+        وگرنه اولین شکستِ بعدیِ همان IP ثبت نمی‌شد."""
+        m = self.m
+        m._login_attempts.clear(); m._login_pending.clear()
+        m._login_attempts_user.clear(); m._login_pending_user.clear()
+        old = time.time() - 7200
+        for i in range(4100):
+            m._login_attempts["10.%d.%d.1" % (i // 256, i % 256)] = [old]
+        m._login_pending["10.0.0.1"] = 1                 # رزروِ یتیم
+        m._login_attempts_user.update({"u%d" % i: [old] for i in range(4100)})
+        m._login_pending_user["u0"] = 1
+        m.login_failed("198.51.100.1")
+        m.login_user_failed("someone")
+        self.assertNotIn("10.0.0.1", m._login_pending)
+        self.assertNotIn("u0", m._login_pending_user)
+        # و شکستِ بعدیِ همان IP حالا واقعاً ثبت می‌شود
+        m.login_failed("10.0.0.1")
+        self.assertEqual(len(m._login_attempts["10.0.0.1"]), 1)
+
+    def test_totp_password_checks_share_the_login_budget(self):
+        """/api/totp/setup و /api/totp/disable رمز را بی‌سقف می‌سنجیدند."""
+        m = self.m
+        m._login_attempts_user.clear(); m._login_pending_user.clear()
+        m.CONFIG["users"][0]["totp"] = "JBSWY3DPEHPK3PXP"
+        for _ in range(m._LOGIN_USER_MAX):
+            code, obj, _h = self._post("/api/totp/disable", {"password": "no"})
+            self.assertFalse(obj["ok"])
+        code, obj, _h = self._post("/api/totp/disable", {"password": "secret-pw"})
+        self.assertEqual(code, 429)
+        code, obj, _h = self._post("/api/totp/setup", {"password": "secret-pw"})
+        self.assertEqual(code, 429)
+        self.assertEqual(m.CONFIG["users"][0]["totp"], "JBSWY3DPEHPK3PXP")
+        # بعد از باز شدنِ بودجه، رمزِ درست کار می‌کند و سهم را پس می‌دهد
+        m._login_attempts_user.clear()
+        code, obj, _h = self._post("/api/totp/disable", {"password": "secret-pw"})
+        self.assertTrue(obj["ok"], obj)
+        self.assertEqual(m._login_attempts_user.get("admin", []), [])
+
     # ---- TOTP ---------------------------------------------------------------
     def test_a_replayed_totp_code_does_not_log_in(self):
         """کدِ TOTP ِ تکراری در مسیرِ ورود باید رد شود.
@@ -11690,7 +11743,10 @@ class ProductMonitoringTests(unittest.TestCase):
                               session=None)
         h.do_GET()
         self.assertEqual(dict(h.sent)["__code__"], 503)
-        self.assertFalse(json.loads(b"".join(h.body).decode())["healthy"])
+        obj = json.loads(b"".join(h.body).decode())
+        self.assertFalse(obj["healthy"])
+        # ok همان healthy است؛ ۵۰۳ با ok:true «سالم» می‌خواند
+        self.assertFalse(obj["ok"])
 
     # ---- persisted edges ----------------------------------------------------------
     def test_edge_state_survives_a_restart(self):
@@ -11713,6 +11769,27 @@ class ProductMonitoringTests(unittest.TestCase):
         with open(m.ALERT_EDGES_STATE, "w") as f:
             f.write("{not json")
         m.AlertManager().load_state()
+
+    def test_edge_state_prunes_keys_that_are_no_longer_checked(self):
+        """کلیدهای لبه از داده‌ی کاربر می‌آیند (pxquota:<user>، tun:<iface>)؛
+        بدونِ هرس alert-edges.json با هر کاربر/تونلِ حذف‌شده بزرگ‌تر می‌شد."""
+        m = self.m
+        m.CONFIG["alerts"] = {"enabled": True}
+        m.ALERTS.emit = lambda t, html=False: None
+        m.ALERTS.state.clear(); m.ALERTS.seen.clear()
+        m.ALERTS.edge("pxquota:gone", True, "x")
+        m.ALERTS.edge("tun:wg9", True, "x")
+        m.ALERTS.seen["pxquota:gone"] -= m.ALERTS.EDGE_TTL + 1
+        m.ALERTS.edge("tun:wg9", False, "down")          # تغییر → ذخیره + هرس
+        with open(m.ALERT_EDGES_STATE, encoding="utf-8") as f:
+            self.assertEqual(json.load(f), {"tun:wg9": False})
+        self.assertNotIn("pxquota:gone", m.ALERTS.state)
+        # کلیدِ بارگذاری‌شده از دیسک مهلتِ کامل می‌گیرد
+        fresh = m.AlertManager()
+        fresh.load_state()
+        self.assertIn("tun:wg9", fresh.seen)
+        fresh.save_state()
+        self.assertIn("tun:wg9", fresh.state)
 
     # ---- throttle ------------------------------------------------------------------
     def test_expensive_warp_checks_are_throttled(self):

@@ -10303,6 +10303,7 @@ def login_user_failed(username):
             for k in [k for k, v in _login_attempts_user.items()
                       if not v or now - v[-1] > 3600]:
                 _login_attempts_user.pop(k, None)
+                _login_pending_user.pop(k, None)   # رجوع به login_failed
 
 
 def make_session_cookie(user):
@@ -10584,6 +10585,11 @@ def login_failed(ip):
                       if not v or now - v[-1] > 3600]:
                 _login_attempts.pop(k, None)
                 _login_alerted.pop(k, None)   # حالتِ هشدار هم با آن برود
+                # رزروِ بازِ یک ساعت پیش هرگز بسته نمی‌شود (درخواستی که وسطِ
+                # ورود به ۵۰۰ خورد). بی این، کلیدش نشت می‌کرد و — بدتر —
+                # اولین شکستِ بعدیِ همان IP فقط این رزروِ کهنه را می‌بست و
+                # هیچ تلاشی ثبت نمی‌کرد: یک شانسِ مجانی.
+                _login_pending.pop(k, None)
         recent10 = sum(1 for t in _login_attempts[ip] if now - t < 600)
         alerted_at = _login_alerted.get(ip)
     # هشدارِ حمله‌ی جستجوی رمز: N خطای اخیر از یک IP (لبه‌ای، هر ۱۰ دقیقه یک‌بار)
@@ -16041,6 +16047,7 @@ class AlertManager:
     def __init__(self):
         self.q = queue.Queue(maxsize=200)
         self.state = {}          # کلیدِ رویداد -> وضعیتِ آخر (برای لبه‌یابی)
+        self.seen = {}           # کلیدِ رویداد -> آخرین بارِ سنجش (هرس)
         self.lock = threading.Lock()
         self._started = False
 
@@ -16061,13 +16068,28 @@ class AlertManager:
         except (OSError, ValueError):
             return
         if isinstance(data, dict):
+            now = time.time()
             with self.lock:
                 for k, v in data.items():
                     if isinstance(k, str) and isinstance(v, bool):
                         self.state.setdefault(k, v)
+                        self.seen.setdefault(k, now)   # مهلتِ کامل پس از بوت
+
+    # کلیدی که این مدت سنجیده نشده (تونل/کاربرِ پروکسی/دامنه‌ی حذف‌شده)
+    # هرس می‌شود. کلیدها «pxquota:<user>»، «tun:<iface>»، «warp:stale:<dom>»
+    # و… از داده‌ی کاربر می‌آیند و پیش از این alert-edges.json را بی‌کران
+    # رشد می‌دادند. کلیدِ زنده هر ~۳۰ ثانیه سنجیده می‌شود؛ هفت روز یعنی حتی
+    # پنلی که هفته‌ها خاموش بوده چیزی را زودتر از موعد فراموش نمی‌کند (seen
+    # پس از بارگذاری از نو شروع می‌شود). بدترین پیامدِ هرسِ اشتباه: اولین
+    # مشاهده‌ی بعدی بی‌صداست.
+    EDGE_TTL = 7 * 86400
 
     def save_state(self):
+        cutoff = time.time() - self.EDGE_TTL
         with self.lock:
+            for k in [k for k, t in self.seen.items() if t < cutoff]:
+                self.seen.pop(k, None)
+                self.state.pop(k, None)
             data = {k: v for k, v in self.state.items() if isinstance(v, bool)}
         try:
             tmp = ALERT_EDGES_STATE + ".tmp"
@@ -16117,6 +16139,7 @@ class AlertManager:
         with self.lock:
             prev = self.state.get(key)
             self.state[key] = now_state
+            self.seen[key] = time.time()
         if prev != now_state:
             self.save_state()
         if prev is not None and prev != now_state:
@@ -31925,6 +31948,12 @@ class Handler(BaseHTTPRequestHandler):
             n = int(self.headers.get("Content-Length", 0))
         except ValueError:
             return None
+        if n < 0:
+            # rfile.read(-1) یعنی «تا EOF»: نخِ درخواست تا وقتی کلاینت اتصال
+            # را باز نگه دارد گیر می‌ماند — یک هدر، یک نخِ قفل‌شده. طولِ
+            # منفی بدنه‌ای ندارد که بشود تخلیه کرد؛ اتصال بسته می‌شود.
+            self.close_connection = True
+            return None
         if n > 65536:
             if not self._drain_body(n):
                 self.close_connection = True
@@ -31952,6 +31981,22 @@ class Handler(BaseHTTPRequestHandler):
 
     def _is_https(self):
         return request_is_https(self.client_address[0], self.headers)
+
+    def _pw_confirm(self, user, pw):
+        """تأییدِ رمزِ کاربرِ واردشده، زیرِ همان بودجه‌ی per-account ِ ورود.
+
+        True/False، یا None اگر بودجه تمام است (فراخوان ۴۲۹ می‌دهد).
+        /api/totp/setup و /api/totp/disable رمز را بی‌هیچ سقفی می‌سنجیدند:
+        کسی با کوکیِ دزدیده یا مرورگرِ رهاشده می‌توانست رمز را بی‌نهایت حدس
+        بزند — دقیقاً چیزی که محدودیتِ ورود جلویش را گرفته بود. بودجه با
+        ورود مشترک است: حدس از هر در از همان سهم کم می‌کند.
+        """
+        u = user["username"]
+        if not login_user_allowed(u):
+            return None
+        ok = check_user_password(user, pw)
+        (login_user_succeeded if ok else login_user_failed)(u)
+        return ok
 
     def _session_cookie_header(self, user):
         cookie = make_session_cookie(user)
@@ -32050,7 +32095,9 @@ class Handler(BaseHTTPRequestHandler):
                 if self._perm_denied(path):
                     return
             rep_ = health_report()
-            self._json(dict(rep_, ok=True, healthy=rep_["ok"]),
+            # ok همان healthy است: ۵۰۳ با ok:true به کلاینت‌هایی که فقط
+            # بدنه را می‌خوانند (قاعده‌ی بقیه‌ی API) «سالم» می‌گفت.
+            self._json(dict(rep_, healthy=rep_["ok"]),
                        200 if rep_["ok"] else 503)
             return
         if path == "/metrics":
@@ -33316,10 +33363,15 @@ class Handler(BaseHTTPRequestHandler):
             # 🪤 تعویضِ عاملِ دوم با یک کوکیِ سرقتی/مرورگرِ رهاشده: وقتی TOTP
             # از قبل فعال است، شروعِ ثبتِ تازه رمزِ فعلی می‌خواهد — همان
             # قاعده‌ای که /api/totp/disable از اول داشت.
-            if me and me.get("totp") and not check_user_password(
-                    me, str(body.get("password", ""))):
-                self._json({"ok": False, "error": "api.err.auth.pw_bad"}, 403)
-                return
+            if me and me.get("totp"):
+                pw_ok = self._pw_confirm(me, str(body.get("password", "")))
+                if pw_ok is None:
+                    self._json({"ok": False, "error": "api.err.auth.rate"}, 429)
+                    return
+                if not pw_ok:
+                    self._json({"ok": False, "error": "api.err.auth.pw_bad"},
+                               403)
+                    return
             secret = base64.b32encode(secrets.token_bytes(20)).decode().rstrip("=")
             _totp_pending[sess["u"]] = (secret, time.time() + _TOTP_PENDING_TTL)
             uri = ("otpauth://totp/wg-panel:%s?secret=%s&issuer=wg-panel"
@@ -33358,8 +33410,12 @@ class Handler(BaseHTTPRequestHandler):
                        extra_headers={
                            "Set-Cookie": self._session_cookie_header(me)})
         elif path == "/api/totp/disable":
-            if not me or not check_user_password(
-                    me, str(body.get("password", ""))):
+            pw_ok = self._pw_confirm(me, str(body.get("password", ""))) \
+                if me else False
+            if pw_ok is None:
+                self._json({"ok": False, "error": "api.err.auth.rate"}, 429)
+                return
+            if not pw_ok:
                 self._json({"ok": False, "error": "api.err.auth.pw_bad"})
                 return
             with config_txn():

@@ -99,6 +99,18 @@ class ReleaseAssetTests(unittest.TestCase):
                 # `sha256sum -c` ِ خطِ بعد رد می‌شود
                 self.assertIn('-O "$base/SHA256SUMS"', text)
 
+    def test_readme_downloads_every_file_listed_in_sha256sums(self):
+        """برعکسِ تستِ بالا: هر فایلِ ASSETS (= هر خطِ SHA256SUMS) باید
+        دانلود شود. three.LICENSE.txt در ریلیز و SHA256SUMS بود ولی در
+        curl ِ README نه، پس `sha256sum -c` روی نصبِ مستند شکست می‌خورد."""
+        wf = _read(".github", "workflows", "release.yml")
+        assets = re.search(r'ASSETS="([^"]+)"', wf).group(1).split()
+        for name in READMES:
+            text = _read(name)
+            for fn in assets:
+                with self.subTest(readme=name, file=fn):
+                    self.assertIn('"$base/%s"' % fn, text)
+
 
 if __name__ == "__main__":
     unittest.main()
