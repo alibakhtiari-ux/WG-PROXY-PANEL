@@ -30908,6 +30908,10 @@ class Handler(BaseHTTPRequestHandler):
         # وضعیتِ WARP، که بخشِ WARP را برای همیشه روی «در حال بارگذاری» نگه
         # می‌داشت. do_POST پیش از رسیدن به این‌جا نشست را تأیید کرده است.
         sess = self._session()
+        if sess is None:
+            # فقط در مسابقه با حذف/غیرفعال‌شدنِ کاربر وسطِ درخواست
+            self._json({"ok": False, "error": "unauthorized"}, 401)
+            return True
         if path == "/api/warp/status":
             # روت با tun.view باز است؛ داده‌ی شخصی جدا گیت می‌شود
             # (رجوع به warp_status_redacted).
