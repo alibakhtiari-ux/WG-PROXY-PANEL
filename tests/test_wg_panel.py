@@ -10799,6 +10799,27 @@ class RequestHardeningTests(unittest.TestCase):
         self.assertEqual(m._login_attempts.get("127.0.0.1", []), [])
 
     # ---- TOTP ---------------------------------------------------------------
+    def test_a_replayed_totp_code_does_not_log_in(self):
+        """کدِ TOTP ِ تکراری در مسیرِ ورود باید رد شود.
+
+        شاخه‌ی ردِ ورود فقط totp_verify را دوباره می‌پرسید؛ کدِ تکراری
+        verify را پاس می‌کند و consume را نه، پس از هر دو شاخه رد می‌شد
+        و ورود موفق بود.
+        """
+        m = self.m
+        m._login_attempts.clear(); m._login_attempts_user.clear()
+        m._totp_used.clear()
+        secret = "JBSWY3DPEHPK3PXP"
+        m.CONFIG["users"][0]["totp"] = secret
+        code_now = m.totp_code(secret)
+        body = {"username": "admin", "password": "secret-pw",
+                "totp": code_now}
+        code, obj, _h = self._post("/api/login", body, session=None)
+        self.assertEqual((code, obj.get("ok")), (200, True), obj)
+        code, obj, _h = self._post("/api/login", body, session=None)
+        self.assertFalse(obj.get("ok"), "کدِ تکراری وارد شد")
+        self.assertEqual(code, 401)
+
     def test_replacing_an_existing_totp_needs_the_password(self):
         m = self.m
         m.CONFIG["users"][0]["totp"] = "JBSWY3DPEHPK3PXP"
@@ -11622,6 +11643,30 @@ class ProductDataTests(unittest.TestCase):
         m.audit("admin", "peer", "peer.add", "x", "", "", True)
         m.META.prune()
         self.assertTrue(m.META.audit_list())
+
+    def test_prune_expires_service_ips_and_mtr_history(self):
+        """هرسِ روزانه باید svc_resolved و mtr_run را هم کران‌دار کند.
+
+        این دو DELETE زیرِ `pass` ِ except ِ checkpoint افتاده بودند و
+        هرگز اجرا نمی‌شدند.
+        """
+        m = self.m
+        old = time.time() - 400 * 86400
+        m.META.svc_resolved_upsert("svc", ["198.51.100.1"])
+        m.META.mtr_add("svc", "wgtest", "198.51.100.1", 10, 1, 0, 4.4,
+                       True, 3, "[]")
+        con = m.META._connect()
+        with con:
+            con.execute("UPDATE svc_resolved SET first_seen=?, last_seen=?",
+                        (old, old))
+            con.execute("UPDATE mtr_run SET ts=?", (old,))
+        con.close()
+        m.META.prune()
+        con = m.META._connect()
+        left = (con.execute("SELECT COUNT(*) FROM svc_resolved").fetchone()[0],
+                con.execute("SELECT COUNT(*) FROM mtr_run").fetchone()[0])
+        con.close()
+        self.assertEqual(left, (0, 0))
 
     def test_warp_rank_pings_the_pool_in_parallel_with_one_packet(self):
         m = self.m

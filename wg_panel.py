@@ -14127,18 +14127,22 @@ class MetaDB:
             # نتایجِ تستِ سرعت: نگهداری ۶ ماه
             con.execute("DELETE FROM speedtest WHERE ts < ?",
                         (time.time() - 183 * 86400,))
-        # WAL بعد از هرسِ روزانه فشرده شود؛ وگرنه فایلِ -wal تا ری‌استارت
-        # رشد می‌کند (خارج از تراکنش، چون checkpoint داخلِ آن بی‌اثر است)
-        try:
-            con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-        except sqlite3.Error:
-            pass
             # موجودیِ IP سرویس‌ها: نگهداری ۳۰ روز
             con.execute("DELETE FROM svc_resolved WHERE last_seen < ?",
                         (time.time() - 30 * 86400,))
             # تاریخچه‌ی نمودار مسیر (mtr): نگهداری ۶ ماه (۱۸۳ روز)؛ از قدیمی‌ترین
             con.execute("DELETE FROM mtr_run WHERE ts < ?",
                         (time.time() - 183 * 86400,))
+        # WAL بعد از هرسِ روزانه فشرده شود؛ وگرنه فایلِ -wal تا ری‌استارت
+        # رشد می‌کند (خارج از تراکنش، چون checkpoint داخلِ آن بی‌اثر است).
+        #
+        # 🪤 این دو DELETE ِ بالا قبلاً اینجا، زیرِ `pass` ِ همین except
+        # بودند: تورفتگی‌شان آن‌ها را جزوِ شاخه‌ی خطا کرده بود و هرگز اجرا
+        # نمی‌شدند — svc_resolved و mtr_run بی‌کران رشد می‌کردند.
+        try:
+            con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        except sqlite3.Error:
+            pass
         con.close()
 
     # ---- تاریخچه‌ی تغییرات (audit)
@@ -32583,9 +32587,16 @@ class Handler(BaseHTTPRequestHandler):
                     # totp_consume بعد از verify: کد باید هم درست باشد
                     # هم **تازه**. بدونش، کدِ دیده‌شده تا ۹۰ ثانیه
                     # دوباره کار می‌کند و عاملِ دوم عاملِ دوم نیست.
+                    #
+                    # نتیجه یک بار حساب و نگه داشته می‌شود. شاخه‌ی ردِ پایین
+                    # قبلاً دوباره فقط totp_verify را می‌پرسید؛ کدِ تکراری
+                    # verify را پاس می‌کند و consume را نه، پس از هر دو
+                    # شاخه رد می‌شد و ورود **موفق** بود — یعنی همان replay
+                    # که consume برای بستنش آمده بود.
+                    totp_ok = (totp_verify(user["totp"], code)
+                               and totp_consume(user["username"], code))
                     used_recovery = False
-                    if not (totp_verify(user["totp"], code)
-                            and totp_consume(user["username"], code)):
+                    if not totp_ok:
                         # کدِ بازیابیِ یک‌بارمصرف به‌جای TOTP
                         with config_txn():
                             used_recovery = totp_recovery_consume(user, code)
@@ -32600,7 +32611,7 @@ class Handler(BaseHTTPRequestHandler):
                         ALERTS.event("login", A('alert.totp.recovery',
                                                 p0=user["username"], p1=ip,
                                                 p2=left))
-                    elif not totp_verify(user["totp"], code):
+                    elif not totp_ok:
                         login_failed(ip)
                         login_user_failed(user["username"])
                         log_action("login FAILED (totp) user=%s from %s"
