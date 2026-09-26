@@ -28047,9 +28047,9 @@ function chNum(ch, v){
 
 // لجندِ تعاملی: کلیک برای پنهان/نمایش هر سری
 function legendHtml(k, st){
-  const isMetric = ke.split('|')[0] === 'm';
+  const isMetric = k.split('|')[0] === 'm';
   if(isMetric){
-    const m = gaugeMeta(ke.split('|')[1]);
+    const m = gaugeMeta(k.split('|')[1]);
     return '<div class="glegend">' +
       '<span class="lgi"><span class="lgsw sq" style="background:var(--rx)"></span>' +
       (m ? esc(m.label) : _t('ui.js.legendHtml.1')) + '</span>' +
@@ -28057,6 +28057,7 @@ function legendHtml(k, st){
       '</div>';
   }
   const h = (st && st.hidden) || {};
+  const ka = jsArg(k);
   const it = (key, cls, color, label) =>
     '<span class="lgi ' + (h[key] ? 'off' : '') + '" onclick="toggleSeries(' +
     ka + ',\'' + key + '\')"><span class="lgsw ' + cls +

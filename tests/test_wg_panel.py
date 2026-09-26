@@ -10619,6 +10619,11 @@ class InlineHandlerArgTests(unittest.TestCase):
         self.assertEqual(bad, [], "esc در کوتیشنِ تکیِ handler؛ jsArg بگیر")
         self.assertNotRegex(src, r"esc\([^)]*\)\.replace\(/'/g",
                             "esc(...).replace(/'/g …) بی‌اثر است؛ jsArg بگیر")
+        # check_js فقط نحو را می‌سنجد؛ متغیرِ حذف‌شده‌ی ke در legendHtml
+        # تنها با بازکردنِ نمودار در مرورگر ReferenceError می‌داد.
+        seg = src[src.index("function graphInner(k){"):]
+        seg = seg[:seg.index("\n}\n", seg.index("function legendHtml("))]
+        self.assertNotRegex(seg, r"\bke\b")
 
     def test_svc_card_handlers_do_not_embed_raw_data(self):
         """کارتِ سرویس‌ها باید از jsArg استفاده کند، نه esc در کوتیشنِ تکی."""
