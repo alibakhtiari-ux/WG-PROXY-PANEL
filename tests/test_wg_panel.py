@@ -8205,6 +8205,24 @@ class HttpSmokeTests(unittest.TestCase):
         self.assertEqual(r.getheader("X-Frame-Options"), "DENY")
         self.assertEqual(r.getheader("Referrer-Policy"), "no-referrer")
 
+    def test_csp_allows_embedded_data_fonts(self):
+        """فونتِ وزیرمتن data: است؛ CSP باید font-src ِ data: را مجاز کند.
+
+        بدونِ font-src مرورگر به default-src 'self' می‌افتاد و فونتِ
+        جاسازی‌شده بی‌صدا رد می‌شد — صفحه با فونتِ سیستم نمایش داده می‌شد.
+        """
+        c = self._conn()
+        c.request("GET", "/")
+        r = c.getresponse()
+        r.read()
+        c.close()
+        csp = r.getheader("Content-Security-Policy") or ""
+        directives = {d.split()[0]: d.split()[1:]
+                      for d in (x.strip() for x in csp.split(";")) if d}
+        self.assertIn("font-src", directives, csp)
+        self.assertIn("data:", directives["font-src"], csp)
+        self.assertIn("url(data:font/woff2", self.m.render_page("fa"))
+
 
 class InlineJsCatalogParityTests(unittest.TestCase):
     """توازنِ کلیدهای _t ِ سمتِ JS با کاتالوگِ سمتِ پایتون.
