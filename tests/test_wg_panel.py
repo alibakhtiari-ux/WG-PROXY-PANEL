@@ -10604,6 +10604,22 @@ class InlineHandlerArgTests(unittest.TestCase):
         self.assertIn("function jsArg(v)", js)
         return js
 
+    def test_no_handler_wraps_esc_in_single_quotes(self):
+        """خانواده‌ی کامل: هیچ onclick ای داده را با esc در '…' نگذارد.
+
+        پس از کارتِ سرویس‌ها ۱۷ handler ِ دیگر (IPهای سرویس، mtr، روند،
+        SNI ِ WARP، sha، نمودار، مصرف، ردیفِ کاربر، تونل‌ها) و کلیدِ
+        نمودار (`esc(k).replace(/'/g, "\\'")` — که بعد از esc چیزی برای
+        جایگزینی نمی‌یافت) همان الگو را داشتند. تستِ تک‌موردی فقط همان یک
+        مورد را می‌پایید.
+        """
+        src = pathlib.Path(PANEL).read_text(encoding="utf-8")
+        bad = [src.count("\n", 0, mt.start()) + 1
+               for mt in re.finditer(r"\\''\s*\+\s*esc\(", src)]
+        self.assertEqual(bad, [], "esc در کوتیشنِ تکیِ handler؛ jsArg بگیر")
+        self.assertNotRegex(src, r"esc\([^)]*\)\.replace\(/'/g",
+                            "esc(...).replace(/'/g …) بی‌اثر است؛ jsArg بگیر")
+
     def test_svc_card_handlers_do_not_embed_raw_data(self):
         """کارتِ سرویس‌ها باید از jsArg استفاده کند، نه esc در کوتیشنِ تکی."""
         src = pathlib.Path(PANEL).read_text(encoding="utf-8")

@@ -25132,8 +25132,8 @@ function paintSvcIps(key){
       '<span class="svc-ipaddr" data-ltr>' + esc(o.ip) + '</span>' +
       '<span class="svc-ipseen">' + _t('ui.js.paintSvcIps.2') + ' ' + fmtAgo(o.last_seen) + '</span>' +
       '<span class="svc-ipacts">' + (can('svc.edit') ?
-        '<button onclick="editSvcIp(\'' + esc(key) + '\',\'' + esc(o.ip) + '\')">' + _t('ui.js.paintSvcIps.3') + '</button>' +
-        '<button class="danger" onclick="deleteSvcIp(\'' + esc(key) + '\',\'' + esc(o.ip) + '\')">' + _t('ui.js.botAddRow.5') + '</button>' : '') +
+        '<button onclick="editSvcIp(' + jsArg(key) + ',' + jsArg(o.ip) + ')">' + _t('ui.js.paintSvcIps.3') + '</button>' +
+        '<button class="danger" onclick="deleteSvcIp(' + jsArg(key) + ',' + jsArg(o.ip) + ')">' + _t('ui.js.botAddRow.5') + '</button>' : '') +
       '</span></div>';
   }).join('') || '<div class="svc-mtr-msg">' + _t('ui.js.paintSvcIps.5') + '</div>';
   h.innerHTML = '<div class="svc-mtr"><div class="svc-mtr-msg">' +
@@ -25738,8 +25738,8 @@ function paintMtr(gk){
   if(c.err){
     holder.innerHTML = '<div class="svc-mtr"><div class="svc-mtr-msg err">⚠️ ' +
       esc(c.err) + '</div><div style="margin-top:6px"><button class="svc-mtrbtn" ' +
-      'onclick="fetchMtr(\'' + esc(parts[0]) + '\',\'' + esc(parts[1]) +
-      '\')">' + _t('ui.js.paintMtr.3') + '</button></div></div>';
+      'onclick="fetchMtr(' + jsArg(parts[0]) + ',' + jsArg(parts[1]) +
+      ')">' + _t('ui.js.paintMtr.3') + '</button></div></div>';
     return;
   }
   holder.innerHTML = mtrHtml(c.data, parts[0], parts[1]);
@@ -25920,10 +25920,10 @@ function mtrHtml(d, service, iface){
   return '<div class="svc-mtr">' +
     '<div class="svc-mtr-top">' +
       '<span>' + _t('ui.js.mtrHtml.20', {p0: faNum(d.cycles || 3)}) + esc(d.tool || 'traceroute') + '</span>' +
-      '<button class="svc-mtrbtn' + (trendOpen ? ' open' : '') + '" onclick="toggleTrend(\'' +
-        esc(service) + '\',\'' + esc(iface) + '\')">' + _t('ui.js.mtrHtml.21') + (trendOpen ? ' ▲' : ' ▼') + '</button>' +
-      '<button class="svc-mtrbtn" style="margin-inline-start:auto" onclick="fetchMtr(\'' +
-        esc(service) + '\',\'' + esc(iface) + '\')">' + _t('ui.js.mtrHtml.22') + '</button>' +
+      '<button class="svc-mtrbtn' + (trendOpen ? ' open' : '') + '" onclick="toggleTrend(' +
+        jsArg(service) + ',' + jsArg(iface) + ')">' + _t('ui.js.mtrHtml.21') + (trendOpen ? ' ▲' : ' ▼') + '</button>' +
+      '<button class="svc-mtrbtn" style="margin-inline-start:auto" onclick="fetchMtr(' +
+        jsArg(service) + ',' + jsArg(iface) + ')">' + _t('ui.js.mtrHtml.22') + '</button>' +
     '</div>' +
     qual + cmp +
     '<div class="svc-trend-holder" data-trend="' + esc(gk) + '"></div>' +
@@ -26956,7 +26956,7 @@ async function loadWarp(){
                        : warpChip(_t('ui.js.loadWarp.113'), 'hp-idle');
           if(e.lowVol) cls += warpChip(_t('ui.js.loadWarp.114'), 'hp-noreturn');
           var act = (!ai && h)
-            ? '<button style="padding:1px 10px;font-size:11px" onclick="addWarpSniHost(\'' + esc(h) + '\')">' + _t('ui.js.loadWarp.115') + '</button>'
+            ? '<button style="padding:1px 10px;font-size:11px" onclick="addWarpSniHost(' + jsArg(h) + ')">' + _t('ui.js.loadWarp.115') + '</button>'
             : '';
           return '<tr><td>' + name + '</td><td>' + cls + '</td>' +
             '<td>' + fmtBytes(b || 0) + '</td>' +
@@ -27568,8 +27568,8 @@ function shaLine(h){
     'title="' + esc(h) + '">sha256: ' + esc(h.slice(0, 16)) + '… ' +
     '<a href="#" style="font-size:10px;color:var(--fg);background:var(--btn);' +
     'border:1px solid var(--border);border-radius:6px;padding:1px 8px;' +
-    'text-decoration:none;display:inline-block" onclick="copySha(\'' + esc(h) +
-    '\');return false">' + _t('ui.js.shaLine.1') + '</a></div>';
+    'text-decoration:none;display:inline-block" onclick="copySha(' + jsArg(h) +
+    ');return false">' + _t('ui.js.shaLine.1') + '</a></div>';
 }
 function copySha(h){
   navigator.clipboard.writeText(h).then(
@@ -27880,8 +27880,8 @@ function graphBtn(kind, a, b){
   const k = gkey(kind, a, b);
   const on = openGraphs.has(k);
   return '<button class="gbtn' + (on ? ' open' : '') + '" ' +
-    'title="' + _t('ui.js.graphBtn.1') + '" onclick="toggleGraph(\'' + kind + '\',\'' +
-    esc(a) + '\',\'' + esc(b || '') + '\')">📈 <span class="gbtn-txt">(' +
+    'title="' + _t('ui.js.graphBtn.1') + '" onclick="toggleGraph(\'' + kind + '\',' +
+    jsArg(a) + ',' + jsArg(b || '') + ')">📈 <span class="gbtn-txt">(' +
     (on ? _t('ui.js.graphBtn.2') : _t('ui.js.graphBtn.3')) + ')</span></button>';
 }
 
@@ -27895,7 +27895,11 @@ function graphInner(k){
   // تک‌نقل‌قول به‌تنهایی، " را دست‌نخورده رد می‌کرد و صفت را می‌شکست.
   // اعتبارسنجیِ GKEY_RE در مرز، رفعِ اصلی است؛ این کمربندِ دوم است
   // برای روزی که کسی راهِ سومی برای پرکردنِ openGraphs اضافه کند.
-  const ke = esc(k).replace(/'/g, "\\'");
+  //
+  // 🪤 و خودِ این کمربند سوراخ بود: esc اول ' را به &#39; تبدیل می‌کرد و
+  // replace بعدی چیزی برای گرفتن نداشت؛ مرورگر &#39; را پیش از JS به '
+  // برمی‌گرداند. آرگومانِ handler با jsArg ساخته می‌شود (JSON، بعد esc).
+  const ka = jsArg(k);
   const kind0 = k.split('|')[0];
   const isMetric = kind0 === 'm' || kind0 === 'px';
   const isProxy = kind0 === 'px';
@@ -27908,39 +27912,39 @@ function graphInner(k){
   return '<div class="gwrap">' +
     '<div class="gtabs">' +
       tabs.map(t => '<button class="' + (st.range === t[0] ? 'active' : '') +
-        '" onclick="setGraphRange(\'' + ke + '\',\'' + t[0] + '\')">' +
+        '" onclick="setGraphRange(' + ka + ',\'' + t[0] + '\')">' +
         t[1] + '</button>').join('') +
       '<span class="gchips" id="' + id + '-chips"></span>' +
       '<span class="gactions">' +
         (isMetric ? '' : '<button class="' + (st.events === false ? '' : 'evon') +
-          '" onclick="toggleEvents(\'' + ke +
-          '\')" title="' + _t('ui.js.graphInner.11') + '">🚩</button>') +
+          '" onclick="toggleEvents(' + ka +
+          ')" title="' + _t('ui.js.graphInner.11') + '">🚩</button>') +
         (isMetric ? '' : '<button class="' + (st.heat ? 'heaton' : '') +
-          '" onclick="toggleHeat(\'' + ke +
-          '\')" title="' + _t('ui.js.graphInner.12') + ')">🌡</button>') +
+          '" onclick="toggleHeat(' + ka +
+          ')" title="' + _t('ui.js.graphInner.12') + ')">🌡</button>') +
         (isSec ? '<button class="' + (st.split ? 'spliton' : '') +
-          '" onclick="toggleSplit(\'' + ke +
-          '\')" title="' + _t('ui.js.graphInner.13') + '">👥</button>' : '') +
-        (isMetric ? '' : '<button class="' + (st.log ? 'logon' : '') + '" onclick="toggleLog(\'' +
-          ke + '\')" title="' + _t('ui.js.graphInner.14') + '">log</button>') +
+          '" onclick="toggleSplit(' + ka +
+          ')" title="' + _t('ui.js.graphInner.13') + '">👥</button>' : '') +
+        (isMetric ? '' : '<button class="' + (st.log ? 'logon' : '') + '" onclick="toggleLog(' +
+          ka + ')" title="' + _t('ui.js.graphInner.14') + '">log</button>') +
         (!isMetric && st.range === '6m'
-          ? '<button class="' + (st.wk ? 'logon' : '') + '" onclick="toggleWeekly(\'' +
-            ke + '\')" title="' + _t('ui.js.graphInner.15') + '">' + _t('ui.js.graphInner.16') + '</button>'
+          ? '<button class="' + (st.wk ? 'logon' : '') + '" onclick="toggleWeekly(' +
+            ka + ')" title="' + _t('ui.js.graphInner.15') + '">' + _t('ui.js.graphInner.16') + '</button>'
           : '') +
-        (st.zoom ? '<button onclick="resetZoom(\'' + ke +
-          '\')" title="' + _t('ui.js.graphInner.17') + '">' + _t('ui.js.graphInner.18') + '</button>' : '') +
-        (isMetric ? '' : '<button class="' + (inCmp ? 'cmpon' : '') + '" onclick="toggleCompare(\'' +
-          ke + '\')" title="' + _t('ui.js.graphInner.19') + '">' +
+        (st.zoom ? '<button onclick="resetZoom(' + ka +
+          ')" title="' + _t('ui.js.graphInner.17') + '">' + _t('ui.js.graphInner.18') + '</button>' : '') +
+        (isMetric ? '' : '<button class="' + (inCmp ? 'cmpon' : '') + '" onclick="toggleCompare(' +
+          ka + ')" title="' + _t('ui.js.graphInner.19') + '">' +
           (inCmp ? _t('ui.js.graphInner.20') : _t('ui.js.graphInner.21')) + '</button>') +
-        '<button onclick="fullscreenGraph(\'' + ke + '\')" title="' + _t('ui.js.graphInner.22') + '">' + _t('ui.js.graphInner.23') + '</button>' +
-        '<button onclick="copyGraphLink(\'' + ke +
-          '\')" title="' + _t('ui.js.graphInner.24') + '">🔗</button>' +
-        '<button onclick="exportPng(\'' + ke + '\')" title="' + _t('ui.js.graphInner.25') + '">PNG</button>' +
-        '<button onclick="exportCsv(\'' + ke + '\')" title="' + _t('ui.js.graphInner.26') + '">CSV</button>' +
+        '<button onclick="fullscreenGraph(' + ka + ')" title="' + _t('ui.js.graphInner.22') + '">' + _t('ui.js.graphInner.23') + '</button>' +
+        '<button onclick="copyGraphLink(' + ka +
+          ')" title="' + _t('ui.js.graphInner.24') + '">🔗</button>' +
+        '<button onclick="exportPng(' + ka + ')" title="' + _t('ui.js.graphInner.25') + '">PNG</button>' +
+        '<button onclick="exportCsv(' + ka + ')" title="' + _t('ui.js.graphInner.26') + '">CSV</button>' +
       '</span>' +
     '</div>' +
     '<canvas class="bigchart" id="' + id + '-cv"></canvas>' +
-    '<div id="' + id + '-lg" data-mode="norm">' + legendHtml(ke, st) + '</div>' +
+    '<div id="' + id + '-lg" data-mode="norm">' + legendHtml(k, st) + '</div>' +
     '</div>';
 }
 function graphRowHtml(k, colspan){
@@ -27958,7 +27962,7 @@ function chNum(ch, v){
 }
 
 // لجندِ تعاملی: کلیک برای پنهان/نمایش هر سری
-function legendHtml(ke, st){
+function legendHtml(k, st){
   const isMetric = ke.split('|')[0] === 'm';
   if(isMetric){
     const m = gaugeMeta(ke.split('|')[1]);
@@ -27970,8 +27974,8 @@ function legendHtml(ke, st){
   }
   const h = (st && st.hidden) || {};
   const it = (key, cls, color, label) =>
-    '<span class="lgi ' + (h[key] ? 'off' : '') + '" onclick="toggleSeries(\'' +
-    ke + '\',\'' + key + '\')"><span class="lgsw ' + cls +
+    '<span class="lgi ' + (h[key] ? 'off' : '') + '" onclick="toggleSeries(' +
+    ka + ',\'' + key + '\')"><span class="lgsw ' + cls +
     '" style="background:' + color + '"></span>' + label + '</span>';
   return '<div class="glegend">' +
     it('rx', 'sq', 'var(--rx)', _t('ui.js.fullscreenGraph.7') + ')') +
@@ -28185,7 +28189,7 @@ function restoreLegend(k, st){
   const w = el(gid(k) + '-lg'); if(!w) return;
   if(w.dataset.mode && w.dataset.mode !== 'norm'){
     w.dataset.mode = 'norm'; w.dataset.sig = '';
-    w.innerHTML = legendHtml(esc(k).replace(/'/g, "\\'"), st);   // ← همان دلیلِ graphInner
+    w.innerHTML = legendHtml(k, st);
   }
 }
 
@@ -29605,7 +29609,7 @@ function rerender(){
 function monthCell(u){
   const total = (u.month_rx || 0) + (u.month_tx || 0);
   let s = '<span class="total" style="cursor:pointer" title="' + _t('ui.js.monthCell.1') + '" ' +
-    'onclick="showUsage(\'' + esc(u.iface) + '\',\'' + esc(u.name) + '\')">' +
+    'onclick="showUsage(' + jsArg(u.iface) + ',' + jsArg(u.name) + ')">' +
     fmtBytes(total);
   if(u.quota_gb){
     const over = total >= u.quota_gb * 1073741824;
@@ -29626,7 +29630,7 @@ function userRow(u){
     (u.share_active ? '<span class="share-badge" title="' + _t('ui.js.userRow.6') + '">🔗</span>' : '');
   const note = u.note ? '<div class="notetxt" title="' + esc(u.note) + '">' +
     esc(u.note) + '</div>' : '';
-  const args = '\'' + esc(u.iface) + '\',\'' + esc(u.name) + '\'';
+  const args = jsArg(u.iface) + ',' + jsArg(u.name);
   return '<tr>' +
     '<td><span class="dot ' + dot + '" title="' + title + '"></span></td>' +
     '<td><b>' + esc(u.name) + '</b>' + badge + note + '</td>' +
@@ -29664,8 +29668,8 @@ function sectionRow(sec){
     ' ' + _t('ui.js.sectionRow.4') + ' <span data-ltr>' + esc(sec.subnet || '—') + '</span>' +
     ' · ' + sec.count + ' ' + _t('ui.js.sectionRow.5') + ' ' + st + ' ' +
     (can('tun.toggle') ?
-    '<button style="margin-inline-start:10px" onclick="toggleTunnel(\'' +
-    esc(sec.iface) + '\',' + (!sec.active) + ', this, true)">' +
+    '<button style="margin-inline-start:10px" onclick="toggleTunnel(' +
+    jsArg(sec.iface) + ',' + (!sec.active) + ', this, true)">' +
     (sec.active ? _t('ui.js.sectionRow.6') : _t('ui.js.sectionRow.7')) +
     '</button>' : '') + '</td></tr>';
 }
@@ -29759,7 +29763,7 @@ function renderTunnels(tunnels){
       '<td>' + boot + '</td>' +
       '<td class="mut">' + esc(t.systemd) + '</td>' +
       '<td>' + (can('tun.toggle') ?
-        '<button onclick="toggleTunnel(\'' + esc(t.iface) + '\',' + (!t.active) + ', this)">' +
+        '<button onclick="toggleTunnel(' + jsArg(t.iface) + ',' + (!t.active) + ', this)">' +
         (t.active ? _t('ui.js.ecmpBadge.3') : _t('ui.js.loadLeakAudit.41')) + '</button>' : '') + '</td>' +
       '</tr>' +
       (openGraphs.has(gkey('t', t.iface)) ?
@@ -30272,10 +30276,10 @@ async function showUsage(iface, name, range){
     (range === '24h' ? _t('ui.js.showUsage.2') + ')' : _t('ui.js.showUsage.3') + ')');
   el('modal-body').innerHTML =
     '<div class="mrow" style="margin:0 0 10px">' +
-      '<button onclick="showUsage(\'' + esc(iface) + '\',\'' + esc(name) +
-        '\',\'24h\')">' + _t('ui.js.auditDebounced.1') + '</button>' +
-      '<button onclick="showUsage(\'' + esc(iface) + '\',\'' + esc(name) +
-        '\',\'30d\')">' + _t('ui.js.auditDebounced.3') + '</button>' +
+      '<button onclick="showUsage(' + jsArg(iface) + ',' + jsArg(name) +
+        ',\'24h\')">' + _t('ui.js.auditDebounced.1') + '</button>' +
+      '<button onclick="showUsage(' + jsArg(iface) + ',' + jsArg(name) +
+        ',\'30d\')">' + _t('ui.js.auditDebounced.3') + '</button>' +
     '</div>' +
     '<canvas id="usage-cv" width="520" height="190" style="width:100%"></canvas>' +
     '<div class="sub" style="margin-top:6px">' +
