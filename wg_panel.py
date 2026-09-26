@@ -15731,9 +15731,42 @@ def tg_iface_candidates(explicit=""):
 TG_MAX_MESSAGE = 4096
 
 
-def tg_chunks(text, limit=TG_MAX_MESSAGE - 96):
+_TG_TAG_RE = re.compile(r"<(/?)([a-zA-Z][\w-]*)[^>]*>")
+
+
+def _tg_safe_cut(line, limit, html):
+    """جای برشِ خطِ بلند در ≤ limit — در HTML نه وسطِ تگ یا &entity;."""
+    if not html:
+        return limit
+    cut = limit
+    lt, gt = line.rfind("<", 0, cut), line.rfind(">", 0, cut)
+    if lt > gt:                                  # وسطِ یک تگ
+        cut = lt
+    amp, semi = line.rfind("&", 0, cut), line.rfind(";", 0, cut)
+    if amp > semi and cut - amp <= 10:           # وسطِ &amp; و…
+        cut = amp
+    # تگِ بازِ چسبیده به انتها → تکه‌ای با <b></b> ِ خالی؛ به تکه‌ی بعد برود
+    while cut > 0:
+        mt = re.search(r"<[a-zA-Z][^<>]*>$", line[:cut])
+        if not mt:
+            break
+        cut = mt.start()
+    return cut if cut > 0 else limit
+
+
+def tg_chunks(text, limit=TG_MAX_MESSAGE - 96, html=False):
     """متنِ بلند را در مرزِ خط به تکه‌های ≤ limit می‌شکند (تلگرام ۴۰۹۶ حرف
-    می‌پذیرد و بلندتر را بی‌صدا رد می‌کند)."""
+    می‌پذیرد و بلندتر را بی‌صدا رد می‌کند).
+
+    html=True (parse_mode=HTML): هر تکه باید به‌تنهایی HTML ِ معتبر باشد.
+    برشِ کور وسطِ <pre>…</pre> (کانفیگِ وایرگارد، ممیزیِ نشت، فهرستِ
+    تونل‌ها) تکه‌ای با تگِ باز می‌ساخت؛ تلگرام «can't parse entities»
+    می‌داد و **کلِ** آن تکه — و در ربات همه‌ی تکه‌های بعدی — نمی‌رسید. حالا
+    تگ‌های باز در پایانِ هر تکه بسته و در آغازِ تکه‌ی بعد با همان صفت‌ها
+    دوباره باز می‌شوند، و خطِ غول‌پیکر وسطِ تگ یا &entity; بریده نمی‌شود.
+    سقفِ تلگرام روی متنِ **پس از** پارسِ تگ‌هاست، پس تگ‌های افزوده از
+    بودجه کم نمی‌کنند.
+    """
     text = text or ""
     if len(text) <= limit:
         return [text]
@@ -15743,8 +15776,9 @@ def tg_chunks(text, limit=TG_MAX_MESSAGE - 96):
             if cur:
                 out.append(cur)
                 cur = ""
-            out.append(line[:limit])
-            line = line[limit:]
+            cut = _tg_safe_cut(line, limit, html)
+            out.append(line[:cut])
+            line = line[cut:]
         cand = line if not cur else cur + "\n" + line
         if len(cand) > limit:
             out.append(cur)
@@ -15753,7 +15787,23 @@ def tg_chunks(text, limit=TG_MAX_MESSAGE - 96):
             cur = cand
     if cur:
         out.append(cur)
-    return out
+    if not html:
+        return out
+    balanced, stack = [], []                     # stack: [(name, opening)]
+    for part in out:
+        head = "".join(o for _n, o in stack)
+        for mt in _TG_TAG_RE.finditer(part):
+            name = mt.group(2).lower()
+            if not mt.group(1):
+                stack.append((name, mt.group(0)))
+            else:
+                for i in range(len(stack) - 1, -1, -1):
+                    if stack[i][0] == name:
+                        del stack[i:]
+                        break
+        tail = "".join("</%s>" % n for n, _o in reversed(stack))
+        balanced.append(head + part + tail)
+    return balanced
 
 
 def tg_api(token, method, params=None, photo=None, iface="", timeout=20,
@@ -15887,7 +15937,7 @@ class AlertManager:
         if not (c["bot_token"] and c["chat_id"]):
             return False, "api.err.tg.unset"
         ifc = c["iface"] if iface_override is None else (iface_override or "")
-        for part in tg_chunks(text):
+        for part in tg_chunks(text, html=html):
             p = {"chat_id": c["chat_id"], "text": part,
                  "disable_web_page_preview": True}
             if html:
@@ -19338,7 +19388,7 @@ class TelegramBot(threading.Thread):
             if isinstance(res, str) and "not modified" in res.lower():
                 return True, None
             # سایرِ خطاها (پیامِ قدیمی و…) → ارسالِ پیامِ جدید
-        parts = tg_chunks(text)
+        parts = tg_chunks(text, html=True)     # send همیشه parse_mode=HTML است
         if len(parts) == 1:
             return tg_api(self._token(), "sendMessage", p, iface=alert_cfg()["iface"])
         # پیامِ بلند (فهرستِ تونل‌ها، کانفیگ با AllowedIPs ِ طولانی، ممیزیِ

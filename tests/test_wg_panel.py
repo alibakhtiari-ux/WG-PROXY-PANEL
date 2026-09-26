@@ -11613,6 +11613,47 @@ class ProductMonitoringTests(unittest.TestCase):
         parts = m.tg_chunks("y" * 9000, limit=4000)
         self.assertEqual([len(p) for p in parts], [4000, 4000, 1000])
 
+    def test_tg_chunks_keeps_every_html_chunk_balanced(self):
+        """برش وسطِ <pre> تکه‌ای با تگِ باز می‌ساخت و تلگرام کلِ آن را
+        با «can't parse entities» رد می‌کرد."""
+        import html.parser
+        m = self.m
+        body = "\n".join("AllowedIPs = 10.0.%d.0/24 &amp; x" % i
+                         for i in range(400))
+        text = "<b>Config</b>\n<pre><code class=\"language-ini\">" + body \
+            + "</code></pre>\n<i>end</i>"
+        parts = m.tg_chunks(text, html=True)
+        self.assertGreater(len(parts), 2)
+
+        class Bal(html.parser.HTMLParser):
+            def __init__(self):
+                super().__init__(); self.stack = []
+
+            def handle_starttag(self, tag, attrs):
+                self.stack.append(tag)
+
+            def handle_endtag(self, tag):
+                assert self.stack and self.stack[-1] == tag, (tag, self.stack)
+                self.stack.pop()
+        for part in parts:
+            b = Bal(); b.feed(part); b.close()
+            self.assertEqual(b.stack, [], part[:80])
+        self.assertTrue(parts[1].startswith('<pre><code class="language-ini">'))
+        # متن (بدونِ تگ‌های افزوده) کامل و به ترتیب رسید
+        strip = lambda x: re.sub(r"<[^>]+>", "", x)
+        self.assertEqual("\n".join(strip(p) for p in parts), strip(text))
+        # خطِ غول‌پیکر وسطِ تگ یا &entity; بریده نمی‌شود
+        long_line = ("ab&amp;" * 3000)
+        for part in m.tg_chunks(long_line, limit=4000, html=True):
+            self.assertFalse(re.search(r"&[a-z]*$", part), part[-10:])
+        long_tag = "x" * 3997 + "<b>bold</b>" + "y" * 100   # برشِ ۴۰۰۰ وسطِ <b>
+        parts = m.tg_chunks(long_tag, limit=4000, html=True)
+        self.assertEqual(parts[0], "x" * 3997)
+        self.assertTrue(parts[1].startswith("<b>bold</b>"))
+        # بدونِ html، رفتارِ قبلی
+        self.assertEqual(m.tg_chunks("y" * 9000, limit=4000),
+                         ["y" * 4000, "y" * 4000, "y" * 1000])
+
     def _fake_https(self, script):
         """_https_raw_over_iface ِ ساختگی: script = {iface: [(status, json), …]}."""
         m = self.m
