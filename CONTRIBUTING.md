@@ -39,26 +39,11 @@ gets a **blank page** in the browser. If you changed anything in the web
 interface, also check the JavaScript syntax (needs Node.js):
 
 ```bash
-python3 - <<'PY'
-import pathlib, re
-src = pathlib.Path('wg_panel.py').read_text(encoding='utf-8')
-out = pathlib.Path('wgjs-check'); out.mkdir(exist_ok=True)
-for name in ('PAGE_HTML', 'SHARE_HTML', 'TV3D_JS'):
-    body = re.search(r'^%s = r"""(.*?)^"""' % name, src, re.S | re.M).group(1)
-    if name == 'TV3D_JS':
-        (out / 'tv3d.mjs').write_text(body, encoding='utf-8')
-        continue
-    for i, js in enumerate(re.findall(
-            r'<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>', body, re.S)):
-        js = js.replace('__PAYLOAD__', 'null').replace(
-            '__SHARE_BOOTSTRAP__', 'var _T={},_FA=false;')
-        (out / ('%s_%d.js' % (name, i))).write_text(js, encoding='utf-8')
-PY
-for f in wgjs-check/*; do node --check "$f" || echo "FAILED: $f"; done
+python3 tests/check_js.py
 ```
 
-No output means no syntax errors. Then open the panel, use the part you
-changed, and check the browser console.
+It prints `0 failed` when every script parses; CI runs the same check. Then
+open the panel, use the part you changed, and check the browser console.
 
 In your pull request, say which of these checks you ran and what they
 reported.
