@@ -10290,29 +10290,84 @@ def _ip_in_nets(ip, nets):
     return any(addr in n for n in nets)
 
 
+# نشانیِ «کلاینتِ نامعلوم»: وقتی درخواست از proxy ِ معتمد آمده ولی هدرها
+# خراب یا متناقض‌اند. عمداً نه loopback است (که allowlist و تأییدِ تلگرام
+# را دور می‌زند) و نه نشانیِ کسی دیگر؛ سطلِ rate-limit ِ مشترکِ جاعل‌هاست.
+UNKNOWN_CLIENT_IP = "0.0.0.0"
+
+
+def _forwarded_hop(h):
+    """یک hop ِ هدر → IP ِ خالص، یا None اگر IP نباشد."""
+    h = h.strip()
+    if h.startswith("[") and "]" in h:              # [v6] یا [v6]:port
+        h = h[1:h.index("]")]
+    elif h.count(":") == 1 and "." in h:            # a.b.c.d:port
+        h = h.split(":")[0]
+    try:
+        return str(ipaddress.ip_address(h))
+    except ValueError:
+        return None
+
+
 def client_ip_from(peer_ip, headers):
-    """IP ِ واقعیِ کلاینت با توجه به proxyهای مورداعتماد (رجوع به _client_ip)."""
+    """IP ِ واقعیِ کلاینت با توجه به proxyهای مورداعتماد (رجوع به _client_ip).
+
+    سه راهِ جعل که بسته شده‌اند:
+
+    * هدرِ خراب یا زنجیره‌ی «فقط-معتمد» قبلاً به peer برمی‌گشت؛ پشتِ proxy
+      ِ همان میزبان peer یعنی 127.0.0.1 — همان نشانی‌ای که allowlist و تأییدِ
+      تلگرام را دور می‌زند. حالا خراب → UNKNOWN_CLIENT_IP، و loopback ِ
+      آمده از هدر هرگز کلاینت شمرده نمی‌شود.
+    * proxy‌ای که فقط X-Real-IP می‌گذارد، X-Forwarded-For ِ کلاینت را دست‌نخورده
+      رد می‌کند؛ proxy‌ای که فقط XFF می‌گذارد، X-Real-IP را. اگر هر دو باشند
+      و X-Real-IP نامعتمد باشد، باید با نتیجه‌ی XFF یکی باشند (nginx ِ
+      رایج هر دو را از $remote_addr می‌سازد)؛ ناهمخوانی یعنی یکی جعلی است.
+    * HAProxy و برخی دیگر XFF را سطرِ **جدا** اضافه می‌کنند؛ headers.get
+      فقط سطرِ اول — سطرِ مهاجم — را می‌دید. همه‌ی سطرها به ترتیب الحاق
+      می‌شوند.
+
+    بدونِ هیچ هدری peer برمی‌گردد: دسترسیِ اضطراریِ SSH port-forward
+    مستقیم به پورتِ پنل همین است، و proxy ِ درست‌پیکربندی‌شده همیشه
+    هدر می‌گذارد، پس مهاجم نمی‌تواند به این حالت برسد.
+    """
     nets = trusted_proxies()
     if not nets or not _ip_in_nets(peer_ip, nets):
         return peer_ip
-    xff = (headers.get("X-Forwarded-For") or "").strip()
-    hops = [h.strip() for h in xff.split(",") if h.strip()] if xff else []
-    real = (headers.get("X-Real-IP") or "").strip()
-    if real and not hops:
-        hops = [real]
-    # از راست: proxyهای معتمد را کنار بزن؛ اولین آدرسِ نامعتمد کلاینت است
-    for h in reversed(hops):
-        if h.startswith("[") and h.endswith("]"):
-            h = h[1:-1]
-        if h.count(":") == 1 and "." in h:          # a.b.c.d:port
-            h = h.split(":")[0]
-        try:
-            ipaddress.ip_address(h)
-        except ValueError:
-            return peer_ip
-        if not _ip_in_nets(h, nets):
-            return h
-    return peer_ip
+    get_all = getattr(headers, "get_all", None)
+    lines = (get_all("X-Forwarded-For") or []) if get_all \
+        else [headers.get("X-Forwarded-For") or ""]
+    hops = [h.strip() for line in lines for h in str(line).split(",")
+            if h.strip()]
+    real_raw = (headers.get("X-Real-IP") or "").strip()
+    if not hops and not real_raw:
+        return peer_ip
+    real = None
+    if real_raw:
+        real = _forwarded_hop(real_raw)
+        if real is None:
+            return UNKNOWN_CLIENT_IP
+    if hops:
+        client = None
+        # از راست: proxyهای معتمد را کنار بزن؛ اولین آدرسِ نامعتمد کلاینت است
+        for h in reversed(hops):
+            ip = _forwarded_hop(h)
+            if ip is None:
+                return UNKNOWN_CLIENT_IP
+            client = ip
+            if not _ip_in_nets(ip, nets):
+                break
+        # همه معتمد → چپ‌ترین (همان client ِ آخرِ حلقه)
+        if real is not None and not _ip_in_nets(real, nets) \
+                and real != client:
+            return UNKNOWN_CLIENT_IP
+    else:
+        client = real
+    try:
+        if ipaddress.ip_address(client).is_loopback:
+            return UNKNOWN_CLIENT_IP
+    except ValueError:
+        return UNKNOWN_CLIENT_IP
+    return client
 
 
 def ip_allowed(ip):

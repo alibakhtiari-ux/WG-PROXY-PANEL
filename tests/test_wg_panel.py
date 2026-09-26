@@ -10960,12 +10960,51 @@ class ProductAuthTests(unittest.TestCase):
         # peer ِ نامعتمد با هدرِ جعلی → همان peer
         self.assertEqual(f("198.51.100.1", {"X-Forwarded-For": "127.0.0.1"}),
                          "198.51.100.1")
-        # هدرِ خراب → peer (نه crash، نه اعتماد)
+        # هدرِ خراب → نامعلوم (نه crash، نه اعتماد، نه loopback ِ peer)
         self.assertEqual(f("127.0.0.1", {"X-Forwarded-For": "not-an-ip"}),
-                         "127.0.0.1")
-        # فقط proxyها در زنجیره → peer
+                         m.UNKNOWN_CLIENT_IP)
+        # فقط proxyها در زنجیره → چپ‌ترین، نه peer
         self.assertEqual(f("127.0.0.1", {"X-Forwarded-For": "10.9.9.9"}),
-                         "127.0.0.1")
+                         "10.9.9.9")
+        # بدونِ هیچ هدری → peer (SSH port-forward ِ مستقیم)
+        self.assertEqual(f("127.0.0.1", {}), "127.0.0.1")
+
+    def test_forwarded_headers_cannot_forge_loopback_or_another_client(self):
+        """جعلِ X-Forwarded-For پشتِ proxy ِ معتمد.
+
+        nginx با فقط `proxy_set_header X-Real-IP $remote_addr` هدرِ XFF ِ
+        کلاینت را دست‌نخورده رد می‌کند. XFF بر X-Real-IP مقدم بود و
+        مقدارِ خراب یا «فقط-معتمد» به peer (127.0.0.1) برمی‌گشت — یعنی
+        دور زدنِ allowlist و تأییدِ تلگرام.
+        """
+        m = self.m
+        m.CONFIG["trusted_proxies"] = ["127.0.0.1", "10.0.0.0/8"]
+        f = m.client_ip_from
+        attacker = "198.51.100.7"
+        for forged in ("127.0.0.1", "not-an-ip", "203.0.113.9", "::1"):
+            with self.subTest(forged=forged):
+                got = f("127.0.0.1", {"X-Forwarded-For": forged,
+                                      "X-Real-IP": attacker})
+                self.assertNotIn(got, ("127.0.0.1", "::1", "203.0.113.9"))
+        # nginx ِ رایج: هر دو از $remote_addr → هم‌خوان
+        self.assertEqual(f("127.0.0.1", {"X-Forwarded-For": "1.1.1.1, " + attacker,
+                                         "X-Real-IP": attacker}), attacker)
+        # X-Real-IP ِ معتمد (proxy ِ داخلی) با XFF تعارض حساب نمی‌شود
+        self.assertEqual(f("127.0.0.1", {"X-Forwarded-For": attacker + ", 10.1.1.1",
+                                         "X-Real-IP": "10.1.1.1"}), attacker)
+        # loopback ِ آمده از هدر هیچ‌وقت کلاینت نیست
+        self.assertEqual(f("127.0.0.1", {"X-Real-IP": "127.0.0.1"}),
+                         m.UNKNOWN_CLIENT_IP)
+
+    def test_every_forwarded_for_line_is_read(self):
+        """HAProxy XFF را سطرِ جدا اضافه می‌کند؛ سطرِ اول مالِ مهاجم است."""
+        import email.message
+        m = self.m
+        m.CONFIG["trusted_proxies"] = ["127.0.0.1"]
+        hdr = email.message.Message()
+        hdr["X-Forwarded-For"] = "203.0.113.9"        # از کلاینت
+        hdr["X-Forwarded-For"] = "198.51.100.7"       # از proxy
+        self.assertEqual(m.client_ip_from("127.0.0.1", hdr), "198.51.100.7")
 
     def test_handler_uses_the_forwarded_ip_for_allowlist_and_audit(self):
         m = self.m
@@ -11112,10 +11151,12 @@ class ProductAuthTests(unittest.TestCase):
                                                  "password": "secret-pw",
                                                  "totp": codes[0]}, session=False)
         self.assertEqual(code, 401)
-        # کدِ TOTP ِ واقعی همچنان کار می‌کند
+        # کدِ TOTP ِ واقعی همچنان کار می‌کند — کدِ گامِ بعد، چون کدِ همین
+        # گام در /api/totp/confirm مصرف شد و تکرارش (درست) رد می‌شود
         code, obj, _h = self._post("/api/login", {"username": "admin",
                                                  "password": "secret-pw",
-                                                 "totp": m.totp_code(secret)},
+                                                 "totp": m.totp_code(
+                                                     secret, time.time() + 30)},
                                    session=False)
         self.assertTrue(obj.get("ok"), obj)
 
