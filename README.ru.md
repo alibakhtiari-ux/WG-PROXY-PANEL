@@ -28,21 +28,78 @@ WireGuard на этом сервере: трафик каждого клиент
 Панель создавалась для сервера без Docker и без pip, поэтому её установка — это
 копирование одного файла.
 
+<p align="center">
+  <img src="docs/screenshots/overview.png" width="900"
+       alt="Панель WG-PROXY-PANEL: индикаторы сервера и таблица клиентов WireGuard с трафиком в реальном времени, квотами и ограничениями скорости">
+</p>
+<p align="center"><sub>На всех снимках экрана в этом README — вымышленные демонстрационные данные; см. <a href="#screenshots">Снимки экрана</a>.</sub></p>
+
 ## Содержание
 
+- [Снимки экрана](#screenshots)
 - [Возможности](#features)
 - [Языки](#languages)
 - [Требования](#requirements)
 - [Быстрый старт с Docker](#quick-start-with-docker)
 - [Установка через systemd](#install-with-systemd)
+- [Обновление](#upgrading)
 - [Настройка](#configuration)
 - [Prometheus](#prometheus)
 - [Безопасность](#security)
+- [Решение проблем](#troubleshooting)
 - [Разработка](#development)
 - [Структура репозитория](#repository-layout)
 - [Участие в проекте](#contributing)
 - [Поддержать проект](#support)
 - [Лицензия](#license)
+
+<a id="screenshots"></a>
+
+## Снимки экрана
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/client-chart.png"><img src="docs/screenshots/client-chart.png" alt="График трафика одного клиента за 30 дней: сумма, среднее, пик, p95 и прогноз на конец месяца"></a>
+      <p align="center"><b>График трафика клиента</b><br><sub>Суточное потребление за 30 дней: среднее, пик, p95, сравнение с прошлым периодом и прогноз на конец месяца</sub></p>
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/heatmap.png"><img src="docs/screenshots/heatmap.png" alt="Тепловая карта использования по дням недели и часам"></a>
+      <p align="center"><b>Тепловая карта «день недели × час»</b><br><sub>Когда клиент пользуется подключением и в какой час нагрузка максимальна</sub></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/rtl-fa.png"><img src="docs/screenshots/rtl-fa.png" alt="Панель на персидском языке с раскладкой справа налево"></a>
+      <p align="center"><b>Персидский, справа налево</b><br><sub>Та же панель на персидском — один из четырёх языков интерфейса</sub></p>
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/light.png"><img src="docs/screenshots/light.png" alt="Панель в светлой теме"></a>
+      <p align="center"><b>Светлая тема</b><br><sub>Тёмная и светлая темы переключаются кнопкой на панели инструментов</sub></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/config-qr.png"><img src="docs/screenshots/config-qr.png" alt="Конфигурация клиента WireGuard с QR-кодом"></a>
+      <p align="center"><b>Конфигурация и QR-код клиента</b><br><sub>Скопируйте её, скачайте файл <code>.conf</code> или отсканируйте QR-код</sub></p>
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/telegram-chart.png"><img src="docs/screenshots/telegram-chart.png" alt="График трафика в виде PNG, нарисованный Telegram-ботом"></a>
+      <p align="center"><b>График из Telegram-бота</b><br><sub>Бот сам рисует PNG на чистом Python</sub></p>
+    </td>
+  </tr>
+</table>
+
+<p align="center">
+  <a href="docs/screenshots/share-mobile.png"><img src="docs/screenshots/share-mobile.png" width="260" alt="Страница передачи на телефоне: конфигурация, QR-код, кнопка скачивания и график потребления"></a><br>
+  <b>Страница передачи на телефоне</b><br><sub>Что видит получатель ссылки: конфигурацию, QR-код, кнопку скачивания и своё потребление</sub>
+</p>
+
+> [!NOTE]
+> Снимки сделаны с настоящей работающей панели, заполненной **вымышленными
+> данными**: придуманные имена клиентов, сгенерированные ключи, домен-пример
+> `vpn.example.com` и IP-адреса из документационных диапазонов RFC 5737.
+> Реальных серверов, пользователей и ключей на них нет.
 
 <a id="features"></a>
 
@@ -255,6 +312,32 @@ sudo systemctl enable --now wg-panel
 Необязательные юниты для резервного копирования, ротации логов, защиты от OOM
 и правило fail2ban находятся в каталоге [deploy/](deploy/).
 
+<a id="upgrading"></a>
+
+## Обновление
+
+Панель — это один файл, поэтому обновление сводится к замене этого файла.
+Настройки в `config.json` и данные в `traffic.db` сохраняются; старые
+конфигурации автоматически приводятся к актуальному виду при запуске панели.
+
+**С systemd:**
+
+```bash
+sudo install -m600 -o root -g root wg_panel.py /opt/wg-panel/wg_panel.py
+sudo systemctl restart wg-panel
+```
+
+**С Docker:** доставьте новый код на сервер (`git pull`), затем в каталоге
+`docker/`:
+
+```bash
+docker compose up -d --build
+```
+
+> [!TIP]
+> Перед обновлением сделайте резервную копию — кнопкой **Резервные копии** в
+> панели или копией каталога `/opt/wg-panel/` (с Docker — `docker/data/`).
+
 <a id="configuration"></a>
 
 ## Настройка
@@ -317,6 +400,57 @@ scrape_configs:
 
 Чтобы сообщить об уязвимости, см. [SECURITY.md](SECURITY.md).
 
+<a id="troubleshooting"></a>
+
+## Решение проблем
+
+<details>
+<summary><b>Я забыл пароль администратора или потерял устройство для двухфакторной аутентификации</b></summary>
+
+<br>
+
+Остановите панель и откройте `config.json` (`/opt/wg-panel/config.json`, с
+Docker — `docker/data/panel/config.json`). Найдите учётную запись в `users` и
+задайте её полям `salt` и `hash` пустые строки; чтобы заодно отключить для неё
+двухфакторную аутентификацию, задайте и `totp` значение `""`. Снова запустите
+панель: следующий пароль, введённый для этой учётной записи на странице входа,
+станет её новым паролем, — поэтому делайте это, пока панель недоступна другим.
+
+</details>
+
+<details>
+<summary><b>Служба не запускается</b></summary>
+
+<br>
+
+Посмотрите журнал: `journalctl -u wg-panel -n 50`. Самая частая причина —
+отсутствующий или некорректный `config.json`: панель никогда не создаёт этот
+файл сама (см. [Установка через systemd](#install-with-systemd)), и он должен
+быть корректным JSON.
+
+</details>
+
+<details>
+<summary><b>Ссылка для передачи пишет, что она недействительна или истекла</b></summary>
+
+<br>
+
+Ссылка перестаёт работать, когда истекает её срок, после первого открытия,
+если она одноразовая, или после отзыва. Страница намеренно не сообщает, что
+именно произошло. Создайте новую ссылку в строке клиента.
+
+</details>
+
+<details>
+<summary><b>После изменения кода страница пустая</b></summary>
+
+<br>
+
+Почти всегда это ошибка JavaScript внутри строк Python — см. примечание в
+разделе [Разработка](#development) и проверьте консоль браузера.
+
+</details>
+
 <a id="development"></a>
 
 ## Разработка
@@ -353,6 +487,7 @@ python3 -m py_compile wg_panel.py
 | `docker/` | Установка через Docker Compose и сборщик офлайн-пакета |
 | `deploy/` | Необязательные юниты systemd, правило fail2ban, скрипты резервного копирования, SNI-разделитель |
 | `tests/` | Тесты |
+| `docs/screenshots/` | Снимки экрана для README |
 | `fonts/` | Подмножество шрифта Vazirmatn |
 | `qr.js` · `three.*.min.js.gz` | Встроенные библиотеки QR-кода и three.js |
 

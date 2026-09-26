@@ -26,21 +26,77 @@ WireGuard 接口的 Web 面板：每个客户端的实时流量、添加和停�
 它最初是为一台既没有 Docker 也没有 pip 的服务器开发的，因此部署面板只需复制
 一个文件。
 
+<p align="center">
+  <img src="docs/screenshots/overview.png" width="900"
+       alt="WG-PROXY-PANEL 仪表盘：服务器仪表和 WireGuard 客户端列表，含实时流量、配额和限速">
+</p>
+<p align="center"><sub>本 README 中的所有截图均为虚构的演示数据——参见<a href="#screenshots">截图</a>。</sub></p>
+
 ## 目录
 
+- [截图](#screenshots)
 - [功能](#features)
 - [语言](#languages)
 - [系统要求](#requirements)
 - [使用 Docker 快速开始](#quick-start-with-docker)
 - [使用 systemd 安装](#install-with-systemd)
+- [升级](#upgrading)
 - [配置](#configuration)
 - [Prometheus](#prometheus)
 - [安全](#security)
+- [故障排查](#troubleshooting)
 - [开发](#development)
 - [仓库结构](#repository-layout)
 - [参与贡献](#contributing)
 - [支持项目](#support)
 - [许可证](#license)
+
+<a id="screenshots"></a>
+
+## 截图
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/client-chart.png"><img src="docs/screenshots/client-chart.png" alt="单个客户端 30 天流量图，含总量、平均值、峰值、p95 和月底预测"></a>
+      <p align="center"><b>客户端流量图</b><br><sub>30 天每日用量，含平均值、峰值、p95、与上一周期的对比以及月底预测</sub></p>
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/heatmap.png"><img src="docs/screenshots/heatmap.png" alt="按星期和小时统计的客户端用量热力图"></a>
+      <p align="center"><b>星期 × 小时热力图</b><br><sub>客户端何时使用连接，以及最繁忙的时段</sub></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/rtl-fa.png"><img src="docs/screenshots/rtl-fa.png" alt="波斯语界面，从右到左布局"></a>
+      <p align="center"><b>波斯语，从右到左</b><br><sub>同一面板的波斯语界面——四种界面语言之一</sub></p>
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/light.png"><img src="docs/screenshots/light.png" alt="浅色主题下的面板"></a>
+      <p align="center"><b>浅色主题</b><br><sub>深色和浅色主题，可在工具栏中切换</sub></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/config-qr.png"><img src="docs/screenshots/config-qr.png" alt="客户端的 WireGuard 配置及二维码"></a>
+      <p align="center"><b>客户端配置和二维码</b><br><sub>复制配置、下载 <code>.conf</code> 文件或扫描二维码</sub></p>
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/telegram-chart.png"><img src="docs/screenshots/telegram-chart.png" alt="Telegram 机器人绘制的 PNG 流量图"></a>
+      <p align="center"><b>Telegram 机器人生成的图表</b><br><sub>机器人用纯 Python 自行绘制 PNG</sub></p>
+    </td>
+  </tr>
+</table>
+
+<p align="center">
+  <a href="docs/screenshots/share-mobile.png"><img src="docs/screenshots/share-mobile.png" width="260" alt="手机上的分享页面：配置、二维码、下载按钮和用量图"></a><br>
+  <b>手机上的分享页面</b><br><sub>分享链接的接收者看到的内容：配置、二维码、下载按钮以及自己的用量</sub>
+</p>
+
+> [!NOTE]
+> 这些截图取自一个真实运行、但填充了**虚构数据**的面板：虚构的客户端名称、
+> 生成的密钥、示例域名 `vpn.example.com`，以及 RFC 5737 文档保留网段中的 IP
+> 地址。其中不包含任何真实的服务器、用户或密钥。
 
 <a id="features"></a>
 
@@ -220,6 +276,31 @@ sudo systemctl enable --now wg-panel
 用于备份、日志轮转、OOM 保护的可选单元以及 fail2ban 规则位于
 [deploy/](deploy/) 目录。
 
+<a id="upgrading"></a>
+
+## 升级
+
+面板只有一个文件，升级就是替换这个文件。`config.json` 中的设置和
+`traffic.db` 中的数据都会保留；旧版配置会在面板启动时自动更新。
+
+**使用 systemd：**
+
+```bash
+sudo install -m600 -o root -g root wg_panel.py /opt/wg-panel/wg_panel.py
+sudo systemctl restart wg-panel
+```
+
+**使用 Docker：** 将新代码拉到服务器上（`git pull`），然后在 `docker/`
+目录中执行：
+
+```bash
+docker compose up -d --build
+```
+
+> [!TIP]
+> 升级前请先备份——使用面板中的 **备份 / 恢复** 按钮，或复制
+> `/opt/wg-panel/`（Docker 为 `docker/data/`）。
+
 <a id="configuration"></a>
 
 ## 配置
@@ -279,6 +360,54 @@ scrape_configs:
 
 报告安全漏洞请参阅 [SECURITY.md](SECURITY.md)。
 
+<a id="troubleshooting"></a>
+
+## 故障排查
+
+<details>
+<summary><b>忘记了管理员密码，或丢失了双因素认证设备</b></summary>
+
+<br>
+
+停止面板并打开 `config.json`（`/opt/wg-panel/config.json`；Docker 为
+`docker/data/panel/config.json`）。在 `users` 中找到该账户，将其 `salt` 和
+`hash` 设为空字符串；如需同时关闭该账户的双因素认证，再将 `totp` 设为
+`""`。重新启动面板：之后在登录页为该账户输入的第一个密码将成为新密码，
+因此请在他人无法访问面板时进行此操作。
+
+</details>
+
+<details>
+<summary><b>服务无法启动</b></summary>
+
+<br>
+
+使用 `journalctl -u wg-panel -n 50` 查看日志。最常见的原因是 `config.json`
+缺失或无效：面板从不自行创建该文件（参见[使用 systemd 安装](#install-with-systemd)），
+且它必须是合法的 JSON。
+
+</details>
+
+<details>
+<summary><b>分享链接提示无效或已过期</b></summary>
+
+<br>
+
+分享链接在过期后、一次性链接在首次使用后，或被撤销后都会失效。页面有意
+不说明具体是哪种情况。请在该客户端所在行重新创建链接。
+
+</details>
+
+<details>
+<summary><b>修改代码后页面一片空白</b></summary>
+
+<br>
+
+这几乎总是 Python 字符串中的 JavaScript 出错——参见[开发](#development)
+一节中的说明，并检查浏览器控制台。
+
+</details>
+
 <a id="development"></a>
 
 ## 开发
@@ -312,6 +441,7 @@ Docker 构建上下文；测试数据使用 RFC 5737 文档地址。本仓库中
 | `docker/` | Docker Compose 安装及离线安装包构建工具 |
 | `deploy/` | 可选的 systemd 单元、fail2ban 规则、备份脚本、SNI 分流器 |
 | `tests/` | 测试套件 |
+| `docs/screenshots/` | README 中使用的截图 |
 | `fonts/` | Vazirmatn 字体子集 |
 | `qr.js` · `three.*.min.js.gz` | 随附的二维码库和 three.js |
 

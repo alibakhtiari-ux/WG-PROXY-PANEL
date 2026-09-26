@@ -27,21 +27,76 @@ an advanced Telegram bot, and Prometheus metrics.
 It was built for a server with no Docker and no pip, so deploying the panel
 means copying one file.
 
+<p align="center">
+  <img src="docs/screenshots/overview.png" width="900"
+       alt="The WG-PROXY-PANEL dashboard: server gauges and the WireGuard client table with live traffic, quotas and speed limits">
+</p>
+<p align="center"><sub>Every screenshot in this README shows synthetic demo data — see <a href="#screenshots">Screenshots</a>.</sub></p>
+
 ## Contents
 
+- [Screenshots](#screenshots)
 - [Features](#features)
 - [Languages](#languages)
 - [Requirements](#requirements)
 - [Quick start with Docker](#quick-start-with-docker)
 - [Install with systemd](#install-with-systemd)
+- [Upgrading](#upgrading)
 - [Configuration](#configuration)
 - [Prometheus](#prometheus)
 - [Security](#security)
+- [Troubleshooting](#troubleshooting)
 - [Development](#development)
 - [Repository layout](#repository-layout)
 - [Contributing](#contributing)
 - [Support the project](#support-the-project)
 - [License](#license)
+
+## Screenshots
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/client-chart.png"><img src="docs/screenshots/client-chart.png" alt="30-day traffic chart of one client, with totals, average, peak, p95 and a month-end forecast"></a>
+      <p align="center"><b>Per-client traffic chart</b><br><sub>30 days of daily usage with average, peak, p95, change against the previous range and a month-end forecast</sub></p>
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/heatmap.png"><img src="docs/screenshots/heatmap.png" alt="Heat map of a client's usage by weekday and hour"></a>
+      <p align="center"><b>Weekday × hour heat map</b><br><sub>When a client uses the connection, and its busiest hour</sub></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/rtl-fa.png"><img src="docs/screenshots/rtl-fa.png" alt="The panel in Persian, laid out right to left"></a>
+      <p align="center"><b>Persian, right to left</b><br><sub>The same panel in Persian — one of four interface languages</sub></p>
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/light.png"><img src="docs/screenshots/light.png" alt="The panel in the light theme"></a>
+      <p align="center"><b>Light theme</b><br><sub>Dark and light themes, switched from the toolbar</sub></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/config-qr.png"><img src="docs/screenshots/config-qr.png" alt="A client's WireGuard config with its QR code"></a>
+      <p align="center"><b>Client config and QR code</b><br><sub>Copy it, download the <code>.conf</code> file, or scan the QR code</sub></p>
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/telegram-chart.png"><img src="docs/screenshots/telegram-chart.png" alt="A traffic chart drawn as a PNG image by the Telegram bot"></a>
+      <p align="center"><b>Chart from the Telegram bot</b><br><sub>The bot draws the PNG itself, in pure Python</sub></p>
+    </td>
+  </tr>
+</table>
+
+<p align="center">
+  <a href="docs/screenshots/share-mobile.png"><img src="docs/screenshots/share-mobile.png" width="260" alt="The share page on a phone: config, QR code, download button and a usage chart"></a><br>
+  <b>Share page on a phone</b><br><sub>What the recipient of a share link sees: config, QR code, download button and their own usage</sub>
+</p>
+
+> [!NOTE]
+> The screenshots were taken from a real running panel filled with **synthetic
+> data**: made-up client names, generated keys, the example domain
+> `vpn.example.com`, and IP addresses from the RFC 5737 documentation ranges.
+> No real server, user or key appears in them.
 
 ## Features
 
@@ -233,6 +288,30 @@ sudo systemctl enable --now wg-panel
 Optional units for backups, log rotation, OOM protection and a fail2ban jail
 are in [deploy/](deploy/).
 
+## Upgrading
+
+The panel is one file, so upgrading means replacing that file. The settings in
+`config.json` and the data in `traffic.db` are kept; older configurations are
+brought up to date automatically when the panel starts.
+
+**With systemd:**
+
+```bash
+sudo install -m600 -o root -g root wg_panel.py /opt/wg-panel/wg_panel.py
+sudo systemctl restart wg-panel
+```
+
+**With Docker:** bring the new code onto the server (`git pull`), then, in
+`docker/`:
+
+```bash
+docker compose up -d --build
+```
+
+> [!TIP]
+> Take a backup before upgrading — the **Backup / restore** button in the
+> panel, or a copy of `/opt/wg-panel/` (`docker/data/` with Docker).
+
 ## Configuration
 
 All settings are in `/opt/wg-panel/config.json`. Most of them can also be
@@ -289,6 +368,54 @@ or give Prometheus the certificate.
 
 To report a vulnerability, see [SECURITY.md](SECURITY.md).
 
+## Troubleshooting
+
+<details>
+<summary><b>I forgot the admin password, or lost the two-factor device</b></summary>
+
+<br>
+
+Stop the panel and open `config.json` (`/opt/wg-panel/config.json`, or
+`docker/data/panel/config.json` with Docker). Find the account in `users` and
+set its `salt` and `hash` to empty strings — to switch off two-factor
+authentication for it as well, also set `totp` to `""`. Start the panel again:
+the next password you type for that account on the login page becomes its new
+password, so do this while no one else can reach the panel.
+
+</details>
+
+<details>
+<summary><b>The service does not start</b></summary>
+
+<br>
+
+Read the log with `journalctl -u wg-panel -n 50`. The most common cause is a
+missing or invalid `config.json`: the panel never creates this file itself
+(see [Install with systemd](#install-with-systemd)), and it must be valid JSON.
+
+</details>
+
+<details>
+<summary><b>A share link says it is invalid or expired</b></summary>
+
+<br>
+
+Share links stop working when they expire, after their first use if they are
+single-use, or when they are revoked. The page deliberately does not say which
+of these happened. Create a new link from the client's row.
+
+</details>
+
+<details>
+<summary><b>The page is blank after I changed the code</b></summary>
+
+<br>
+
+This almost always means a JavaScript error inside the Python strings — see
+the note under [Development](#development) and check the browser console.
+
+</details>
+
 ## Development
 
 `wg_panel.py` has more than 30,000 lines, including the whole web interface
@@ -320,6 +447,7 @@ they check deployment tooling that is not published here.
 | `docker/` | Docker Compose install and the offline bundle builder |
 | `deploy/` | Optional systemd units, fail2ban jail, backup scripts, SNI splitter |
 | `tests/` | Test suite |
+| `docs/screenshots/` | The screenshots used in the READMEs |
 | `fonts/` | Vazirmatn font subset |
 | `qr.js` · `three.*.min.js.gz` | Bundled QR code and three.js libraries |
 
