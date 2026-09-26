@@ -661,6 +661,8 @@ class PanelTestCase(unittest.TestCase):
                   for k, lbl in m.CLOUD_RESTORE_COMPONENTS]
         pairs += [("ui.svc.name." + k, v["label"])
                   for k, v in m.SVC_DEFAULTS.items()]
+        pairs += [("ui.warpev." + k, lbl)
+                  for k, lbl in m.WARP_EVENT_LABELS.items()]
         for key, fa in pairs:
             with self.subTest(key=key):
                 self.assertIn(key, m.I18N, "برچسب بی‌ترجمه")
@@ -668,7 +670,7 @@ class PanelTestCase(unittest.TestCase):
                                  "متنِ فارسیِ کاتالوگ با برچسبِ سرور فرق دارد")
         js = _read_panel_source()
         for prefix in ("ui.permgrp.", "ui.perm.", "ui.alertev.",
-                       "ui.bk.comp.", "ui.svc.name."):
+                       "ui.bk.comp.", "ui.svc.name.", "ui.warpev."):
             with self.subTest(prefix=prefix):
                 self.assertIn("_tOr('%s' + " % prefix, js,
                               "مرورگر این برچسب‌ها را ترجمه نمی‌کند")
@@ -1441,38 +1443,59 @@ class PanelTestCase(unittest.TestCase):
 
     # ---------------------- رویدادهای گراف (نشانگرها/باند قطعی)
     def test_graph_events_peer_tunnel_and_warp(self):
+        """رویدادهای گراف کدِ اکشن برمی‌گردانند و رنگشان از همان کد است.
+
+        پیش از این sev با واژه‌های فارسی سنجیده می‌شد، در حالی که audit
+        از چهارزبانه‌شدن به بعد کد ذخیره می‌کند — پس همه‌ی فلگ‌ها آبی
+        می‌شدند و tooltip کدِ خام نشان می‌داد.
+        """
         m = self.m
         now = m.time.time()
-        m.META.add_audit("admin", "peer", "غیرفعال‌سازی خودکار",
-                         "u1 @ wgtest", "سهمیه", "", True)
-        m.META.add_audit("admin", "peer", "فعال‌سازی", "u1 @ wgtest",
+        det = m.adet("ui.audit.det.autodisable", why="ui.audit.reason.quota")
+        m.META.add_audit("sys:policy", "peer", "peer.disable.auto",
+                         "u1 @ wgtest", det, "", True)
+        m.META.add_audit("admin", "peer", "peer.enable", "u1 @ wgtest",
                          "", "", True)
-        m.META.add_audit("سیستم (پایش)", "tunnel", "قطع شد", "wg21",
+        m.META.add_audit("sys:monitor", "tunnel", "tun.monitor.down", "wg21",
                          "systemd: failed", "", False)
-        m.META.add_audit("سیستم (پایش)", "tunnel", "وصل شد", "wg21",
+        m.META.add_audit("sys:monitor", "tunnel", "tun.monitor.up", "wg21",
                          "systemd: active", "", True)
-        m.META.add_audit("admin", "peer", "افزودن کاربر", "other @ wgtest",
+        m.META.add_audit("admin", "peer", "peer.add", "other @ wgtest",
                          "", "", True)
         # کاربر: فقط رویدادهای خودِ همان peer، مرتب بر اساس زمان
         evs = m.META.graph_events("wgtest", "u1", now - 3600)
-        self.assertEqual([e["label"] for e in evs],
-                         ["غیرفعال‌سازی خودکار", "فعال‌سازی"])
-        self.assertEqual(evs[0]["sev"], "bad")
-        self.assertEqual(evs[1]["sev"], "ok")
+        self.assertEqual([e["action"] for e in evs],
+                         ["peer.disable.auto", "peer.enable"])
+        self.assertEqual([e["sev"] for e in evs], ["bad", "ok"])
+        self.assertEqual(evs[0]["detail"], det)
+        self.assertEqual(evs[0]["actor"], "sys:policy")
+        self.assertEqual(evs[0]["src"], "audit")
         # تونل: category های tunnel/iface با target خودِ اینترفیس
         evs = m.META.graph_events("wg21", "", now - 3600)
-        self.assertEqual([e["label"] for e in evs], ["قطع شد", "وصل شد"])
+        self.assertEqual([e["action"] for e in evs],
+                         ["tun.monitor.down", "tun.monitor.up"])
+        self.assertEqual([e["sev"] for e in evs], ["bad", "ok"])
         # فیلتر زمانی: بازه‌ی گذشته‌ی دور → خالی
         self.assertEqual(m.META.graph_events("wg21", "", now + 10), [])
         # include_warp: رویدادهای warp_event هم بیایند
         con = m.META._connect()
         with con:
             con.execute("INSERT INTO warp_event(ts,kind,detail) VALUES(?,?,?)",
-                        (now, "چرخش endpoint", "1.2.3.4 → 5.6.7.8"))
+                        (now, "degrade", "1.2.3.4 → 5.6.7.8"))
         con.close()
         evs = m.META.graph_events("wgwarp", "", now - 3600, include_warp=True)
         self.assertEqual(len(evs), 1)
-        self.assertIn("WARP", evs[0]["label"])
+        self.assertEqual((evs[0]["src"], evs[0]["action"], evs[0]["sev"]),
+                         ("warp", "degrade", "bad"))
+
+    def test_graph_event_severity_still_reads_legacy_persian_rows(self):
+        """ردیف‌های پیش از چهارزبانه‌شدن متنِ فارسی دارند و باید رنگ بگیرند."""
+        m = self.m
+        now = m.time.time()
+        m.META.add_audit("admin", "peer", "غیرفعال‌سازی", "u1 @ wgtest",
+                         "", "", True)
+        evs = m.META.graph_events("wgtest", "u1", now - 3600)
+        self.assertEqual([e["sev"] for e in evs], ["bad"])
 
     # ---------------------------------------------------------------- رمزها
     def test_password_hash_and_set(self):

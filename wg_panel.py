@@ -2926,14 +2926,6 @@ I18N = {
                              "Daily quota budget",
                              "Дневной бюджет квоты",
                              "每日配额预算"),
-    "ui.js.paintChart.3": ("قطع شد",
-                             "went down",
-                             "разорвано",
-                             "已断开"),
-    "ui.js.paintChart.4": ("وصل شد",
-                             "came up",
-                             "восстановлено",
-                             "已连接"),
     # ── paintCompare ──
     "ui.js.paintCompare.1": ("داده‌ی کافی برای مقایسه نیست",
                                "Not enough data to compare",
@@ -8795,6 +8787,54 @@ I18N = {
                         "rclone error",
                         "Ошибка rclone",
                         "rclone 出错"),
+    "ui.warpev.target_add": ("افزودنِ مقصد",
+                           "Destination added",
+                           "Добавлено направление",
+                           "已添加目标"),
+    "ui.warpev.target_del": ("حذفِ مقصد",
+                           "Destination removed",
+                           "Удалено направление",
+                           "已删除目标"),
+    "ui.warpev.preset_on": ("روشن‌کردنِ سرویس",
+                          "Service turned on",
+                          "Сервис включён",
+                          "已开启服务"),
+    "ui.warpev.preset_off": ("خاموش‌کردنِ سرویس",
+                           "Service turned off",
+                           "Сервис выключен",
+                           "已关闭服务"),
+    "ui.warpev.egress": ("سوییچِ تونلِ خروج",
+                       "Egress tunnel switched",
+                       "Смена исходящего туннеля",
+                       "已切换出口隧道"),
+    "ui.warpev.rotate": ("چرخشِ endpoint",
+                       "Endpoint rotated",
+                       "Смена endpoint",
+                       "已轮换 endpoint"),
+    "ui.warpev.standby": ("سوییچ به کلیدِ استندبای",
+                        "Switched to the standby key",
+                        "Переход на резервный ключ",
+                        "已切换到备用密钥"),
+    "ui.warpev.degrade": ("حالتِ اضطراری (fail-open)",
+                        "Emergency mode (fail-open)",
+                        "Аварийный режим (fail-open)",
+                        "应急模式（fail-open）"),
+    "ui.warpev.restore": ("بازگشتِ سالم",
+                        "Back to normal",
+                        "Возврат в норму",
+                        "已恢复正常"),
+    "ui.warpev.failopen_sni": ("fail-openِ فیلترِ SNI",
+                             "SNI filter fail-open",
+                             "Fail-open фильтра SNI",
+                             "SNI 过滤器 fail-open"),
+    "ui.warpev.country": ("تغییرِ کشورِ خروج",
+                        "Exit country changed",
+                        "Смена страны выхода",
+                        "出口国家已变更"),
+    "ui.warpev.quic": ("تنظیمِ QUIC",
+                     "QUIC setting",
+                     "Настройка QUIC",
+                     "QUIC 设置"),
 }
 
 
@@ -12856,10 +12896,19 @@ class MetaDB:
 
         name خالی = خودِ اینترفیس/تونل (category های tunnel/iface)؛
         name پر = کاربرِ وایرگارد (category=peer با target «name @ iface»).
-        خروجی: [{ts, label, detail, sev}] — sev: bad|ok|info برای رنگِ فلگ.
+        خروجی: [{ts, src, action, detail, actor, sev}] — src: audit|warp؛
+        action کدِ پایدار است (peer.disable، tun.monitor.down، rotate) و
+        مرورگر آن را ترجمه می‌کند. sev: bad|ok|info برای رنگِ فلگ.
         """
         def sev_of(action):
             a = str(action)
+            parts = set(re.split(r"[._]", a))
+            if parts & {"del", "disable", "down", "degrade", "standby",
+                        "failopen"} or a == "iface.loop.found":
+                return "bad"
+            if parts & {"add", "enable", "up", "fix", "restore"}:
+                return "ok"
+            # ردیف‌های پیش از چهارزبانه‌شدن متنِ فارسی دارند، نه کد
             if any(w in a for w in ("قطع", "غیرفعال", "حذف", "حلقه")):
                 return "bad"
             if any(w in a for w in ("وصل", "فعال", "افزودن", "رفع")):
@@ -12878,16 +12927,16 @@ class MetaDB:
                 "category IN ('tunnel','iface') AND target=? AND ts>=? "
                 "ORDER BY ts LIMIT 300", (iface, since_ts))
         for ts, action, detail, actor in cur.fetchall():
-            out.append({"ts": ts, "label": action,
-                        "detail": ("%s — %s" % (detail, actor)).strip(" —"),
+            out.append({"ts": ts, "src": "audit", "action": action,
+                        "detail": detail or "", "actor": actor or "",
                         "sev": sev_of(action)})
         if include_warp:
             cur = con.execute(
                 "SELECT ts, kind, detail FROM warp_event WHERE ts>=? "
                 "ORDER BY ts LIMIT 200", (since_ts,))
             for ts, kind, detail in cur.fetchall():
-                out.append({"ts": ts, "label": "WARP: %s" % kind,
-                            "detail": detail or "",
+                out.append({"ts": ts, "src": "warp", "action": kind or "",
+                            "detail": detail or "", "actor": "",
                             "sev": sev_of(kind) if kind else "info"})
         con.close()
         out.sort(key=lambda e: e["ts"])
@@ -18768,8 +18817,10 @@ class TelegramBot(threading.Thread):
         else:
             for e in evs:
                 icon = self._WARP_EVENT_ICON.get(e.get("kind"), "•")
+                lk = "ui.warpev.%s" % e.get("kind")
+                lbl = self.T(lk) if lk in I18N else (e.get("label") or "")
                 L.append(self._rtl("%s <b>%s</b> · %s"
-                                   % (icon, esc_html(e.get("label") or ""),
+                                   % (icon, esc_html(lbl),
                                       _ago_srv(e.get("ts")))))
                 det = (e.get("detail") or "").strip()
                 who = (e.get("actor") or "").strip()
@@ -25095,7 +25146,7 @@ async function loadWarpEvents(){
     return '<tr>' +
       '<td class="mut" style="white-space:nowrap">' + fmtTs(e.ts) +
         ' <span style="opacity:.7">(' + agoFa(e.ts) + ')</span></td>' +
-      '<td><b style="color:' + warpEventCls(e.kind) + '">' + esc(e.label) + '</b></td>' +
+      '<td><b style="color:' + warpEventCls(e.kind) + '">' + esc(_tOr('ui.warpev.' + e.kind, e.label)) + '</b></td>' +
       '<td data-ltr style="unicode-bidi:plaintext">' + esc(e.detail || '') + '</td>' +
       '<td class="mut">' + (e.actor ? esc(e.actor) : '') + '</td>' +
     '</tr>';
@@ -25625,6 +25676,15 @@ function auditAction(a){ return _tOr('ui.audit.act.' + a, a); }
 // برچسب‌هایی که سرور با کلیدِ پایدار می‌فرستد (نقش‌ها، هشدارها، سرویس‌ها،
 // اجزای بازیابی) این‌جا به زبانِ کاربر برگردانده می‌شوند؛ متنِ سرور فقط
 // پشتیبان است. سرویسِ سفارشی نامی است که خودِ ادمین نوشته — ترجمه نمی‌شود.
+// متنِ یک رویدادِ گراف: اکشن، جزئیات و کنشگر هر کدام به زبانِ کاربر
+function graphEventText(e){
+  const warp = e.src === 'warp';
+  const head = warp ? 'WARP: ' + _tOr('ui.warpev.' + e.action, e.action)
+                    : auditAction(e.action);
+  const tail = [warp ? e.detail : auditDetail(e.detail), auditActor(e.actor)]
+    .filter(Boolean).join(' — ');
+  return head + (tail ? ' — ' + tail : '');
+}
 function svcLabel(row){
   return row.custom ? row.label : _tOr('ui.svc.name.' + row.key, row.label);
 }
@@ -26826,6 +26886,9 @@ function paintChart(cv){
     }
   }
   // ---- نشانگرِ رویدادها (audit/WARP) + باندِ قطعیِ تونل روی محورِ زمان
+  // مقایسه با کدِ اکشن است، نه با متنِ ترجمه‌شده — آن متن هرگز ذخیره نمی‌شود.
+  const TUN_DOWN = new Set(['tun.down', 'tun.monitor.down']),
+        TUN_UP = new Set(['tun.up', 'tun.monitor.up']);
   if(ch.timeAxis && ch.events && ch.events.length){
     const evCol = e => e.sev === 'bad' ? cssVar('--red')
                      : e.sev === 'ok' ? cssVar('--green') : cssVar('--blue');
@@ -26833,8 +26896,8 @@ function paintChart(cv){
       // باندِ کم‌رنگ بین «قطع شد» تا «وصل شد» (قطعیِ باز تا لبه‌ی راست)
       let downT = null; const bands = [];
       ch.events.forEach(e => {
-        if(e.label === _t('ui.js.paintChart.3')) downT = (downT == null) ? e.ts*1000 : downT;
-        else if(e.label === _t('ui.js.paintChart.4') && downT != null){
+        if(TUN_DOWN.has(e.action)) downT = (downT == null) ? e.ts*1000 : downT;
+        else if(TUN_UP.has(e.action) && downT != null){
           bands.push([downT, e.ts*1000]); downT = null; }
       });
       if(downT != null) bands.push([downT, tMax]);
@@ -26922,7 +26985,7 @@ function paintHover(cv){
     const half = (ch.stepMs || 3600e3) / 2;
     ch.events.forEach(e => {
       if(Math.abs(e.ts*1000 - p.t) > half) return;
-      let txt = e.label + (e.detail ? ' — ' + e.detail : '');
+      let txt = graphEventText(e);
       if(txt.length > 46) txt = txt.slice(0, 45) + '…';
       lines.push({t: '🚩 ' + txt,
         c: e.sev === 'bad' ? cssVar('--red')
