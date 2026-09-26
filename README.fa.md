@@ -5,6 +5,7 @@
 **پنلِ تحتِ وبِ تک‌فایلی برای پایش و مدیریتِ WireGuard و پروکسیِ Squid.**<br>
 فقط کتابخانه‌ی استانداردِ پایتون — بدونِ بسته‌ی pip، بدونِ مرحله‌ی build، با چهار زبان.
 
+[![verify](https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/actions/workflows/verify.yml/badge.svg)](https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/actions/workflows/verify.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB.svg)
 ![Dependencies: none](https://img.shields.io/badge/dependencies-stdlib%20only-brightgreen.svg)
@@ -176,7 +177,7 @@
 می‌کنند و به داده‌های شما دست نمی‌زنند.
 
 ```bash
-git clone https://github.com/vahidbakhtiari-ux/WG-PROXY-PANEL.git
+git clone https://github.com/alibakhtiari-ux/WG-PROXY-PANEL.git
 cd WG-PROXY-PANEL/docker
 sudo bash host-setup.sh
 (umask 077 && cp .env.example .env)

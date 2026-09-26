@@ -1,103 +1,105 @@
 # Contributing
 
-## The constraint that shapes everything
+Thank you for helping. Bug reports, translations and pull requests are all
+welcome — in English, Persian, Russian or Chinese.
 
-`wg_panel.py` is a **single file** and uses **only the Python standard
-library**. The target servers have no pip and no Docker; air-gapped installs
-have no network at all. A patch that adds a dependency cannot be merged,
-however good it is. The same rule covers the browser: no CDN, no external
-font, no bundler. `three.js`, the QR generator and the Vazirmatn subset are
-vendored into the repository for exactly this reason.
+## The two rules
 
-Python 3.10 or newer (that is the floor the installers check, chosen so Ubuntu
-22.04's system Python works).
+1. **Standard library only.** `wg_panel.py` must run with nothing but the
+   Python standard library. The servers it runs on often have no pip and
+   sometimes no internet at all. A patch that adds a dependency cannot be
+   merged, however good it is. The same applies in the browser: no CDN, no
+   external font, no bundler — `three.js`, the QR generator and the Vazirmatn
+   font are bundled in the repository for this reason.
+2. **One file.** The whole application stays in `wg_panel.py`, including the
+   web interface and all four translations.
 
-The file is over 30,000 lines and about 7,100 of them are the HTML, CSS and
-JavaScript of the panel, held as raw Python strings. **Do not read it end to
-end.** Use `grep` to find the region you need — the `# ------` separator
-comments are its table of contents.
+The minimum Python version is **3.10** (Ubuntu 22.04's system Python). CI
+tests 3.10 and 3.12.
 
-## Building and testing
+## Finding your way around
 
-There is no build step. To run the tests:
+`wg_panel.py` is over 30,000 lines, and several thousand of them are the
+HTML, CSS and JavaScript of the panel, stored in raw Python strings
+(`PAGE_HTML`, `SHARE_HTML`, `TV3D_JS`). Do not read it end to end — use
+`grep`; the `# ------` separator comments work as a table of contents.
 
-```bash
-python3 -m unittest discover -s tests
-```
+## Testing
 
-That is necessary and **not sufficient**, for one specific reason:
-
-> Python cannot see inside those raw strings. `py_compile` stays green on
-> JavaScript with a syntax error, and the failure reaches the user as a **blank
-> page** in the browser. The test suite alone will not catch it.
-
-The maintainer's gate is a ten-step battery that also extracts and syntax-checks
-every inline script, sweeps `bash -n` over every shell script, and verifies the
-install bundles agree. That tooling lives in the maintainer's working tree and
-is not part of this repository, so if you are reading this on the public branch
-you cannot run it. What you can and should do before proposing a change:
+There is no build step. Before opening a pull request, run:
 
 ```bash
 python3 -m unittest discover -s tests
 python3 -m py_compile wg_panel.py
 ```
 
-and, if you touched anything inside `PAGE_HTML`, `TV3D_JS` or the share-page
-template, extract the script and check it yourself:
+That is necessary but **not sufficient**. Python cannot see inside the
+JavaScript strings: `py_compile` passes on broken JavaScript, and the user
+gets a **blank page** in the browser. If you changed anything in the web
+interface, also check the JavaScript syntax (needs Node.js):
 
 ```bash
-python3 - <<'PY' > /tmp/panel.js
-import re
-src = open('wg_panel.py', encoding='utf-8').read()
-print('\n'.join(m.group(1) for m in
-      re.finditer(r'<script[^>]*>(.*?)</script>', src, re.S)))
+python3 - <<'PY'
+import pathlib, re
+src = pathlib.Path('wg_panel.py').read_text(encoding='utf-8')
+out = pathlib.Path('wgjs-check'); out.mkdir(exist_ok=True)
+for name in ('PAGE_HTML', 'SHARE_HTML', 'TV3D_JS'):
+    body = re.search(r'^%s = r"""(.*?)^"""' % name, src, re.S | re.M).group(1)
+    if name == 'TV3D_JS':
+        (out / 'tv3d.mjs').write_text(body, encoding='utf-8')
+        continue
+    for i, js in enumerate(re.findall(
+            r'<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>', body, re.S)):
+        js = js.replace('__PAYLOAD__', 'null').replace(
+            '__SHARE_BOOTSTRAP__', 'var _T={},_FA=false;')
+        (out / ('%s_%d.js' % (name, i))).write_text(js, encoding='utf-8')
 PY
-node --check /tmp/panel.js
+for f in wgjs-check/*; do node --check "$f" || echo "FAILED: $f"; done
 ```
 
-Say in your patch description which of these you ran. "It looks right" is not a
-verification; this project's convention is to report the number.
+No output means no syntax errors. Then open the panel, use the part you
+changed, and check the browser console.
+
+In your pull request, say which of these checks you ran and what they
+reported.
 
 ## Conventions
 
-- **The interface is right-to-left.** Any container that may hold Persian text
-  needs `direction: rtl` or `unicode-bidi: plaintext`. A `<select>` needs the
-  rule on both the element and its `option`s, and new ones need
-  `class="rtlsel"` — macOS renders the native dropdown left-aligned otherwise.
-- **Quantities render in Persian digits, identifiers stay Latin.** A
-  `TreeWalker` converts digits in rendered text; device names, keys, endpoints
-  and IPs are excluded so they stay searchable and copyable. New elements that
-  must stay Latin get `class="mono"` or `data-ltr`.
-- **No hard-coded colors.** Everything is a CSS variable in `:root`, and both
-  themes supply values. A dark-theme literal is unreadable in the light theme.
-- **User-facing strings live in the `I18N` catalog**, in Persian, English,
-  Russian and Chinese — one 4-tuple per key, ordered
-  `LANGS = ("fa", "en", "ru", "zh")`. A missing entry fails a test.
-- **Code comments and commit messages are in Persian**, matching the rest of the
-  repository. Documentation aimed at users is English. If you are more
-  comfortable in English throughout, write it in English and say so — a correct
-  patch in the wrong language is a much smaller problem than no patch.
+- **Translations.** Every user-facing string lives in the `I18N` catalog in
+  `wg_panel.py`, as one 4-tuple per key in the order
+  `LANGS = ("fa", "en", "ru", "zh")`. A key missing in any language fails a
+  test. If you cannot translate into a language, use English there and say so
+  in the pull request.
+- **Translated text is never data.** Store and compare stable codes, not
+  translated strings — in the database, in metric labels and in audit rows.
+- **Right-to-left.** Persian pages are right-to-left, the others
+  left-to-right. Use logical CSS properties (`margin-inline-start`,
+  `text-align: start`, …) instead of `left`/`right`. A `<select>` that can
+  show Persian needs `direction` and `text-align` on both the element and its
+  `option`s.
+- **Digits and identifiers.** Quantities are shown in Persian digits only in
+  Persian. Identifiers — client names, keys, endpoints, IP addresses — stay in
+  Latin script in every language. Elements that must stay Latin get
+  `class="mono"` or `data-ltr`.
+- **Colors.** No hard-coded colors: use the CSS variables in `:root`, which
+  both the dark and the light theme define.
+- **Test data.** Use RFC 5737 documentation addresses (`192.0.2.0/24`,
+  `198.51.100.0/24`, `203.0.113.0/24`) and `example.com`, never real hosts.
+- **Language of code comments.** Existing comments and commit messages are
+  mostly in Persian. English is equally welcome.
 
-## When you fix a bug, guard the family
+## When you fix a bug, guard the whole family
 
-This is the convention the project cares about most: a fix ships with a test
-that catches **the whole family of that bug, not the instance**. If a
-timestamp formatter mishandled one locale, the test asserts the behaviour for
-every locale in the catalog; if one write path was not atomic, the test looks
-for the same shape everywhere it could recur.
+A fix should come with a test that catches **the whole family of that bug,
+not just the one case**. If a formatter broke one language, test every
+language; if one write path was not atomic, look for the same pattern
+everywhere it could appear.
 
-Then check the test actually has teeth — run it against the code *before* your
-fix and confirm it fails. A guard that passes on the broken version is not a
-guard, and this repository has shipped that mistake more than once (twice by
-matching a comment that described the trap rather than the code that contained
-it; strip comment lines before any textual assertion).
+Then make sure the test really works: run it against the code *before* your
+fix and confirm that it fails. A test that also passes on the broken code does
+not protect anything.
 
-## Notes for maintainers of this deployment
+## Reporting security issues
 
-These do not apply to the public repository, only to the working tree that
-carries the ansible role and the three install bundles:
-
-- After changing `wg_panel.py`, run `ansible/sync-files.sh`, or the bundle
-  synchronization test goes red. Five copies of the file must agree.
-- The version identifier is the first 12 characters of `sha256(wg_panel.py)`,
-  so any change to the file — including a comment — moves it.
+Please do not open a public issue for a vulnerability — see
+[SECURITY.md](SECURITY.md).

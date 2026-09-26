@@ -1,0 +1,25 @@
+name: Feature request
+description: Suggest an idea for the panel or the Telegram bot
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        You can write in English, Persian, Russian or Chinese. Please keep in mind
+        the project's two rules: **Python standard library only** and **one file**.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered

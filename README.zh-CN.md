@@ -5,6 +5,7 @@
 **用于监控和管理 WireGuard 与 Squid 代理的单文件 Web 面板。**<br>
 仅使用 Python 标准库——无需 pip 包，无需构建，支持四种语言。
 
+[![verify](https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/actions/workflows/verify.yml/badge.svg)](https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/actions/workflows/verify.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB.svg)
 ![Dependencies: none](https://img.shields.io/badge/dependencies-stdlib%20only-brightgreen.svg)
@@ -156,7 +157,7 @@ CDN 加载资源，因此面板在无法访问互联网的服务器上同样可�
 和自签名 TLS 证书；之后的启动只更新面板代码，不会改动你的数据。
 
 ```bash
-git clone https://github.com/vahidbakhtiari-ux/WG-PROXY-PANEL.git
+git clone https://github.com/alibakhtiari-ux/WG-PROXY-PANEL.git
 cd WG-PROXY-PANEL/docker
 sudo bash host-setup.sh
 (umask 077 && cp .env.example .env)

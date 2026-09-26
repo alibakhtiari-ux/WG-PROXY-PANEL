@@ -5,6 +5,7 @@
 **Однофайловая веб-панель для мониторинга и управления WireGuard и прокси Squid.**<br>
 Только стандартная библиотека Python — без пакетов pip, без сборки, на четырёх языках.
 
+[![verify](https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/actions/workflows/verify.yml/badge.svg)](https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/actions/workflows/verify.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB.svg)
 ![Dependencies: none](https://img.shields.io/badge/dependencies-stdlib%20only-brightgreen.svg)
@@ -189,7 +190,7 @@ WireGuard на этом сервере: трафик каждого клиент
 запуски только обновляют код панели и не трогают ваши данные.
 
 ```bash
-git clone https://github.com/vahidbakhtiari-ux/WG-PROXY-PANEL.git
+git clone https://github.com/alibakhtiari-ux/WG-PROXY-PANEL.git
 cd WG-PROXY-PANEL/docker
 sudo bash host-setup.sh
 (umask 077 && cp .env.example .env)

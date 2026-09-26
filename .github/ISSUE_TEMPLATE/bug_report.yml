@@ -1,0 +1,75 @@
+name: Bug report
+description: Something in the panel or the Telegram bot does not work as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. You can write in English, Persian, Russian or Chinese.
+
+        **Before pasting anything, remove private keys, bot tokens, passwords,
+        share links and real IP addresses.** Security problems belong in a
+        private report — see SECURITY.md — not in a public issue.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open …
+        2. Click …
+        3. See …
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How is the panel installed?
+      options:
+        - Docker Compose
+        - Docker offline bundle
+        - systemd (wg_panel.py copied by hand)
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Panel version
+      description: >-
+        The first 12 characters of `sha256sum wg_panel.py`
+        (with Docker: `cat data/panel/VERSION`).
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Ubuntu and Python version
+      placeholder: Ubuntu 24.04, Python 3.12
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where does it happen?
+      multiple: true
+      options:
+        - Web panel
+        - Share page
+        - Telegram bot
+        - Telegram alerts
+        - Speed limits / quotas
+        - Charts
+        - Backup / restore
+        - Installation
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: >-
+        `journalctl -u wg-panel -n 100` (systemd) or `docker compose logs --tail 100`,
+        and for a blank or broken page, the browser console. Remove secrets first.
+      render: text

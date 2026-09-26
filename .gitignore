@@ -33,3 +33,6 @@ scripts/wg-panel-s4-*.env
 .claude/settings.local.json
 .claude/worktrees/
 .claude/hooks/.last-server-change
+
+# خروجیِ دستورِ بررسیِ JS در CONTRIBUTING.md
+wgjs-check/

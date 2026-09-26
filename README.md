@@ -5,6 +5,7 @@
 **A single-file web panel for monitoring and managing WireGuard and a Squid proxy.**<br>
 Pure Python standard library — no pip packages, no build step, four languages.
 
+[![verify](https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/actions/workflows/verify.yml/badge.svg)](https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/actions/workflows/verify.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB.svg)
 ![Dependencies: none](https://img.shields.io/badge/dependencies-stdlib%20only-brightgreen.svg)
@@ -170,7 +171,7 @@ The panel and WireGuard run in one container. The first start creates
 only update the panel code and never touch your data.
 
 ```bash
-git clone https://github.com/vahidbakhtiari-ux/WG-PROXY-PANEL.git
+git clone https://github.com/alibakhtiari-ux/WG-PROXY-PANEL.git
 cd WG-PROXY-PANEL/docker
 sudo bash host-setup.sh
 (umask 077 && cp .env.example .env)

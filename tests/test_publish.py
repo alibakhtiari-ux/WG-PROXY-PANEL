@@ -229,6 +229,97 @@ class PublishToolingTests(unittest.TestCase):
                 self.assertEqual(body.count(addr), 1, "%s: %s" % (pub, addr))
                 self.assertIn(addr, fences, "%s: آدرس بیرونِ بلوکِ کد" % pub)
 
+    def test_github_sync_never_rewrites_public_history(self):
+        """از ۲۶ سپتامبر مخزن Public است: به‌روزرسانی باید کامیتِ معمولی با
+        والد باشد (نه یتیم ⇒ force-push)، بدونِ تگِ خصوصی، و هرگز push نکند."""
+        sh = _read(PUB, "sync-github-folder.sh")
+        code = "\n".join(ln for ln in sh.split("\n")
+                         if not ln.lstrip().startswith("#"))
+        self.assertIn("--no-tags", code)
+        self.assertIn("read-tree -u --reset", code)
+        for bad in ("git push", "push -f", "--force", "remote add",
+                    "--orphan", "reset --hard FETCH_HEAD"):
+            self.assertNotIn(bad, code, "ابزارِ همگام‌سازی نباید %r داشته باشد" % bad)
+
+    def test_github_sync_stacks_a_normal_commit(self):
+        import subprocess
+        import tempfile
+        tmp = tempfile.mkdtemp(prefix="wgsync-")
+        dest = os.path.join(tmp, "dest")
+        env = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@example.invalid",
+                   GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@example.invalid")
+        def git(*a):
+            return subprocess.run(["git", "-C", dest] + list(a), env=env,
+                                  capture_output=True, text=True, check=True).stdout.strip()
+        try:
+            subprocess.run(["git", "init", "-q", "-b", "main", dest], check=True)
+            git("fetch", "-q", "--no-tags", REPO, "public")
+            git("reset", "-q", "--hard", "FETCH_HEAD")
+            with open(os.path.join(dest, "stale.txt"), "w") as f:
+                f.write("x")
+            git("add", "stale.txt")
+            git("commit", "-q", "-m", "older published state")
+            base = git("rev-parse", "HEAD")
+            run = lambda: subprocess.run(
+                ["bash", os.path.join(PUB, "sync-github-folder.sh"),
+                 "Test update", dest], capture_output=True, text=True)
+            r = run()
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertEqual(git("rev-parse", "HEAD^"), base, "والد باید کامیتِ قبلی باشد")
+            self.assertEqual(git("rev-parse", "HEAD^{tree}"),
+                             subprocess.run(["git", "-C", REPO, "rev-parse", "public^{tree}"],
+                                            capture_output=True, text=True).stdout.strip())
+            self.assertFalse(os.path.exists(os.path.join(dest, "stale.txt")))
+            self.assertEqual(git("tag", "-l"), "", "هیچ تگی نباید وارد شود")
+            self.assertEqual(git("log", "-1", "--format=%ae"), "abghub@pm.me")
+            r2 = run()
+            self.assertEqual(r2.returncode, 0, r2.stdout + r2.stderr)
+            self.assertIn("هم‌گام", r2.stdout)
+        finally:
+            import shutil
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_contributing_js_check_passes_on_healthy_code(self):
+        """خانواده‌ی «دستورِ مستندی که روی کدِ سالم هم خطا می‌دهد»: نسخه‌ی قبلیِ
+        CONTRIBUTING هر <script> ِ کلِ فایل را برمی‌داشت — از جمله کامنت‌های
+        پایتون — و node همیشه SyntaxError می‌داد. اینجا خودِ بلوکِ مستند
+        عیناً روی کپیِ wg_panel.py اجرا می‌شود."""
+        import shutil
+        import subprocess
+        import tempfile
+        if not shutil.which("node"):
+            self.skipTest("node نیست")
+        body = _read(REPO, "CONTRIBUTING.md")
+        blocks = [b for b in re.findall(r"```bash\n(.*?)```", body, re.S)
+                  if "node --check" in b]
+        self.assertEqual(len(blocks), 1, "بلوکِ بررسیِ JS در CONTRIBUTING پیدا نشد")
+        tmp = tempfile.mkdtemp(prefix="wgcontrib-")
+        try:
+            shutil.copy(os.path.join(REPO, "wg_panel.py"), tmp)
+            r = subprocess.run(["bash", "-c", blocks[0]], cwd=tmp,
+                               capture_output=True, text=True, timeout=120)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertNotIn("FAILED", r.stdout + r.stderr)
+            made = sorted(os.listdir(os.path.join(tmp, "wgjs-check")))
+            self.assertIn("tv3d.mjs", made)
+            self.assertTrue(any(m.startswith("PAGE_HTML_") for m in made))
+            self.assertTrue(any(m.startswith("SHARE_HTML_") for m in made))
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_every_repository_link_names_the_same_owner(self):
+        """۲۶ سپتامبر نامِ حسابِ گیت‌هاب عوض شد (vahidbakhtiari-ux ⇐
+        alibakhtiari-ux) و لینک‌ها در چند فایل پخش بودند. همه باید یک مالک
+        داشته باشند، وگرنه یکی بی‌صدا به حسابی می‌رود که شاید مالِ کسِ دیگری شود."""
+        texts = [_read(PUB, s) for s in self.READMES.values()]
+        for root, _dirs, files in os.walk(os.path.join(REPO, ".github")):
+            texts += [_read(root, n) for n in files]
+        texts += [_read(REPO, n) for n in ("CONTRIBUTING.md", "SECURITY.md")]
+        owners = set()
+        for t in texts:
+            owners |= set(re.findall(r"github\.com/([\w.-]+)/WG-PROXY-PANEL", t))
+        self.assertEqual(len(owners), 1, "مالک‌های ناهمسان: %s" % sorted(owners))
+
     def test_dockerfile_transform_assumption_holds(self):
         """اسکریپت ۴ ارجاع به ansible/ را به deploy/ می‌برد و اگر تعداد
         فرق کند می‌میرد. اینجا همان فرض را زودتر می‌سنجیم — و مهم‌تر،
@@ -711,23 +802,21 @@ class PublicMetaFileTests(unittest.TestCase):
                             or k.startswith(d) for k in keep),
                         "ورک‌فلو %s را می‌خواهد ولی منتشر نمی‌شود" % d)
 
-    def test_the_workflow_says_it_is_inert(self):
-        """بدونِ این جمله، خواننده فرض می‌کند CI دارد اجرا می‌شود.
-
-        مخزن طبقِ قاعده‌ی ثابت هیچ ریموتی ندارد، پس هیچ رانری این را
-        برنمی‌دارد. تیکِ سبزی که وجود ندارد بدتر از نبودِ تیک است.
-        """
-        wf = os.path.join(REPO, ".github", "workflows")
-        if not os.path.isdir(wf):
-            self.skipTest("ورک‌فلو ساخته نشده")
-        for name in sorted(os.listdir(wf)):
-            if not name.endswith((".yml", ".yaml")):
-                continue
-            head = "\n".join(_read(wf, name).splitlines()[:12])
-            with self.subTest(f=name):
-                self.assertTrue(
-                    "اجرا نمی‌شود" in head or "inert" in head.lower(),
-                    "ورک‌فلو نمی‌گوید که امروز اجرا نمی‌شود")
+    def test_ci_tests_the_documented_python_floor(self):
+        """از ۲۶ سپتامبر ۲۰۲۶ مخزن روی گیت‌هاب است و این ورک‌فلو واقعاً اجرا
+        می‌شود (جایگزینِ گاردِ قدیمیِ «بگو اجرا نمی‌شود»). README کمینه‌ی
+        پایتون را اعلام می‌کند؛ CI باید دقیقاً همان کمینه را هم بسنجد، وگرنه
+        ادعای README آزموده نمی‌شود."""
+        wf = _read(REPO, ".github", "workflows", "verify.yml")
+        m = re.search(r"Python (\d+\.\d+) or newer", _read(PUB, "README.public.md"))
+        self.assertIsNotNone(m, "README کمینه‌ی پایتون را اعلام نمی‌کند")
+        assert m is not None
+        mx = re.search(r"python-version:\s*\[([^\]]+)\]", wf)
+        self.assertIsNotNone(mx, "ورک‌فلو ماتریسِ نسخه‌ی پایتون ندارد")
+        assert mx is not None
+        self.assertIn('"%s"' % m.group(1), mx.group(1))
+        head = "\n".join(wf.splitlines()[:12])
+        self.assertNotIn("اجرا نمی‌شود", head, "توضیحِ کهنه‌ی «اجرا نمی‌شود»")
 
     def test_security_md_has_no_placeholder_contact(self):
         """آدرسِ جای‌نگه‌دار از نبودِ فایل بدتر است.

@@ -1,32 +1,34 @@
-# ⚠️ این فایل امروز **هیچ‌جا اجرا نمی‌شود.**
+# Runs on every push and pull request.
 #
-# مخزن عمداً هیچ ریموتِ گیتی ندارد و روی هیچ میزبانی نیست، پس هیچ رانری این
-# را برنمی‌دارد. اگر روزی میزبانی شد، همین‌جا سبز/قرمز می‌دهد. تا آن روز
-# دروازه‌ی واقعی همان باتریِ محلیِ ده‌گامه است.
+# Python 3.10 is the documented floor (Ubuntu 22.04's system Python) and
+# 3.12 is Ubuntu 24.04's, so both are tested. The panel uses only the
+# standard library, so there is nothing to install.
 #
-# چرا فقط سه گام و نه کلِ باتری: باتری در `.claude/skills/verify-battery/`
-# زندگی می‌کند و آن پوشه **لایه‌ی عملیاتیِ همین استقرار** است و در شاخه‌ی
-# `public` منتشر نمی‌شود. ورک‌فلویی که آن مسیر را صدا بزند روی شاخه‌ی عمومی
-# از روزِ اول قرمز است. کپیِ خلاصه‌ای از باتری هم ساخته نشد: این مخزن قبلاً
-# یاد گرفته که نسخه‌ی دوم دریفت می‌کند.
-#
-# سه گامِ زیر عمداً همان‌هایی‌اند که در یک کلونِ تمیز و بدونِ `.claude/`
-# واقعاً سبز می‌شوند.
+# What this cannot see: errors inside the JavaScript that lives in Python
+# strings. py_compile passes on broken JavaScript — see CONTRIBUTING.md for
+# how to check it before opening a pull request.
 name: verify
 
 on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   verify:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.12"]
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
 
       - name: unit tests
         run: python3 -m unittest discover -s tests -v
@@ -34,9 +36,8 @@ jobs:
       - name: py_compile
         run: python3 -m py_compile wg_panel.py
 
-      # همان جاروی گامِ ۴ باتری، بازنویسی‌شده تا به `.claude/` وابسته نباشد.
-      # نصاب‌ها و اسکریپت‌های docker/ را هیچ گیتِ دیگری اجرا نمی‌کند؛
-      # `bash -n` تنها دروازه‌شان است.
+      # The installers and docker/ scripts are not exercised by the tests;
+      # a syntax check is their only gate.
       - name: bash -n
         run: |
           n=0
