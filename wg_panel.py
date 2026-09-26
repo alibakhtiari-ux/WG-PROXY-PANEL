@@ -5732,6 +5732,10 @@ I18N = {
                                  "Allow",
                                  "Разрешить",
                                  "放行"),
+    # برچسبِ مبدأِ «استخر» در جدولِ مصرفِ AI — warp_src_label خودِ کلید را
+    # برمی‌گرداند و مرورگر/ربات ترجمه‌اش می‌کنند (نامِ peer همیشه «iface/نام»
+    # است، پس با این کلید قاطی نمی‌شود)
+    "ui.warp.src.pool": ("استخر VPN", "VPN pool", "Пул VPN", "VPN 地址池"),
 
     # ═══ پیام‌های خطای API — گلوگاهِ ترجمه در Handler._json ═══
     "api.err.addr": ("آدرس نامعتبر: {v}",
@@ -5746,18 +5750,18 @@ I18N = {
                              "Invalid client AllowedIPs: {v}",
                              "Некорректные AllowedIPs клиента: {v}",
                              "客户端 AllowedIPs 无效：{v}"),
-    "api.err.apply.changed": ("فایل عوض شد ولی اعمال زنده خطا داد: ",
-                                "The file changed but applying it live failed: ",
-                                "Файл изменён, но применение вживую не удалось: ",
-                                "文件已更改，但实时生效失败："),
-    "api.err.apply.edited": ("فایل ویرایش شد ولی اعمال زنده خطا داد: ",
-                               "The file was edited but applying it live failed: ",
-                               "Файл изменён, но применение вживую не удалось: ",
-                               "文件已编辑，但实时生效失败："),
-    "api.err.apply.written": ("فایل نوشته شد ولی اعمال زنده خطا داد: ",
-                                "The file was written but applying it live failed: ",
-                                "Файл записан, но применение вживую не удалось: ",
-                                "文件已写入，但实时生效失败："),
+    "api.err.apply.changed": ("فایل عوض شد ولی اعمال زنده خطا داد: {v}",
+                                "The file changed but applying it live failed: {v}",
+                                "Файл изменён, но применение вживую не удалось: {v}",
+                                "文件已更改，但实时生效失败：{v}"),
+    "api.err.apply.edited": ("فایل ویرایش شد ولی اعمال زنده خطا داد: {v}",
+                               "The file was edited but applying it live failed: {v}",
+                               "Файл изменён, но применение вживую не удалось: {v}",
+                               "文件已编辑，但实时生效失败：{v}"),
+    "api.err.apply.written": ("فایل نوشته شد ولی اعمال زنده خطا داد: {v}",
+                                "The file was written but applying it live failed: {v}",
+                                "Файл записан, но применение вживую не удалось: {v}",
+                                "文件已写入，但实时生效失败：{v}"),
     "api.err.arch.bad": ("آرشیو معتبر نیست (tar.gz خراب)",
                            "The archive is not valid (corrupt tar.gz)",
                            "Архив недействителен (повреждён tar.gz)",
@@ -5854,10 +5858,10 @@ I18N = {
                                   "Keepalive must be between 0 and 600 seconds",
                                   "Keepalive должен быть от 0 до 600 секунд",
                                   "Keepalive 必须在 0 到 600 秒之间"),
-    "api.err.keygen": ("خطا در تولید کلید: ",
-                         "Error generating the key: ",
-                         "Ошибка генерации ключа: ",
-                         "生成密钥时出错："),
+    "api.err.keygen": ("خطا در تولید کلید: {v}",
+                         "Error generating the key: {v}",
+                         "Ошибка генерации ключа: {v}",
+                         "生成密钥时出错：{v}"),
     "api.err.listempty": ("فهرست نمی‌تواند خالی بماند",
                             "The list cannot be left empty",
                             "Список не может остаться пустым",
@@ -6345,6 +6349,237 @@ I18N = {
                         "Error writing the file: {v}",
                         "Ошибка записи файла: {v}",
                         "写入文件时出错：{v}"),
+    "api.err.bulk.item": ("{name}: {why}", "{name}: {why}",
+                          "{name}: {why}", "{name}：{why}"),
+    "api.err.mega.sha": ("sha256 نمی‌خواند (دانلود={got}، ثبت‌شده={want}) — "
+                         "بازیابی متوقف شد",
+                         "sha256 mismatch (downloaded={got}, recorded={want}) — "
+                         "restore stopped",
+                         "sha256 не совпадает (скачано={got}, записано={want}) — "
+                         "восстановление остановлено",
+                         "sha256 不匹配（下载={got}，记录={want}）——已停止恢复"),
+    "api.err.tg.send": ("تلگرام: {v}", "Telegram: {v}", "Telegram: {v}",
+                        "Telegram：{v}"),
+    "api.err.warp.t.empty": ("مقدار خالی است", "The value is empty",
+                             "Значение пустое", "值为空"),
+    "api.err.warp.t.long": ("خیلی بلند است", "It is too long",
+                            "Слишком длинное значение", "过长"),
+    "api.err.warp.t.chars": ("کاراکترِ غیرمجاز دارد",
+                             "It contains a disallowed character",
+                             "Содержит недопустимый символ",
+                             "包含不允许的字符"),
+    "api.err.warp.t.ipfmt": ("قالبِ IP یا رنج نامعتبر است",
+                             "Invalid IP or range format",
+                             "Неверный формат IP или диапазона",
+                             "IP 或网段格式无效"),
+    "api.err.warp.t.v4only": ("فقط IPv4 پشتیبانی می‌شود",
+                              "Only IPv4 is supported",
+                              "Поддерживается только IPv4", "仅支持 IPv4"),
+    "api.err.warp.t.wide": ("رنج خیلی پهن است (حداکثر /{max} مجاز است) — رنجِ "
+                            "پهن کلِ ترافیک را به تونل می‌برد",
+                            "The range is too wide (at most /{max} is allowed) — "
+                            "a wide range sends all traffic into the tunnel",
+                            "Диапазон слишком широкий (допустимо не шире /{max}) — "
+                            "широкий диапазон уводит в туннель весь трафик",
+                            "网段过宽（最宽允许 /{max}）——过宽的网段会把所有流量送进隧道"),
+    "api.err.warp.t.private": ("رنجِ خصوصی/رزرو مجاز نیست — مسیریابی‌اش به تونل، "
+                               "شبکهٔ داخلی و کاربران را قطع می‌کند",
+                               "Private or reserved ranges are not allowed — "
+                               "routing them into the tunnel cuts off the "
+                               "internal network and the users",
+                               "Частные и зарезервированные диапазоны запрещены — "
+                               "их маршрутизация в туннель отрежет внутреннюю "
+                               "сеть и пользователей",
+                               "不允许私有或保留网段——将其路由进隧道会切断内网和用户"),
+    "api.err.warp.t.overlap": ("با فضای حیاتیِ سرور همپوشانی دارد ({net}: "
+                               "endpointِ وارپ / resolver / سابنتِ سرور) و "
+                               "باعثِ حلقه یا قطعیِ کامل می‌شود",
+                               "It overlaps the server’s critical space ({net}: "
+                               "WARP endpoint / resolver / server subnet) and "
+                               "would cause a loop or a full outage",
+                               "Пересекается с критическим адресным пространством "
+                               "сервера ({net}: endpoint WARP / резолвер / "
+                               "подсеть сервера) и вызовет петлю или полный "
+                               "обрыв связи",
+                               "与服务器关键地址空间重叠（{net}：WARP 端点 / 解析器 / "
+                               "服务器子网），会造成环路或完全断网"),
+    "api.err.warp.t.domain": ("نامِ دامنه معتبر نیست",
+                              "The domain name is not valid",
+                              "Некорректное доменное имя", "域名无效"),
+    "api.err.warp.t.entry": ("«{entry}»: {why}", "“{entry}”: {why}",
+                             "«{entry}»: {why}", "“{entry}”：{why}"),
+    "api.err.warp.preset.empties": ("حذفِ این سرویس فهرست را خالی می‌کند — "
+                                    "دستِ‌کم یک مقصد باید بماند",
+                                    "Removing this service would empty the "
+                                    "list — at least one target must remain",
+                                    "Удаление этого сервиса опустошит список — "
+                                    "должна остаться хотя бы одна цель",
+                                    "移除此服务会清空列表——至少要保留一个目标"),
+    "api.err.bot.owner_locked": ("کاربرِ مالکِ ربات از پنل قابلِ تغییر/حذف "
+                                 "نیست؛ تغییرِ مالک فقط مستقیم در config روی "
+                                 "سرور ممکن است",
+                                 "The bot owner cannot be changed or removed "
+                                 "from the panel; the owner can only be changed "
+                                 "directly in the config on the server",
+                                 "Владельца бота нельзя изменить или удалить из "
+                                 "панели; сменить владельца можно только "
+                                 "напрямую в config на сервере",
+                                 "无法在面板中更改或删除机器人所有者；只能直接在服务器上的 "
+                                 "config 中更换所有者"),
+    "api.err.bot.admin_grant": ("اعطای نقشِ «مدیر» به کاربرِ ربات فقط در "
+                                "اختیارِ ادمینِ کاملِ پنل است (مجوزِ «کاربرانِ "
+                                "ربات» به‌تنهایی کافی نیست)",
+                                "Only a full panel admin can give a bot user "
+                                "the «admin» role (the «Bot users» permission "
+                                "alone is not enough)",
+                                "Выдать пользователю бота роль «администратор» "
+                                "может только полный администратор панели "
+                                "(одного права «Пользователи бота» недостаточно)",
+                                "只有面板的完整管理员才能授予机器人用户“管理员”角色"
+                                "（仅有“机器人用户”权限不够）"),
+    "api.err.login_chat.format": ("شناسهٔ چت باید عددیِ مثبت و با ارقامِ "
+                                  "انگلیسی باشد (چتِ خصوصیِ خودِ کاربر با "
+                                  "ربات؛ گروه و کانال پذیرفته نمی‌شود)",
+                                  "The chat ID must be a positive number in "
+                                  "Latin digits (the user’s own private chat "
+                                  "with the bot; groups and channels are not "
+                                  "accepted)",
+                                  "ID чата должен быть положительным числом "
+                                  "латинскими цифрами (личный чат самого "
+                                  "пользователя с ботом; группы и каналы не "
+                                  "принимаются)",
+                                  "聊天 ID 必须是用拉丁数字书写的正数（用户本人与机器人的私聊；"
+                                  "不接受群组和频道）"),
+    "api.err.login_chat.no_token": ("اول باید توکنِ ربات را در بخشِ «🔔 هشدارها» "
+                                    "تنظیم کنید",
+                                    "Set the bot token in the «🔔 Alerts» "
+                                    "section first",
+                                    "Сначала задайте токен бота в разделе "
+                                    "«🔔 Оповещения»",
+                                    "请先在“🔔 告警”部分设置机器人令牌"),
+    "api.err.login_chat.send": ("ارسالِ پیام به این چت ممکن نشد ({v}). کاربر "
+                                "باید اول در تلگرام رباتِ پنل را باز کند و "
+                                "/start بزند.",
+                                "Could not send a message to this chat ({v}). "
+                                "The user must first open the panel bot in "
+                                "Telegram and send /start.",
+                                "Не удалось отправить сообщение в этот чат "
+                                "({v}). Пользователь должен сначала открыть "
+                                "бота панели в Telegram и отправить /start.",
+                                "无法向此聊天发送消息（{v}）。用户需先在 Telegram 中打开"
+                                "面板机器人并发送 /start。"),
+    "api.err.svc.domain_bad": ("دامنه نامعتبر است (نمونه: cisco.com)",
+                               "Invalid domain (example: cisco.com)",
+                               "Некорректный домен (пример: cisco.com)",
+                               "域名无效（示例：cisco.com）"),
+    "api.err.svc.ip_not_domain": ("به‌جای IP یک دامنه وارد کنید",
+                                  "Enter a domain rather than an IP",
+                                  "Введите домен, а не IP",
+                                  "请输入域名而不是 IP"),
+    "api.err.svc.unresolved": ("دامنه resolve نشد (اشتباه یا غیرقابل‌دسترس)",
+                               "The domain did not resolve (wrong or "
+                               "unreachable)",
+                               "Домен не разрешается (ошибка в имени или "
+                               "недоступен)",
+                               "域名无法解析（错误或不可达）"),
+    "api.err.svc.noaddr": ("دامنه resolve نشد", "The domain did not resolve",
+                           "Домен не разрешается", "域名无法解析"),
+    "api.err.svc.nonpublic": ("دامنه به IP غیرعمومی اشاره می‌کند (رد شد)",
+                              "The domain points to a non-public IP (rejected)",
+                              "Домен указывает на непубличный IP (отклонено)",
+                              "域名指向非公网 IP（已拒绝）"),
+    "api.err.svc.exists": ("این سرویس از قبل در فهرست است",
+                           "This service is already in the list",
+                           "Этот сервис уже есть в списке",
+                           "该服务已在列表中"),
+    "api.err.svc.max": ("سقفِ سرویس‌های سفارشی (۳۰) پر است",
+                        "The custom-service limit (30) has been reached",
+                        "Достигнут лимит пользовательских сервисов (30)",
+                        "自定义服务已达上限（30）"),
+
+    # ═══ پیام‌های موفقیتِ API (خانهٔ message) — همان گلوگاهِ Handler._json ═══
+    "api.ok.done": ("انجام شد", "Done", "Готово", "完成"),
+    "api.ok.nochange": ("بدون تغییر", "No change", "Без изменений", "无变化"),
+    "api.ok.saved.offline": ("در فایل ذخیره شد (اینترفیس خاموش است؛ با "
+                             "روشن‌شدن اعمال می‌شود)",
+                             "Saved to the file (the interface is down; it "
+                             "takes effect when it comes up)",
+                             "Сохранено в файл (интерфейс выключен; изменения "
+                             "применятся при его включении)",
+                             "已保存到文件（接口已关闭；启用后生效）"),
+    "api.ok.deleted": ("حذف شد", "Deleted", "Удалено", "已删除"),
+    "api.ok.psk.had": ("از قبل PSK داشت", "It already had a PSK",
+                       "PSK уже был задан", "已有 PSK"),
+    "api.ok.psk.none": ("PSK نداشت", "It had no PSK", "PSK не был задан",
+                        "原本没有 PSK"),
+    "api.ok.pw.changed": ("رمز عبور تغییر کرد", "The password was changed",
+                          "Пароль изменён", "密码已更改"),
+    "api.ok.sent": ("ارسال شد", "Sent", "Отправлено", "已发送"),
+    "api.ok.report.queued": ("در حالِ ساخت و ارسال — چند ثانیه‌ی دیگر تلگرام "
+                             "را ببینید",
+                             "Building and sending — check Telegram in a few "
+                             "seconds",
+                             "Отчёт готовится и отправляется — проверьте "
+                             "Telegram через несколько секунд",
+                             "正在生成并发送——几秒后请查看 Telegram"),
+    "api.ok.restore": ("{n} فایل بازیابی شد (وضعیت قبلی در restore-backups "
+                       "ذخیره شد)",
+                       "{n} file(s) restored (the previous state was saved in "
+                       "restore-backups)",
+                       "Восстановлено файлов: {n} (прежнее состояние "
+                       "сохранено в restore-backups)",
+                       "已恢复 {n} 个文件（之前的状态已保存到 restore-backups）"),
+    "api.ok.restore.parts": ("{n} فایل بازیابی شد ({skipped} فایلِ خارج از "
+                             "اجزای انتخابی دست نخورد؛ وضعیت قبلی در "
+                             "restore-backups ذخیره شد)",
+                             "{n} file(s) restored ({skipped} file(s) outside "
+                             "the selected components left untouched; the "
+                             "previous state was saved in restore-backups)",
+                             "Восстановлено файлов: {n} (вне выбранных "
+                             "компонентов не тронуто: {skipped}; прежнее "
+                             "состояние сохранено в restore-backups)",
+                             "已恢复 {n} 个文件（所选组件之外的 {skipped} 个文件未改动；"
+                             "之前的状态已保存到 restore-backups）"),
+    "api.ok.restore.parts.sha": ("{n} فایل بازیابی شد ({skipped} فایلِ خارج از "
+                                 "اجزای انتخابی دست نخورد؛ وضعیت قبلی در "
+                                 "restore-backups ذخیره شد)؛ sha256 تأیید شد",
+                                 "{n} file(s) restored ({skipped} file(s) "
+                                 "outside the selected components left "
+                                 "untouched; the previous state was saved in "
+                                 "restore-backups); sha256 verified",
+                                 "Восстановлено файлов: {n} (вне выбранных "
+                                 "компонентов не тронуто: {skipped}; прежнее "
+                                 "состояние сохранено в restore-backups); "
+                                 "sha256 подтверждён",
+                                 "已恢复 {n} 个文件（所选组件之外的 {skipped} 个文件未改动；"
+                                 "之前的状态已保存到 restore-backups）；sha256 已验证"),
+    "api.ok.restore.parts.nosha": ("{n} فایل بازیابی شد ({skipped} فایلِ خارج "
+                                   "از اجزای انتخابی دست نخورد؛ وضعیت قبلی در "
+                                   "restore-backups ذخیره شد)؛ ⚠️ این نسخه "
+                                   "هشِ ثبت‌شده ندارد",
+                                   "{n} file(s) restored ({skipped} file(s) "
+                                   "outside the selected components left "
+                                   "untouched; the previous state was saved in "
+                                   "restore-backups); ⚠️ this snapshot has no "
+                                   "recorded hash",
+                                   "Восстановлено файлов: {n} (вне выбранных "
+                                   "компонентов не тронуто: {skipped}; прежнее "
+                                   "состояние сохранено в restore-backups); "
+                                   "⚠️ у этой копии нет записанного хеша",
+                                   "已恢复 {n} 个文件（所选组件之外的 {skipped} 个文件未改动；"
+                                   "之前的状态已保存到 restore-backups）；⚠️ 此备份没有记录的哈希"),
+    "api.ok.warp.preset.all": ("همه‌ی دامنه‌های این سرویس از قبل هستند",
+                               "All of this service’s domains are already "
+                               "present",
+                               "Все домены этого сервиса уже есть в списке",
+                               "该服务的所有域名都已存在"),
+    "api.ok.warp.preset.none": ("هیچ‌کدام از دامنه‌های این سرویس در فهرست "
+                                "نبود",
+                                "None of this service’s domains were in the "
+                                "list",
+                                "Ни одного домена этого сервиса не было в "
+                                "списке",
+                                "列表中没有该服务的任何域名"),
 
     # ═══ رباتِ تلگرام — زبان per-chat (bot_lang/bot_set_lang) ═══
     "bot.menu": ("منو", "Menu", "Меню", "菜单"),
@@ -8876,6 +9111,45 @@ def aerr(key, **params):
                       separators=(",", ":"))
 
 
+def api_text(v, lang):
+    """کلیدِ api.* (ساده یا خروجیِ aerr) را به متنِ زبانِ lang می‌برد.
+
+    هرچه کلید نباشد دست‌نخورده برمی‌گردد، پس پیامِ خامِ سیستم (خروجیِ wg،
+    متنِ خطای OS) از این مسیر سالم رد می‌شود. پارامتری که خودش کلید است
+    («چرا»ی یک خطای بیرونی‌تر) هم ترجمه می‌شود. گلوگاهِ مشترکِ Handler._msg،
+    ربات (BotThread.M) و هشدارها.
+    """
+    if not isinstance(v, str) or not v:
+        return v
+    if v.startswith("api.") and v in I18N:
+        return t(v, lang)
+    if v.startswith('{"k":"api.'):
+        try:
+            o = json.loads(v)
+            p = {k: api_text(x, lang) for k, x in (o.get("p") or {}).items()}
+            return t(o["k"], lang, **p)
+        except (ValueError, KeyError, TypeError, AttributeError):
+            return v
+    return v
+
+
+def audit_detail_text(d, lang):
+    """پارامترهای api.* ِ جزئیاتِ ممیزی را پیش از رفتن به مرورگر ترجمه می‌کند.
+
+    کاتالوگِ مرورگر فقط ui.* دارد، پس «ناموفق: {why}» با why=کلیدِ api.*
+    خودِ کلید را نشان می‌داد. قالبِ adet دست نمی‌خورد تا مرورگر همچنان
+    رندرش کند؛ فقط مقدارِ پارامترها متن می‌شوند.
+    """
+    if not isinstance(d, str) or not d.startswith('{"k":"ui.'):
+        return api_text(d, lang)
+    try:
+        o = json.loads(d)
+        o["p"] = {k: api_text(x, lang) for k, x in (o.get("p") or {}).items()}
+    except (ValueError, TypeError, AttributeError):
+        return d
+    return json.dumps(o, ensure_ascii=False, separators=(",", ":"))
+
+
 def adet(key, **params):
     """جزئیاتِ ممیزی به‌شکلِ «کلید + پارامتر»، نه متنِ آمادهٔ یک‌زبانه.
 
@@ -9472,7 +9746,7 @@ def set_user_password(user, new):
         user["salt"] = secrets.token_hex(16)
         user["hash"] = hash_password(new, user["salt"])
         user["stoken"] = secrets.token_hex(8)  # ابطال همه‌ی سشن‌های قبلی
-    return True, "رمز عبور تغییر کرد"
+    return True, "api.ok.pw.changed"
 
 
 # ---- TOTP (RFC 6238، SHA1، گام ۳۰ ثانیه، ۶ رقم)
@@ -10116,7 +10390,7 @@ def set_peer_enabled(iface, name, enable):
         if blk is None:
             return False, aerr("api.err.peer.notinconf", v=name)
         if blk["enabled"] == bool(enable):
-            return True, "بدون تغییر"
+            return True, "api.ok.nochange"
         backup_conf(path)
         for idx in range(blk["start"] + 1, blk["end"] + 1):
             line = lines[idx]
@@ -10150,12 +10424,10 @@ def set_peer_enabled(iface, name, enable):
                                 blk["public_key"], "remove"])
     WATCHER.resync()
     if rc != 0:
-        return False, "api.err.apply.edited" + (err or out)
+        return False, aerr("api.err.apply.edited", v=(err or out))
     log_action("peer %s@%s -> %s" % (name, iface,
                                      "enabled" if enable else "disabled"))
-    msg = "انجام شد" if live else \
-        "در فایل ذخیره شد (اینترفیس خاموش است؛ با روشن‌شدن اعمال می‌شود)"
-    return True, msg
+    return True, ("api.ok.done" if live else "api.ok.saved.offline")
 
 
 def next_free_ip(iface, blocks):
@@ -10342,9 +10614,9 @@ def regen_client_conf(iface, name):
 
 def add_peer(iface, name, use_psk=True, overrides=None):
     if not _valid_iface(iface):
-        return None, "اینترفیس نامعتبر"
+        return None, "api.err.iface"
     if not re.fullmatch(r"[A-Za-z0-9_.\-]{1,32}", name):
-        return None, "نام فقط می‌تواند حروف انگلیسی/عدد/خط تیره باشد (حداکثر ۳۲ کاراکتر)"
+        return None, "api.err.name"
     with _conf_lock:
         path = conf_path(iface)
         with open(path, "r", encoding="utf-8") as f:
@@ -10354,15 +10626,15 @@ def add_peer(iface, name, use_psk=True, overrides=None):
             return None, aerr("api.err.peer.exists", v=name)
         ip = next_free_ip(iface, blocks)
         if not ip:
-            return None, "آدرس IP آزاد در رنج کاربرها پیدا نشد"
+            return None, "api.err.nofreeip"
 
         rc, priv, err = run(["wg", "genkey"])
         if rc != 0:
-            return None, "خطا در تولید کلید: " + err
+            return None, aerr("api.err.keygen", v=err)
         priv = priv.strip()
         ok, pub = wg_pubkey(priv)
         if not ok:
-            return None, "خطا در تولید کلید عمومی"
+            return None, "api.err.pubkey"
         psk = gen_psk() if use_psk else ""
 
         backup_conf(path)
@@ -10392,7 +10664,7 @@ def add_peer(iface, name, use_psk=True, overrides=None):
                 rc, err = 1, perr
         WATCHER.resync()
         if rc != 0:
-            return None, "فایل نوشته شد ولی اعمال زنده خطا داد: " + (err or out)
+            return None, aerr("api.err.apply.written", v=(err or out))
     else:
         WATCHER.resync()
 
@@ -10446,7 +10718,7 @@ def has_client_conf(iface, name):
 
 def delete_peer(iface, name):
     if not _valid_iface(iface):
-        return False, "اینترفیس نامعتبر"
+        return False, "api.err.iface"
     with _conf_lock:
         path = conf_path(iface)
         with open(path, "r", encoding="utf-8") as f:
@@ -10481,7 +10753,7 @@ def delete_peer(iface, name):
             pass
     META.delete(iface, name)
     log_action("peer %s@%s deleted" % (name, iface))
-    return True, "حذف شد"
+    return True, "api.ok.deleted"
 
 
 def rotate_peer_key(iface, name):
@@ -10491,7 +10763,7 @@ def rotate_peer_key(iface, name):
         return None, "api.err.iface"
     rc, priv, err = run(["wg", "genkey"])
     if rc != 0:
-        return None, "api.err.keygen" + err
+        return None, aerr("api.err.keygen", v=err)
     priv = priv.strip()
     ok, new_pub = wg_pubkey(priv)
     if not ok:
@@ -10533,12 +10805,12 @@ def rotate_peer_key(iface, name):
             # چرخشِ کلید بی‌اثر شده و پنل «موفق» گزارش می‌دهد.
             rc, out, err = run(["wg", "set", iface, "peer", old_pub, "remove"])
             if rc != 0:
-                return None, "api.err.apply.changed" + (err or out)
+                return None, aerr("api.err.apply.changed", v=(err or out))
             allowed = blk["allowed_ips"].replace(" ", "")
             rc, out, err = run(["wg", "set", iface, "peer", new_pub,
                                 "allowed-ips", allowed])
             if rc != 0:
-                return None, "api.err.apply.changed" + (err or out)
+                return None, aerr("api.err.apply.changed", v=(err or out))
             if psk:
                 apply_preshared_key(iface, new_pub, psk)
     WATCHER.resync()
@@ -10571,9 +10843,9 @@ def set_peer_psk(iface, name, enable):
                   for i in range(blk["start"], blk["end"] + 1))
         if enable and has:
             regen_client_conf(iface, name)
-            return True, "از قبل PSK داشت"
+            return True, "api.ok.psk.had"
         if not enable and not has:
-            return True, "PSK نداشت"
+            return True, "api.ok.psk.none"
         # پیشوند کامنت را از خط PublicKey تشخیص بده
         pub_idx = next((i for i in range(blk["start"], blk["end"] + 1)
                         if lines[i].strip().lstrip("#").strip()
@@ -10598,7 +10870,7 @@ def set_peer_psk(iface, name, enable):
     WATCHER.resync()
     regen_client_conf(iface, name)
     log_action("peer %s@%s psk %s" % (name, iface, "on" if enable else "off"))
-    return True, "انجام شد"
+    return True, "api.ok.done"
 
 
 def update_peer_ips(iface, name, allowed_ips):
@@ -10643,10 +10915,10 @@ def update_peer_ips(iface, name, allowed_ips):
         rc, out, err = run(["wg", "set", iface, "peer", blk["public_key"],
                             "allowed-ips", new_val])
         if rc != 0:
-            return False, "api.err.apply.changed" + (err or out)
+            return False, aerr("api.err.apply.changed", v=(err or out))
     WATCHER.resync()
     log_action("peer %s@%s allowed-ips -> %s" % (name, iface, new_val))
-    return True, "انجام شد"
+    return True, "api.ok.done"
 
 
 # ---------------------------------------------------- ساخت دسته‌ای کاربر
@@ -10672,7 +10944,7 @@ def bulk_add_peers(iface, prefix, start, count, use_psk=True, overrides=None,
         nm = "%s%d" % (prefix, i)
         res, err = add_peer(iface, nm, use_psk=use_psk, overrides=overrides)
         if err:
-            errors.append("%s: %s" % (nm, err))
+            errors.append(aerr("api.err.bulk.item", name=nm, why=err))
             continue
         if meta_fields:
             META.meta_update(iface, nm, meta_fields)
@@ -10904,7 +11176,7 @@ def restore_from_tar(raw):
     if SAMPLER:
         SAMPLER.refresh_meta()
     log_action("restore: %d file(s) restored" % restored)
-    return True, "%d فایل بازیابی شد (وضعیت قبلی در restore-backups ذخیره شد)" % restored
+    return True, aerr("api.ok.restore", n=restored)
 
 
 # ---- بازیابیِ انتخابی از آرشیوِ شبانه (فرمتِ wg-panel-backup.sh روی MEGA)
@@ -10916,14 +11188,17 @@ CLOUD_RESTORE_COMPONENTS = (
 CLOUD_COMPONENT_KEYS = frozenset(k for k, _ in CLOUD_RESTORE_COMPONENTS)
 
 
-def restore_from_nightly_tar(raw, components):
+def restore_from_nightly_tar(raw, components, ok_key="api.ok.restore.parts"):
     """بازیابیِ اجزای انتخابی از آرشیوِ شبانه (ساختارِ wireguard/ و wg-panel/).
 
     تفاوتِ عمدی با restore_from_tar: آرشیوِ شبانه فایل‌هایی دارد که **هرگز**
     از این مسیر بازیابی نمی‌شوند — config.json (رمزها/رازها؛ بازیابی‌اش یعنی
     برگشتِ رمزهای چرخانده‌شده یا قفل‌شدن) و wg_panel.py (کد؛ بازیابی‌اش یعنی
     downgrade از یک آرشیو راهِ دور). این‌ها skip می‌شوند، نه error — چون
-    حضورشان در آرشیو طبیعی است. خروجی: (ok، پیام)."""
+    حضورشان در آرشیو طبیعی است. خروجی: (ok، پیام).
+
+    ok_key کلیدِ پیامِ موفقیت است (جای‌گیرهای {n} و {skipped})؛ فراخوان
+    نتیجهٔ sha256 را از همین راه در پیام می‌گذارد، نه با الحاقِ متن."""
     import io
     components = [c for c in components if c in CLOUD_COMPONENT_KEYS]
     if not components:
@@ -10990,9 +11265,7 @@ def restore_from_nightly_tar(raw, components):
         SAMPLER.refresh_meta()
     log_action("cloud restore: %d restored, %d skipped (%s)"
                % (restored, skipped, ",".join(components)))
-    return True, ("%d فایل بازیابی شد (%d فایلِ خارج از اجزای انتخابی دست "
-                  "نخورد؛ وضعیت قبلی در restore-backups ذخیره شد)"
-                  % (restored, skipped))
+    return True, aerr(ok_key, n=restored, skipped=skipped)
 
 
 # ------------------------------------------------------ لینک اشتراک امن
@@ -11006,8 +11279,7 @@ def create_share(iface, name, minutes, single, creator):
     if not _valid_iface(iface):
         return None, "api.err.iface"
     if load_client_conf(iface, name) is None:
-        return None, ("این کاربر کانفیگ ذخیره‌شده ندارد؛ ابتدا با «چرخش کلید» "
-                      "کانفیگ بسازید")
+        return None, "api.err.peer.no_saved_conf"
     try:
         minutes = int(minutes)
     except (TypeError, ValueError):
@@ -11205,7 +11477,7 @@ def endpoint_route_state(iface, ep):
 
 def toggle_tunnel(iface, up):
     if not re.fullmatch(r"(wg|awg)[0-9a-zA-Z]+", iface):
-        return False, "نام اینترفیس نامعتبر"
+        return False, "api.err.ifacename"
     unit = tunnel_unit(iface)
     action = "start" if up else "stop"
     rc, out, err = run(["systemctl", action, unit], timeout=60)
@@ -11213,10 +11485,12 @@ def toggle_tunnel(iface, up):
         # جزئیات خطا از ژورنال
         _, jout, _ = run(["journalctl", "-u", unit,
                           "-n", "8", "--no-pager", "-o", "cat"], timeout=10)
-        return False, (err or out or "خطا") + "\n" + jout
+        # متنِ خامِ systemd/ژورنال — پیامِ سیستم است و ترجمه نمی‌شود
+        return False, ((err or out or "systemctl %s: rc=%d" % (action, rc))
+                       + "\n" + jout)
     log_action("tunnel %s -> %s" % (iface, action))
     TUNNELS.update_one(iface)
-    return True, "انجام شد"
+    return True, "api.ok.done"
 
 
 def ensure_user_routes():
@@ -13951,27 +14225,24 @@ def cloud_restore_panel(obj, components, by):
         rc, _, err = run(["rclone", "--config", conf, "copyto",
                           "%s/%s" % (target, obj), local], timeout=300)
         if rc != 0 or not os.path.isfile(local):
-            return False, "دانلود از MEGA ناموفق: %s" % (err or "rc=%s" % rc)[:150]
+            return False, aerr("api.err.mega.dl", v=(err or "rc=%s" % rc)[:150])
         if os.path.getsize(local) > 200 * 1024 * 1024:
             return False, "api.err.arch.big"
         with open(local, "rb") as f:
             raw = f.read()
         # sidecar: اگر هست باید عیناً بخواند؛ اگر نیست فقط هشدار می‌دهیم
-        sha_note = ""
         rc, out, _ = run(["rclone", "--config", conf, "cat",
                           "%s/%s.sha256" % (target, obj)], timeout=60)
         remote_sha = (out or "").strip().split()[0] if rc == 0 and out else ""
         if remote_sha:
             local_sha = hashlib.sha256(raw).hexdigest()
             if local_sha != remote_sha:
-                return False, ("sha256 نمی‌خواند (دانلود=%s، ثبت‌شده=%s) — "
-                               "بازیابی متوقف شد" % (local_sha[:12],
-                                                    remote_sha[:12]))
-            sha_note = "؛ sha256 تأیید شد"
+                return False, aerr("api.err.mega.sha", got=local_sha[:12],
+                                   want=remote_sha[:12])
+            ok_key = "api.ok.restore.parts.sha"
         else:
-            sha_note = "؛ ⚠️ این نسخه هشِ ثبت‌شده ندارد"
-        ok, msg = restore_from_nightly_tar(raw, components)
-        return ok, msg + (sha_note if ok else "")
+            ok_key = "api.ok.restore.parts.nosha"
+        return restore_from_nightly_tar(raw, components, ok_key)
     finally:
         shutil.rmtree(tmpd, ignore_errors=True)
         with _manual_backup_lock:
@@ -14538,7 +14809,8 @@ class AlertManager:
         if html:
             p["parse_mode"] = "HTML"
         ok, res = tg_api(c["bot_token"], "sendMessage", p, iface=ifc)
-        return (True, "ارسال شد") if ok else (False, "تلگرام: %s" % res)
+        return (True, "api.ok.sent") if ok else \
+            (False, aerr("api.err.tg.send", v=res))
 
     def emit(self, text, html=False):
         """صف‌کردنِ هشدار (غیرِمسدودکننده). html=True برای پیام‌های قالب‌دار."""
@@ -15426,16 +15698,15 @@ def warp_preset_apply(pid, enable, by):
     if enable:
         add = [d for d in doms if d not in cur]
         if not add:
-            return True, "همه‌ی دامنه‌های این سرویس از قبل هستند", False
+            return True, "api.ok.warp.preset.all", False
         new = cur + add
     else:
         dset = set(doms)
         new = [t for t in cur if t not in dset]
         if len(new) == len(cur):
-            return True, "هیچ‌کدام از دامنه‌های این سرویس در فهرست نبود", False
+            return True, "api.ok.warp.preset.none", False
         if not new:
-            return False, ("حذفِ این سرویس فهرست را خالی می‌کند — دستِ‌کم یک "
-                           "مقصد باید بماند"), False
+            return False, "api.err.warp.preset.empties", False
     ok, werr = warp_targets_write(new, by)
     if not ok:
         return False, werr, False
@@ -15553,38 +15824,33 @@ def warp_validate_target(raw, protected=None):
     دروازهٔ ورودِ داده به فایلی است که اسکریپتِ rootی می‌خواندش."""
     s = (raw or "").strip().lower()
     if not s:
-        return "", "", "مقدار خالی است"
+        return "", "", "api.err.warp.t.empty"
     if len(s) > 253:
-        return "", "", "خیلی بلند است"
+        return "", "", "api.err.warp.t.long"
     if any(c.isspace() for c in s) or any(c in s for c in "\\;|&$`'\"<>(){}[]*?!"):
-        return "", "", "کاراکترِ غیرمجاز دارد"
+        return "", "", "api.err.warp.t.chars"
     protected = protected if protected is not None else warp_protected_ips()
     # --- IP یا رنج
     if re.fullmatch(r"[0-9./]+", s):
         try:
             net = ipaddress.ip_network(s, strict=False)
         except ValueError:
-            return "", "", "قالبِ IP یا رنج نامعتبر است"
+            return "", "", "api.err.warp.t.ipfmt"
         if net.version != 4:
-            return "", "", "فقط IPv4 پشتیبانی می‌شود"
+            return "", "", "api.err.warp.t.v4only"
         if net.prefixlen < WARP_MIN_PREFIX:
-            return "", "", ("رنج خیلی پهن است (حداکثر /%d مجاز است) — رنجِ "
-                            "پهن کلِ ترافیک را به تونل می‌برد"
-                            % WARP_MIN_PREFIX)
+            return "", "", aerr("api.err.warp.t.wide", max=WARP_MIN_PREFIX)
         if (net.is_private or net.is_loopback or net.is_link_local
                 or net.is_multicast or net.is_reserved
                 or net.network_address.packed[0] == 0):
-            return "", "", ("رنجِ خصوصی/رزرو مجاز نیست — مسیریابی‌اش به تونل، "
-                            "شبکهٔ داخلی و کاربران را قطع می‌کند")
+            return "", "", "api.err.warp.t.private"
         for pn in protected:
             if net.overlaps(pn):
-                return "", "", ("با فضای حیاتیِ سرور همپوشانی دارد (%s: "
-                                "endpointِ وارپ / resolver / سابنتِ سرور) و "
-                                "باعثِ حلقه یا قطعیِ کامل می‌شود" % pn)
+                return "", "", aerr("api.err.warp.t.overlap", net=str(pn))
         return "net", str(net), ""
     # --- دامنه
     if not _WARP_DOMAIN_RE.match(s):
-        return "", "", "نامِ دامنه معتبر نیست"
+        return "", "", "api.err.warp.t.domain"
     return "domain", s, ""
 
 
@@ -15632,7 +15898,7 @@ def warp_targets_write(entries, by):
     for e in entries:
         kind, val, err = warp_validate_target(e, protected)
         if err:
-            return False, "«%s»: %s" % (e, err)
+            return False, aerr("api.err.warp.t.entry", entry=e, why=err)
         if val not in seen:
             seen.add(val)
             clean.append((kind, val))
@@ -15705,7 +15971,8 @@ def warp_apply():
     rc, out, err = run([WARP_SYNC], timeout=120)
     _WARP_CACHE.update(ts=0, data=None)        # کش باطل شود
     if rc != 0:
-        return False, (err or out or "خطای نامشخص").strip()[:200]
+        # متنِ خامِ sync.sh — پیامِ سیستم است و ترجمه نمی‌شود
+        return False, (err or out or "sync.sh: rc=%d" % rc).strip()[:200]
     return True, (out or "").strip()[:200]
 
 
@@ -15968,14 +16235,18 @@ def warp_src_names():
     return mp
 
 
+# برچسبِ مبدأِ استخر خودِ کلیدِ کاتالوگ است؛ مرورگر و ربات ترجمه‌اش می‌کنند
+WARP_POOL_LABEL = "ui.warp.src.pool"
+
+
 def warp_src_label(ip, names=None):
-    """برچسبِ نمایشیِ یک مبدأ: نامِ peer، یا «استخر VPN»، یا خالی (=خام)."""
+    """برچسبِ نمایشیِ یک مبدأ: نامِ peer، یا WARP_POOL_LABEL، یا خالی (=خام)."""
     names = names if names is not None else warp_src_names()
     if ip in names:
         return names[ip]
     try:
         if WARP_POOL_NET is not None and ipaddress.ip_address(ip) in WARP_POOL_NET:
-            return "استخر VPN"
+            return WARP_POOL_LABEL
     except ValueError:
         pass
     return ""
@@ -17740,8 +18011,7 @@ def bot_owner_violation(new_users):
     dup_bad = any(str(u.get("id")) in cur and u.get("role") != "owner"
                   for u in new_users)
     if new != cur or dup_bad:
-        return ("کاربرِ مالکِ ربات از پنل قابلِ تغییر/حذف نیست؛ "
-                "تغییرِ مالک فقط مستقیم در config روی سرور ممکن است")
+        return "api.err.bot.owner_locked"
     return None
 
 
@@ -17762,8 +18032,7 @@ def bot_admin_grant_violation(new_users, privileged):
         new_role = u.get("role")
         old_role = cur.get(str(u.get("id")))
         if role_is_privileged(new_role) and not role_is_privileged(old_role):
-            return ("اعطای نقشِ «مدیر» به کاربرِ ربات فقط در اختیارِ ادمینِ "
-                    "کاملِ پنل است (مجوزِ «کاربرانِ ربات» به‌تنهایی کافی نیست)")
+            return "api.err.bot.admin_grant"
     return None
 
 
@@ -17801,6 +18070,11 @@ class TelegramBot(threading.Thread):
     def T(self, key, **params):
         """متنِ محلی‌شده به زبانِ کاربرِ همین به‌روزرسانی."""
         return t(key, self._lang, **params)
+
+    def M(self, v):
+        """پیامِ برگشتیِ توابعِ مشترک با وب (کلیدِ api.* یا aerr) به زبانِ همین
+        چت، HTML-امن. متنِ خامِ سیستم دست‌نخورده (فقط escape) رد می‌شود."""
+        return esc_html(str(api_text(v, self._lang) or ""))
 
     # ---- ابزارِ ارسال
     def _token(self):
@@ -19049,6 +19323,8 @@ class TelegramBot(threading.Thread):
                 aC = r[3] if len(r) > 3 else 0
                 dC = r[4] if len(r) > 4 else 0
                 lbl = labels.get(ip) or ""
+                if lbl == WARP_POOL_LABEL:
+                    lbl = self.T(lbl)
                 who = ("%s " % esc_html(lbl)) if lbl else ""
                 L.append(self._rtl("%s<code>%s</code>" % (who, esc_html(ip))))
                 L.append(self._rtl(self.T('bot.warp_ai_usage.4', p0=fmt_bytes_srv(aB), p1=fmt_bytes_srv(dB), p2=_fa_num(aC), p3=_fa_num(dC))))
@@ -19268,7 +19544,7 @@ class TelegramBot(threading.Thread):
         if err:
             audit("bot:%s" % frm, "peer", "peer.add.bot",
                   "%s @ %s" % (name, iface), adet("ui.audit.det.failed", why=err), "", False)
-            self.send(chat, "%s" % err, [self._back_row()])
+            self.send(chat, self.M(err), [self._back_row()])
             return
         mf = {}
         if st["quota"]:
@@ -19612,7 +19888,7 @@ class TelegramBot(threading.Thread):
                 return
             kind, val, err = warp_validate_target(text.strip())
             if err:
-                self.send(chat, self._rtl(self.T('bot.convo_step.3') + err),
+                self.send(chat, self._rtl(self.T('bot.convo_step.3') + self.M(err)),
                           [[{"text": self.T('bot.warp_page.3'),
                              "callback_data": "wp:page"}]])
                 return
@@ -19624,7 +19900,7 @@ class TelegramBot(threading.Thread):
                 return
             ok, werr = warp_targets_write(cur + [val], "bot:%s" % frm)
             if not ok:
-                self.send(chat, self._rtl(self.T('bot.convo_step.4') + werr), [self._back_row()])
+                self.send(chat, self._rtl(self.T('bot.convo_step.4') + self.M(werr)), [self._back_row()])
                 return
             aok, msg = warp_apply()
             log_action("warp target added: %s by bot:%s" % (val, frm))
@@ -19761,18 +20037,18 @@ class TelegramBot(threading.Thread):
             ok, msg = delete_peer(iface, name)
             audit("bot:%s" % frm, "peer", "peer.del.bot", tag, "", "", ok)
             self.send(chat, (self.T('bot.apply_wg.1', p0=name)) if ok
-                      else "%s" % msg, [self._back_row()])
+                      else self.M(msg), [self._back_row()])
         elif act == "tog":
             ok, msg = set_peer_enabled(iface, name, st["val"])
             audit("bot:%s" % frm, "peer",
                   "peer.enable.bot" if st["val"] else "peer.disable.bot",
                   tag, "", "", ok)
             self.send(chat, (self.T('bot.apply_wg.2', p0=self.T('bot.px_show.1') if st['val'] else self.T('bot.px_show.2'), p1=name)) if ok
-                      else "%s" % msg, [self._back_row()])
+                      else self.M(msg), [self._back_row()])
         elif act == "key":
             res, err = rotate_peer_key(iface, name)
             if err:
-                self.send(chat, "%s" % err, [self._back_row()])
+                self.send(chat, self.M(err), [self._back_row()])
                 return
             audit("bot:%s" % frm, "peer", "peer.key.rotate.bot", tag, "", "", True)
             conf = res.get("client_conf", "")
@@ -20322,8 +20598,7 @@ def parse_login_chat(raw):
     # [0-9] نه \d — چون \d در پایتون ارقامِ فارسی/عربی («۱۲۳») را هم می‌پذیرد
     # و آن‌وقت شناسه‌ای ذخیره می‌شد که تلگرام هرگز نمی‌شناسد.
     if not re.fullmatch(r"[0-9]{1,20}", s):
-        return "", ("شناسهٔ چت باید عددیِ مثبت و با ارقامِ انگلیسی باشد (چتِ "
-                    "خصوصیِ خودِ کاربر با ربات؛ گروه و کانال پذیرفته نمی‌شود)")
+        return "", "api.err.login_chat.format"
     return s, None
 
 
@@ -20334,7 +20609,7 @@ def verify_login_chat(chat_id, username):
     نرسیدنِ پیام = ردِ ورود)."""
     c = alert_cfg()
     if not c["bot_token"]:
-        return False, ("اول باید توکنِ ربات را در بخشِ «🔔 هشدارها» تنظیم کنید")
+        return False, "api.err.login_chat.no_token"
     ok, res = tg_api(c["bot_token"], "sendMessage",
                      {"chat_id": chat_id, "parse_mode": "HTML",
                       "text": "<b>تأییدِ ورودِ پنل</b>\nاز این پس درخواستِ "
@@ -20343,9 +20618,7 @@ def verify_login_chat(chat_id, username):
                      iface=c["iface"])
     if ok:
         return True, ""
-    return False, ("ارسالِ پیام به این چت ممکن نشد (%s). کاربر باید اول در "
-                   "تلگرام رباتِ پنل را باز کند و /start بزند."
-                   % str(res)[:120])
+    return False, aerr("api.err.login_chat.send", v=str(res)[:120])
 
 
 def user_login_chat(u):
@@ -20562,31 +20835,31 @@ def svc_add_custom(domain, label):
         domain = domain.split("//", 1)[1]
     domain = domain.split("/")[0].split("?")[0].split(":")[0].strip().strip(".")
     if not _DOMAIN_RE.match(domain):
-        return None, "دامنه نامعتبر است (نمونه: cisco.com)"
+        return None, "api.err.svc.domain_bad"
     try:
         ipaddress.ip_address(domain)
-        return None, "به‌جای IP یک دامنه وارد کنید"
+        return None, "api.err.svc.ip_not_domain"
     except ValueError:
         pass
     # resolve و بررسیِ اینکه فقط به IP عمومی اشاره می‌کند (ضدِ SSRF)
     try:
         infos = socket.getaddrinfo(domain, 443, proto=socket.IPPROTO_TCP)
     except Exception:
-        return None, "دامنه resolve نشد (اشتباه یا غیرقابل‌دسترس)"
+        return None, "api.err.svc.unresolved"
     ips = {i[4][0] for i in infos}
     if not ips:
-        return None, "دامنه resolve نشد"
+        return None, "api.err.svc.noaddr"
     for ip in ips:
         if not _is_global_ip(ip):
-            return None, "دامنه به IP غیرعمومی اشاره می‌کند (رد شد)"
+            return None, "api.err.svc.nonpublic"
     key = "c_" + re.sub(r"[^a-z0-9]+", "_", domain).strip("_")
     if key in svc_services():
-        return None, "این سرویس از قبل در فهرست است"
+        return None, "api.err.svc.exists"
     custom = CONFIG.get("svc_custom")
     if not isinstance(custom, dict):
         custom = {}
     if len(custom) >= 30:
-        return None, "سقفِ سرویس‌های سفارشی (۳۰) پر است"
+        return None, "api.err.svc.max"
     with config_txn() as cfg:
         custom[key] = {"label": (label or domain).strip()[:40] or domain,
                        "domains": [domain], "probe": "https://%s/" % domain}
@@ -20713,12 +20986,14 @@ def svc_probe_one(service, iface):
     svc = svc_services().get(service)
     if not svc:
         return None
+    # detail فقط متنِ خامِ curl است؛ nocurl/badiface خودِ کدِ verdict اند و
+    # مرورگر برچسبِ ترجمه‌شده‌شان را از SVC_VERDICT می‌گیرد
     if not shutil.which("curl"):
         return {"ok": False, "latency_ms": None, "http_code": None,
-                "verdict": "nocurl", "detail": "curl روی سرور نیست"}
+                "verdict": "nocurl", "detail": ""}
     if not _valid_public_iface(iface):
         return {"ok": False, "latency_ms": None, "http_code": None,
-                "verdict": "badiface", "detail": "اینترفیس نامعتبر"}
+                "verdict": "badiface", "detail": ""}
     cmd = ["curl", "-4", "-sS", "-o", "/dev/null", "--interface", iface,
            "--max-time", "8", "-A", _UA_PROBE,
            "-w", "%{http_code} %{time_total}", svc["probe"]]
@@ -25146,6 +25421,7 @@ async function loadWarp(){
         var urows = tsrc.map(function(r){
           var ip = r[0], aB = r[1], dB = r[2], aC = r[3], dC = r[4];
           var lbl = lbls[ip] || '';
+          if(lbl === 'ui.warp.src.pool') lbl = _t(lbl);   // WARP_POOL_LABEL
           var who = (lbl ? esc(lbl) + ' <span class="mut" data-ltr>' + esc(ip) + '</span>'
                          : '<span data-ltr>' + esc(ip) + '</span>');
           return '<tr><td>' + who + '</td>' +
@@ -29838,17 +30114,7 @@ class Handler(BaseHTTPRequestHandler):
         هرچه کلید نباشد دست‌نخورده برمی‌گردد، پس پیامِ خامِ سیستم (خروجیِ
         wg، متنِ خطای OS) و رشته‌های دادهٔ معمولی از این مسیر سالم رد می‌شوند.
         """
-        if not isinstance(v, str) or not v:
-            return v
-        if v.startswith("api.") and v in I18N:
-            return t(v, lang)
-        if v.startswith('{"k":"api.'):
-            try:
-                o = json.loads(v)
-                return t(o["k"], lang, **(o.get("p") or {}))
-            except (ValueError, KeyError, TypeError):
-                return v
-        return v
+        return api_text(v, lang)
 
     def _json(self, obj, code=200, extra_headers=None):
         # فقط دو خانهٔ پیام‌رسان ترجمه می‌شوند، نه کلِ payload — /api/stats هر
@@ -30155,6 +30421,9 @@ class Handler(BaseHTTPRequestHandler):
             since = int(days) if days.isdigit() else None
             rows = META.audit_list(category=cat, actor=actor, q=q,
                                    since_days=since, limit=800)
+            lang = self._lang()
+            for r in rows:
+                r["detail"] = audit_detail_text(r.get("detail"), lang)
             self._json({"ok": True, "rows": rows,
                         "actors": META.audit_actors()})
         elif path == "/api/svc/status":
@@ -31328,8 +31597,7 @@ class Handler(BaseHTTPRequestHandler):
             self._audit("settings", "alert.report", "telegram",
                         adet("ui.audit.det.testsend"))
             self._json({"ok": True,
-                        "message": "در حالِ ساخت و ارسال — چند ثانیه‌ی "
-                                   "دیگر تلگرام را ببینید"})
+                        "message": "api.ok.report.queued"})
         elif path == "/api/alerts/get":
             c = alert_cfg()
             tuns = [i for i in list_tunnel_confs()
@@ -31399,7 +31667,7 @@ class Handler(BaseHTTPRequestHandler):
                 iface_override=(ifc if ifc else None))
             self._audit("settings", "alert.test", "", detail, ok=ok)
             self._json({"ok": ok, "error": None if ok else detail,
-                        "detail": detail})
+                        "detail": self._msg(detail, self._lang())})
         elif path == "/api/ecmp/get":
             c = dict(ECMP_GUARD_DEFAULTS)
             c.update(CONFIG.get("ecmp_guard") or {})
@@ -31537,7 +31805,7 @@ class Handler(BaseHTTPRequestHandler):
                              parts=(",".join(comps) or "-")), ok=ok)
             # بازیابی رخدادِ مهمی است — موفق یا ناموفق، خبرش برود
             ALERTS.event("backup",
-                         A('alert.do_POST.1', p0=obj, p1=sess['u'], p2=A('alert.lit.7') if ok else A('alert.lit.8') + msg))
+                         A('alert.do_POST.1', p0=obj, p1=sess['u'], p2=A('alert.lit.7') if ok else A('alert.lit.8') + api_text(msg, alert_lang())))
             self._json({"ok": ok, "error": None if ok else msg,
                         "message": msg if ok else None})
         elif path == "/api/bot/get":
@@ -31570,12 +31838,15 @@ class Handler(BaseHTTPRequestHandler):
                 return
             # ضدِ ارتقای دسترسی: دارنده‌ی صرفِ bot.manage نتواند کسی (از جمله
             # خودش) را مدیرِ ربات کند — نقشِ admin همه‌ی مجوزها را دارد.
-            aerr = bot_admin_grant_violation(users, sess.get("r") == "admin")
-            if aerr:
+            # ⚠️ نامِ «aerr» این‌جا ممنوع است: انتساب به آن در do_POST نام را
+            # محلیِ کلِ تابع می‌کرد و همهٔ فراخوان‌های aerr(...) ِ این متد
+            # UnboundLocalError می‌دادند.
+            gerr = bot_admin_grant_violation(users, sess.get("r") == "admin")
+            if gerr:
                 self._audit("settings", "bot.settings", "",
                             adet("ui.audit.det.escalation"),
                             ok=False)
-                self._json({"ok": False, "error": aerr}, 403)
+                self._json({"ok": False, "error": gerr}, 403)
                 return
             # طرفِ دومِ همان گارد: خاموش‌کردنِ ربات وقتی تأییدِ ورود روشن است
             # یعنی هیچ تپی پردازش نمی‌شود → قفل‌شدنِ ورودِ همه.
@@ -31766,6 +32037,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._audit("peer", "peer.bulk", "%s* @ %s" % (prefix, iface),
                             adet("ui.audit.det.bulkmade", n=len(res["created"])),
                             not res["errors"])
+                lang = self._lang()
+                res["errors"] = [self._msg(e, lang) for e in res["errors"]]
                 self._json({"ok": True, "result": res})
         elif path == "/api/peer/psk":
             iface = str(body.get("iface", "wg1udp"))

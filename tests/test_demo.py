@@ -74,20 +74,19 @@ class DemoToolsTests(unittest.TestCase):
 
 
 class DemoSandboxTests(unittest.TestCase):
-
-    def test_paths_already_inside_a_var_state_dir_are_not_remapped(self):
-        # macOS: پوشه‌ی موقت زیرِ ‎/var/folders است؛ CONFIG_PATH ِ کپی که از
-        # قبل داخلِ پوشه‌ی دموست نباید دوباره زیرِ root برود.
+    def test_paths_already_inside_the_demo_folder_are_left_alone(self):
+        """روی macOS ‎$TMPDIR زیرِ ‎/var/folders است؛ مسیرهای خودِ پنل که همین
+        حالا داخلِ پوشه‌ی دمو اند نباید دوباره پیشوند بگیرند. این شکل روی
+        CI ِ لینوکس (‎/tmp) هرگز پیش نمی‌آید، پس این‌جا شبیه‌سازی می‌شود."""
         import types
-        state = "/var/folders/xx/T/wg-panel-demo"
+        state = "/var/folders/xy/T/wgpanel-demo/demo"
         m = types.SimpleNamespace(
             CONFIG_PATH=state + "/panel/config.json",
-            SQUID_PASSWD="/etc/squid/passwd",
-            SOME_VAR="/var/lib/wg-panel/x")
+            WG_DIR="/etc/wireguard", NOTE="not a path")
         demo.sandbox(m, state)
         self.assertEqual(m.CONFIG_PATH, state + "/panel/config.json")
-        self.assertEqual(m.SQUID_PASSWD, state + "/root/etc/squid/passwd")
-        self.assertEqual(m.SOME_VAR, state + "/root/var/lib/wg-panel/x")
+        self.assertEqual(m.WG_DIR, state + "/root/etc/wireguard")
+        self.assertEqual(m.NOTE, "not a path")
 
 
 class DemoSeedTests(unittest.TestCase):
@@ -98,8 +97,10 @@ class DemoSeedTests(unittest.TestCase):
         cls.saved_env = dict(os.environ)
         cls.saved_mod = sys.modules.get("wg_panel")
         cls.tmp = tempfile.mkdtemp(prefix="wgpanel-demo-test-")
-        # cleanup حتی اگر prepare شکست بخورد اجرا می‌شود (tearDownClass نه)؛
-        # وگرنه PATH ِ ابزارهای ساختگی به تست‌های بعدی نشت می‌کند.
+        # addClassCleanup نه tearDownClass: اگر setUpClass بشکند unittest
+        # tearDownClass را صدا نمی‌زند، و PATH ِ آلوده به ابزارهای ساختگی
+        # (openssl، curl …) به تست‌های بعدیِ همین اجرا نشت می‌کرد — ساختِ
+        # کاربرِ پروکسی در BotTests با openssl ِ ساختگی بی‌صدا شکست می‌خورد.
         cls.addClassCleanup(cls._restore)
         cls.state = os.path.join(cls.tmp, "demo")
         cls.m = demo.prepare(cls.state, reset=True)

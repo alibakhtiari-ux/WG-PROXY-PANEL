@@ -2870,6 +2870,10 @@ class BotTests(unittest.TestCase):
         bot._px_add_cb(1, 1, "go", p)
         self.assertNotIn(1, bot.convo)
         u = m.META.proxy_user_get("pxuser1")
+        self.assertIsNotNone(u, "کاربر ساخته نشد: %s" % (sent[-1:],))
+        # نوعِ سرویس ترجمه شود، نه کلیدِ خامِ bot.proto.* در پیش‌نمایش/پیام
+        self.assertFalse([t for t, _ in sent if "bot.proto." in t],
+                         "کلیدِ خامِ bot.proto.* به کاربر رسید")
         self.assertEqual(u["rate_kbit"], 20000)       # Mbit → kbit
         self.assertEqual(u["quota_gb"], 50.0)
         self.assertEqual(u["protocol"], "https")
@@ -4269,7 +4273,10 @@ class WarpSrcNamesTests(unittest.TestCase):
         _saved = m.WARP_POOL_NET
         m.WARP_POOL_NET = m.ipaddress.ip_network("192.168.64.0/19")
         self.addCleanup(setattr, m, "WARP_POOL_NET", _saved)
-        self.assertEqual(m.warp_src_label("192.168.70.5", names), "استخر VPN")
+        # کلیدِ کاتالوگ، نه متنِ فارسی — مرورگر/ربات به زبانِ خودشان ترجمه می‌کنند
+        self.assertEqual(m.warp_src_label("192.168.70.5", names),
+                         m.WARP_POOL_LABEL)
+        self.assertEqual(m.t(m.WARP_POOL_LABEL, "en"), "VPN pool")
         # ناشناخته → خالی (نمایشِ IPِ خام)
         self.assertEqual(m.warp_src_label("192.168.188.99", names), "")
         # ورودیِ خراب نباید استثنا بدهد
@@ -4676,7 +4683,7 @@ class WarpPresetTests(unittest.TestCase):
         ok2, msg2, aok2 = m.warp_preset_apply("openai", True, "admin")
         self.assertTrue(ok2)
         self.assertFalse(aok2)
-        self.assertIn("از قبل", msg2)
+        self.assertEqual(msg2, "api.ok.warp.preset.all")
 
     def test_disable_removes_only_its_domains(self):
         m = self.m
@@ -4694,7 +4701,7 @@ class WarpPresetTests(unittest.TestCase):
         # فقط دامنه‌های gemini در فهرست‌اند؛ حذفش فهرست را خالی می‌کند
         ok, msg, _a = m.warp_preset_apply("gemini", False, "admin")
         self.assertFalse(ok)
-        self.assertIn("خالی", msg)
+        self.assertEqual(msg, "api.err.warp.preset.empties")
         # فهرست دست‌نخورده مانده
         self.assertEqual(set(m.warp_targets_read()), set(self.gem["domains"]))
 
@@ -4923,7 +4930,7 @@ class CloudRestoreTests(unittest.TestCase):
         ok, msg = m.cloud_restore_panel("wg-panel-20260720-124925.tar.gz",
                                         ["wireguard"], "admin")
         self.assertFalse(ok)
-        self.assertIn("sha256", msg)
+        self.assertIn("sha256", m.api_text(msg, "en"))
         self.assertEqual(open(os.path.join(self.tmp,
                                            "wgtest.conf")).read(), "KEEP")
         # sha درست → بازیابی + یادداشتِ تأیید؛ قفل هم آزاد شده باشد
@@ -4931,7 +4938,8 @@ class CloudRestoreTests(unittest.TestCase):
         ok, msg = m.cloud_restore_panel("wg-panel-20260720-124925.tar.gz",
                                         ["wireguard"], "admin")
         self.assertTrue(ok, msg)
-        self.assertIn("sha256 تأیید شد", msg)
+        self.assertIn("sha256 تأیید شد", m.api_text(msg, "fa"))
+        self.assertIn("sha256 verified", m.api_text(msg, "en"))
         self.assertIn("# NEW", open(os.path.join(self.tmp,
                                                  "wgtest.conf")).read())
         self.assertFalse(m.CLOUD_RESTORE["running"])
@@ -4940,7 +4948,7 @@ class CloudRestoreTests(unittest.TestCase):
         ok, msg = m.cloud_restore_panel("wg-panel-20260720-124925.tar.gz",
                                         ["wireguard"], "admin")
         self.assertTrue(ok)
-        self.assertIn("هشِ ثبت‌شده ندارد", msg)
+        self.assertIn("هشِ ثبت‌شده ندارد", m.api_text(msg, "fa"))
 
 
 class ConfigTransactionTests(unittest.TestCase):
@@ -8860,6 +8868,33 @@ class ApiErrorLanguageTests(unittest.TestCase):
         bad = re.findall(r'"error":[^,}\n]*[؀-ۿ][^,}\n]*', src)
         self.assertEqual(bad, [], "پیامِ فارسی در مقدارِ error: %s" % bad)
 
+    def test_no_persian_reaches_message_in_any_shape(self):
+        """همتای گاردِ بالا برای خانهٔ `message` (پیامِ موفقیت در toast).
+
+        `/api/report/test` تا این‌جا «در حالِ ساخت و ارسال…» ِ فارسیِ ثابت
+        برمی‌گرداند و کاربرِ en/ru/zh همان را در toast می‌دید؛ گاردِ `error`
+        آن را نمی‌دید چون خانه‌اش `message` بود.
+        """
+        src = _read_panel_source()
+        bad = re.findall(r'"message":[^,}\n]*[؀-ۿ][^,}\n]*', src)
+        self.assertEqual(bad, [], "پیامِ فارسی در مقدارِ message: %s" % bad)
+
+    def test_report_test_message_follows_the_request_language(self):
+        m = self.m
+        m.CONFIG["users"] = [{"username": "admin", "salt": "a" * 32,
+                              "hash": "h", "role": "admin", "totp": "T" * 16,
+                              "stoken": "s1"}]
+        m.send_periodic_report = lambda: (True, "api.ok.sent")
+        h = make_fake_handler(m, path="/api/report/test", method="POST",
+                              body={}, headers={"Cookie": "wgl=en"},
+                              session={"u": "admin", "r": "admin"})
+        h.do_POST()
+        r = json.loads(b"".join(h.body).decode("utf-8"))
+        self.assertTrue(r["ok"], r)
+        self.assertEqual(r["message"],
+                         "Building and sending — check Telegram in a few "
+                         "seconds")
+
     def test_every_aerr_call_matches_its_catalog_placeholders(self):
         """پارامترهای aerr باید دقیقاً جای‌گیرهای همان کلید باشند.
 
@@ -8910,6 +8945,214 @@ class ApiErrorLanguageTests(unittest.TestCase):
         self.assertGreaterEqual(seen, 20,
                                 "فراخوانِ aerr کمتر از انتظار پیدا شد (%d) — "
                                 "الگوی گارد کهنه شده؟" % seen)
+
+
+def _persian_returns(src):
+    """{نامِ تابع: [خطِ return ِ دارای ثابتِ رشته‌ایِ فارسی، ...]}.
+
+    نامِ متد با کلاسش می‌آید (SpeedTester.drop_alert_text). تابعِ تودرتو به
+    نامِ خودش شمرده می‌شود، نه تابعِ بیرونی.
+    """
+    import ast
+    tree = ast.parse(src)
+    parents = {}
+    for node in ast.walk(tree):
+        for ch in ast.iter_child_nodes(node):
+            parents[ch] = node
+
+    def owner(n):
+        while n in parents:
+            n = parents[n]
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                cls = parents.get(n)
+                return ((cls.name + ".") if isinstance(cls, ast.ClassDef)
+                        else "") + n.name
+        return "<module>"
+
+    fa = re.compile(r"[؀-ۿ]")
+    out = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Return) and node.value is not None and any(
+                isinstance(c, ast.Constant) and isinstance(c.value, str)
+                and fa.search(c.value) for c in ast.walk(node.value)):
+            out.setdefault(owner(node), []).append(node.lineno)
+    return out
+
+
+class PersianReturnGuardTests(unittest.TestCase):
+    """پیامی که توابع برمی‌گردانند باید کلیدِ کاتالوگ باشد، نه فارسیِ ثابت.
+
+    پیش از این ۶۶ return در ۲۸ تابع متنِ فارسیِ آماده برمی‌گرداندند؛ همان
+    متن هم به مرورگر می‌رفت، هم به ربات، هم به ممیزی — پس کاربرِ en/ru/zh
+    هر شکست (و هر «انجام شد») را فارسی می‌دید. `ApiErrorLanguageTests`
+    فقط مقدارِ `"error":` در خودِ هندلر را می‌پاید و این‌ها از کنارش رد
+    می‌شدند، چون پیام از تابعِ دیگری می‌آمد.
+    """
+
+    # توابعی که تبدیل شدند — هر فارسیِ تازه در return ِ این‌ها رگرسیون است.
+    CONVERTED = (
+        "set_user_password", "set_peer_enabled", "add_peer", "delete_peer",
+        "set_peer_psk", "update_peer_ips", "restore_from_tar",
+        "restore_from_nightly_tar", "create_share", "toggle_tunnel",
+        "_s4_target", "cloud_restore_panel", "AlertManager.send_now",
+        "warp_preset_apply", "warp_validate_target", "warp_targets_write",
+        "warp_apply", "warp_src_label", "bot_owner_violation",
+        "bot_admin_grant_violation", "parse_login_chat", "verify_login_chat",
+        "svc_add_custom", "svc_probe_one",
+    )
+
+    # استثناهای عمدی. هر ردیفِ تازه باید دلیل داشته باشد، نه صرفاً سبز کند.
+    ALLOWED = {
+        # قالب‌بندِ ارقام برای متنِ فارسی («٫» ممیزِ فارسی)، نه پیام
+        "_fa_num",
+        # قالب‌بندِ «٪» درونِ گزارشِ تصویریِ تلگرام (فقط در همان گزارش)
+        "pct",
+        # جداکنندهٔ «، » درونِ هشدارِ تلگرامی که با A() ساخته می‌شود
+        "SpeedTester.drop_alert_text",
+        # پیامش فقط به log_action می‌رود («report test: …»)
+        "send_periodic_report",
+        # برچسبِ دوم را تنها فراخوانش (svc_probe_one) دور می‌ریزد؛ مرورگر
+        # از کدِ verdict و SVC_VERDICT ترجمه می‌کند
+        "_verdict",
+    }
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="wgpanel-fareturn-")
+        self.m = load_module(self.tmp)
+        self.m.CONFIG["users"] = [
+            {"username": "admin", "salt": "a" * 32, "hash": "h",
+             "role": "admin", "totp": "T" * 16, "stoken": "s1"}]
+        with open(os.path.join(self.tmp, "wgtest.conf"), "w",
+                  encoding="utf-8") as f:
+            f.write(FIXTURE_CONF)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_converted_functions_return_no_persian_literal(self):
+        found = _persian_returns(_read_panel_source())
+        bad = {f: found[f] for f in self.CONVERTED if f in found}
+        self.assertEqual(bad, {}, "فارسیِ ثابت در return ِ تابعِ تبدیل‌شده؛ "
+                                  "کلیدِ api.* یا aerr(...) بسازید")
+
+    def test_only_allowlisted_functions_return_persian(self):
+        """تابعِ **تازه**ای هم که فارسی برگرداند باید این‌جا دیده شود."""
+        found = _persian_returns(_read_panel_source())
+        extra = {f: ln for f, ln in found.items() if f not in self.ALLOWED}
+        self.assertEqual(extra, {},
+                         "return ِ فارسی بیرون از فهرستِ استثنا — اگر به "
+                         "مرورگر یا API می‌رسد کلید بسازید، اگر به ربات "
+                         "می‌رسد self.T(...)، وگرنه با دلیل به ALLOWED بیفزایید")
+
+    def test_the_guard_still_sees_its_functions(self):
+        """گاردِ خودِ گارد: تغییرِ نام نباید تابعی را بی‌صدا از دید بیرون ببرد."""
+        import ast
+        tree = ast.parse(_read_panel_source())
+        names = set()
+        for n in tree.body:
+            if isinstance(n, ast.FunctionDef):
+                names.add(n.name)
+            elif isinstance(n, ast.ClassDef):
+                names.update(n.name + "." + f.name for f in n.body
+                             if isinstance(f, ast.FunctionDef))
+        missing = [f for f in self.CONVERTED if f not in names]
+        self.assertEqual(missing, [], "تابعِ ناموجود در CONVERTED")
+        # ALLOWED باید همین حالا واقعاً فارسی برگرداند؛ ردیفِ مرده یعنی
+        # جایی که بعداً کسی می‌تواند بی‌صدا فارسی بریزد
+        self.assertEqual(set(_persian_returns(_read_panel_source())),
+                         self.ALLOWED, "ALLOWED با واقعیت هم‌خوان نیست")
+
+    def test_no_code_rebinds_the_name_aerr(self):
+        """انتساب به نامِ `aerr` آن را محلیِ **کلِ** تابع می‌کند.
+
+        do_POST یک بار `aerr = bot_admin_grant_violation(...)` داشت؛ نتیجه
+        این بود که هر ۱۳ فراخوانِ `aerr(...)` در do_POST — مثلاً شناسهٔ
+        نامعتبرِ ربات در /api/bot/save — به‌جای پیامِ خطا UnboundLocalError
+        می‌داد. py_compile و گاردِ جای‌گیرها هیچ‌کدام این را نمی‌بینند.
+        """
+        import ast
+        bad = []
+        for n in ast.walk(ast.parse(_read_panel_source())):
+            if isinstance(n, ast.Name) and n.id in ("aerr", "adet") \
+                    and isinstance(n.ctx, (ast.Store, ast.Del)):
+                bad.append(n.lineno)
+            elif isinstance(n, ast.arg) and n.arg in ("aerr", "adet"):
+                bad.append(n.lineno)
+        self.assertEqual(bad, [], "نامِ aerr/adet دوباره انتساب شد")
+
+    def _post(self, path, body, lang):
+        h = make_fake_handler(self.m, path=path, method="POST", body=body,
+                              headers={"Cookie": "wgl=%s" % lang},
+                              session={"u": "admin", "r": "admin"})
+        h.do_POST()
+        return json.loads(b"".join(h.body).decode("utf-8"))
+
+    def test_invalid_client_name_follows_the_request_language(self):
+        """مسیرِ کامل: do_POST ← add_peer ← _json، در هر چهار زبان."""
+        want = {"fa": "حروف", "en": "Latin letters", "ru": "латинские",
+                "zh": "拉丁字母"}
+        for lang, needle in want.items():
+            with self.subTest(lang=lang):
+                r = self._post("/api/peer/add",
+                               {"iface": "wgtest", "name": "bad name!"}, lang)
+                self.assertFalse(r["ok"])
+                self.assertIn(needle, r["error"])
+                if lang != "fa":
+                    self.assertNotRegex(r["error"], r"[؀-ۿ]")
+
+    def test_bad_bot_id_returns_an_error_not_a_crash(self):
+        """رگرسیونِ سایه‌افتادنِ aerr در do_POST (بالا را ببین)."""
+        r = self._post("/api/bot/save", {"users": [{"id": "abc"}]}, "en")
+        self.assertFalse(r["ok"])
+        self.assertIn("abc", r["error"])
+        self.assertIn("numeric", r["error"])
+
+    def test_success_message_follows_the_request_language(self):
+        r = self._post("/api/peer/toggle",
+                       {"iface": "wgtest", "name": "user01", "enable": True},
+                       "en")
+        self.assertTrue(r["ok"], r)
+        self.assertEqual(r["message"], "Done")
+
+    def test_a_key_inside_a_parameter_is_translated_too(self):
+        """«"x": چرا» — چرا خودش کلید است و باید ترجمه شود، نه خام بماند."""
+        m = self.m
+        _, _, why = m.warp_validate_target("not_a_domain")
+        wrapped = m.aerr("api.err.warp.t.entry", entry="not_a_domain", why=why)
+        txt = m.api_text(wrapped, "en")
+        self.assertEqual(txt, "“not_a_domain”: The domain name is not valid")
+        _, err = m.warp_targets_write(["not_a_domain"], "t")
+        self.assertEqual(m.api_text(err, "en"), txt)
+
+    def test_prefix_style_keys_keep_their_system_text(self):
+        """api.err.apply.* و keygen پیش‌تر با `+` به متنِ خطا چسبانده می‌شدند
+        و در نتیجه هرگز کلید شناخته نمی‌شدند (کاربر «api.err.keygen…» می‌دید)."""
+        m = self.m
+        m.run = lambda cmd, timeout=20: (1, "", "boom")
+        _, err = m.add_peer("wgtest", "newguy")
+        self.assertEqual(m.api_text(err, "en"),
+                         "Error generating the key: boom")
+
+    def test_audit_detail_parameters_are_translated_for_the_viewer(self):
+        """کاتالوگِ مرورگر فقط ui.* دارد؛ why=کلیدِ api.* باید متن شود."""
+        m = self.m
+        d = m.adet("ui.audit.det.failed", why="api.err.name")
+        o = json.loads(m.audit_detail_text(d, "en"))
+        self.assertEqual(o["k"], "ui.audit.det.failed")
+        self.assertIn("Latin letters", o["p"]["why"])
+        # جزئیاتِ ساده‌ای که خودش کلید است هم
+        self.assertEqual(m.audit_detail_text("api.ok.sent", "ru"),
+                         "Отправлено")
+        # متنِ آزادِ قدیمی دست نمی‌خورد
+        self.assertEqual(m.audit_detail_text("متنِ قدیمی", "en"), "متنِ قدیمی")
+
+    def test_bot_relays_shared_messages_in_the_chat_language(self):
+        m = self.m
+        bot = m.TelegramBot.__new__(m.TelegramBot)
+        bot._lang = "en"
+        self.assertEqual(bot.M("api.ok.deleted"), "Deleted")
+        # متنِ خامِ سیستم فقط escape می‌شود
+        self.assertEqual(bot.M("a < b"), "a &lt; b")
 
 
 class SubprocessBoundTests(unittest.TestCase):
