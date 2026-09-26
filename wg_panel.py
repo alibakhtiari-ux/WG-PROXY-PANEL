@@ -32067,7 +32067,8 @@ class Handler(BaseHTTPRequestHandler):
         """تأییدِ رمزِ کاربرِ واردشده، زیرِ همان بودجه‌ی per-account ِ ورود.
 
         True/False، یا None اگر بودجه تمام است (فراخوان ۴۲۹ می‌دهد).
-        /api/totp/setup و /api/totp/disable رمز را بی‌هیچ سقفی می‌سنجیدند:
+        /api/totp/setup، /api/totp/disable، /api/password و رمزِ تأییدِ هر
+        دو مسیرِ بازیابی رمز را بی‌هیچ سقفی می‌سنجیدند:
         کسی با کوکیِ دزدیده یا مرورگرِ رهاشده می‌توانست رمز را بی‌نهایت حدس
         بزند — دقیقاً چیزی که محدودیتِ ورود جلویش را گرفته بود. بودجه با
         ورود مشترک است: حدس از هر در از همان سهم کم می‌کند.
@@ -32927,7 +32928,15 @@ class Handler(BaseHTTPRequestHandler):
                 return
             me = find_user(sess["u"])
             pw = self.headers.get("X-Confirm-Password", "")
-            if not me or not check_user_password(me, pw):
+            pw_ok = self._pw_confirm(me, pw) if me else False
+            if not pw_ok:
+                # بدنه (تا ۵۰MB) خوانده نشده؛ اتصال باید بسته شود وگرنه
+                # بایت‌هایش درخواستِ بعدیِ همین اتصال را ناهم‌گام می‌کنند.
+                self.close_connection = True
+                if pw_ok is None:
+                    self._json({"ok": False, "error": "api.err.auth.rate"},
+                               429)
+                    return
                 self._audit("settings", "bk.restore", "*",
                             adet("ui.audit.det.badconfirmpw"), ok=False)
                 self._json({"ok": False, "error": "api.err.auth.totp_bad"}, 403)
@@ -33124,8 +33133,13 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/password":
-            if not me or not check_user_password(
-                    me, str(body.get("current", ""))):
+            # همان بودجه‌ی per-account ِ ورود (رجوع به _pw_confirm)
+            pw_ok = self._pw_confirm(me, str(body.get("current", ""))) \
+                if me else False
+            if pw_ok is None:
+                self._json({"ok": False, "error": "api.err.auth.rate"}, 429)
+                return
+            if not pw_ok:
                 log_action("password change FAILED user=%s from %s"
                            % (sess["u"], self._client_ip()))
                 self._json({"ok": False, "error": "api.err.auth.cur_pw_bad"})
@@ -33761,7 +33775,11 @@ class Handler(BaseHTTPRequestHandler):
                 return
             me = find_user(sess["u"])
             pw = str(body.get("password", ""))
-            if not me or not check_user_password(me, pw):
+            pw_ok = self._pw_confirm(me, pw) if me else False
+            if pw_ok is None:
+                self._json({"ok": False, "error": "api.err.auth.rate"}, 429)
+                return
+            if not pw_ok:
                 self._audit("settings", "bk.restore.cloud", "",
                             adet("ui.audit.det.badconfirmpw"), ok=False)
                 self._json({"ok": False, "error": "api.err.auth.totp_bad"}, 403)

@@ -11029,6 +11029,39 @@ class RequestHardeningTests(unittest.TestCase):
         self.assertTrue(obj["ok"], obj)
         self.assertEqual(m._login_attempts_user.get("admin", []), [])
 
+    def test_every_password_confirmation_shares_the_login_budget(self):
+        """/api/password و رمزِ تأییدِ دو مسیرِ بازیابی هم بی‌سقف بودند."""
+        m = self.m
+        self.assertTrue(m.is_protected_admin("admin"))
+        cases = (
+            ("/api/password", lambda pw: self._post(
+                "/api/password", {"current": pw, "new": "another-pw-1"})),
+            ("/api/restore", lambda pw: self._post(
+                "/api/restore", raw=b"x",
+                headers={"X-Confirm-Password": pw, "Content-Length": "1"})),
+            ("/api/backup/cloud-restore", lambda pw: self._post(
+                "/api/backup/cloud-restore",
+                {"password": pw, "object": "none", "components": []})),
+        )
+        for path, call in cases:
+            with self.subTest(path=path):
+                m._login_attempts_user.clear(); m._login_pending_user.clear()
+                for _ in range(m._LOGIN_USER_MAX):
+                    code, obj, _h = call("wrong")
+                    self.assertFalse(obj["ok"])
+                    self.assertNotEqual(code, 429)
+                code, obj, h = call("secret-pw")
+                self.assertEqual(code, 429, obj)
+                if path == "/api/restore":
+                    # بدنه خوانده نشده؛ اتصال باید بسته شود
+                    self.assertTrue(h.close_connection)
+        # رمزِ درست سهم را پس می‌دهد
+        m._login_attempts_user.clear(); m._login_pending_user.clear()
+        code, obj, _h = self._post("/api/password", {"current": "secret-pw",
+                                                     "new": "another-pw-1"})
+        self.assertTrue(obj["ok"], obj)
+        self.assertEqual(m._login_attempts_user.get("admin", []), [])
+
     # ---- TOTP ---------------------------------------------------------------
     def test_a_replayed_totp_code_does_not_log_in(self):
         """کدِ TOTP ِ تکراری در مسیرِ ورود باید رد شود.

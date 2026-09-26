@@ -69,8 +69,9 @@ prints as its version.
   closed the connection.
 - The login rate limiter's cleanup left open reservations behind; the next
   failure from that address was then not counted.
-- `/api/totp/setup` and `/api/totp/disable` checked the password without a
-  rate limit; they now share the per-account login budget.
+- `/api/totp/setup`, `/api/totp/disable`, `/api/password` and the password
+  confirmation of both restore paths checked the password without a rate
+  limit; they now share the per-account login budget.
 
 ## [1.2.1] — 2026-09-26
 
