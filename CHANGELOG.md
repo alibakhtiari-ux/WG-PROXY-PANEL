@@ -11,6 +11,8 @@ prints as its version.
 
 ## [Unreleased]
 
+## [1.2.1] — 2026-09-26
+
 ### Changed
 
 - The Telegram bot's command menu is shown in each bot user's language (the
@@ -22,6 +24,12 @@ prints as its version.
   when it is in use (`FULL_PREFIX` set in `/etc/wg-panel-s4.env`, or the
   chain has uploaded at least once). An install that backs up only the panel
   no longer fails every week with "no backup on MEGA".
+- README, in all four languages, checked against the code: new sections on
+  setting up the Telegram bot, the Squid proxy, backups, TLS and reverse
+  proxies, outbound connections, limitations and uninstalling; the optional
+  programs and ports to open; more configuration keys with their defaults
+  and the permission catalog. The upgrade step now installs
+  `wg-panel.service` and the bundled files too.
 
 ### Fixed
 
@@ -249,7 +257,8 @@ prints as its version.
 
 First public release.
 
-[Unreleased]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/compare/81faf06...v1.1.0
 [1.0.0]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/commit/81faf06
