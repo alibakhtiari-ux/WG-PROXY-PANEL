@@ -147,8 +147,14 @@ def load(state_dir):
 def sandbox(m, state_dir):
     """هر مسیرِ ثابتِ سیستمی را به داخلِ پوشه‌ی دمو می‌برد."""
     root = os.path.join(state_dir, "root")
+    # مسیرهایی که از قبل داخلِ پوشه‌ی دمو اند (BASE_DIR، CONFIG_PATH …) دست
+    # نمی‌خورند: روی macOS خودِ ‎$TMPDIR زیرِ ‎/var/folders است و بدونِ این
+    # شرط دوباره پیشوند می‌گرفتند (…/demo/root/var/folders/…/panel/config.json)
+    inside = tuple(os.path.join(d, "") for d in
+                   {state_dir, os.path.realpath(state_dir)})
     for name, val in list(vars(m).items()):
-        if isinstance(val, str) and val.startswith(SYSTEM_PREFIXES):
+        if isinstance(val, str) and val.startswith(SYSTEM_PREFIXES) \
+                and not val.startswith(inside):
             setattr(m, name, root + val)
 
 
