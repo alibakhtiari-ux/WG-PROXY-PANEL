@@ -47,6 +47,52 @@ prints as its version.
   `qr.js` and the three.js files next to it, QR codes, the share page and the
   TV 3D view failed. The release now attaches those files and the install
   steps copy them.
+- A request body that was valid JSON but not an object (for example `[]`),
+  and several wrongly typed fields (role permissions, bot users, ECMP groups,
+  alert event toggles, the proxy log line count), crashed the request thread
+  and closed the connection without a reply. They are now answered with
+  `400`, and any other unexpected error in a request is answered with a JSON
+  `500` and written to `actions.log` instead of dropping the connection.
+- A quota, total cap or speed limit of `inf` or `nan` was accepted; `inf`
+  then broke `/api/stats` for every open tab (invalid JSON), and `nan`
+  silently disabled the limit. Non-finite numbers are rejected, and the API
+  never emits `NaN`/`Infinity`.
+- Share links always started with `https://`, so on a panel served over plain
+  HTTP they did not work. The link now uses the scheme the panel runs on.
+- The login rate limit (5 per minute per IP, 10 per 5 minutes per account)
+  counted an attempt only after the password check, so parallel requests
+  could all pass. The slot is now reserved when the request is admitted and
+  released on success.
+- Enrolling a new TOTP secret while one was already active needed no
+  password, so a stolen session cookie could replace the second factor. It
+  now requires the current password, the pending secret expires after 10
+  minutes, and confirming a new secret signs the other sessions out.
+- Speed-limit classes in `tc` were numbered by the last byte of the client's
+  IP, so with a client subnet larger than /24 two clients could share one
+  class (the second `tc class add` failed and both got one rate). Classes are
+  now numbered sequentially; IPv6-only peers are skipped instead of producing
+  an invalid class.
+- The Squid and traffic-shaper reconcile loops could run concurrently (from
+  the UI and the background thread) and the Squid password file, `squid.conf`
+  and the WARP targets file were written through a fixed temporary name, so
+  two writers could publish a truncated file. Reconciles are serialised and
+  temporary files are unique.
+- A WARP target overlapping one of the endpoints the guard rotates through
+  (for example `188.114.96.0/24`) was accepted, which routes the WARP tunnel's
+  own packets into the tunnel after a rotation. The whole endpoint pool and
+  the live endpoint are now protected.
+- The Telegram bot accepted an expiry date typed with Persian digits and
+  stored it as-is, so the account never expired; Persian digits in Telegram
+  user IDs were accepted too and never matched. Both are normalised.
+- The "expiring soon" alert only covered proxy users, repeated every six
+  hours and again after every restart. It now covers WireGuard clients too,
+  is sent once per day, and remembers the day across restarts.
+- The alert toggles for tunnel up/down and swap usage had no effect; edge
+  alerts now honour their event category.
+- The active tab in the users/roles editor was invisible in the light theme
+  and the permission chips had no borders (two undefined CSS variables); the
+  IP allowlist box and the restore password field had a dark background with
+  light-theme text.
 
 ## [1.1.0] — 2026-09-26
 

@@ -22,6 +22,7 @@ import binascii
 import gzip
 import ipaddress
 import json
+import math
 import os
 import queue
 import re
@@ -5798,6 +5799,10 @@ I18N = {
                          "The backup file is not valid (corrupt tar.gz)",
                          "Файл копии недействителен (повреждён tar.gz)",
                          "备份文件无效（tar.gz 已损坏）"),
+    "api.err.internal": ("خطای داخلیِ سرور؛ جزئیات در actions.log",
+                         "Internal server error; details are in actions.log",
+                         "Внутренняя ошибка сервера; подробности в actions.log",
+                         "服务器内部错误；详情见 actions.log"),
     "api.err.body.big": ("بدنه‌ی درخواست بیش‌ازحد بزرگ است",
                          "The request body is too large",
                          "Тело запроса слишком велико",
@@ -8477,6 +8482,8 @@ I18N = {
                         "Туннель ECMP «{p0}» снова исправен; доля «{p1}» возвращена в ECMP",
                         "ECMP 隧道“{p0}”已恢复正常；“{p1}”的份额已归还给 ECMP"),
     # ── check_expiry ──
+    "alert.kind.wg": ("وایرگارد", "WireGuard", "WireGuard", "WireGuard"),
+    "alert.kind.px": ("پروکسی", "Proxy", "Прокси", "代理"),
     "alert.check_expiry.1": ("حساب‌های نزدیکِ انقضا (تا {p0} روز):\n{p1}",
                                "Accounts expiring soon (within {p0} days):\n{p1}",
                                "Учётные записи с истекающим сроком (в течение {p0} дней):\n{p1}",
@@ -9227,6 +9234,12 @@ def parse_quota_expires(quota_raw, expires_raw):
             quota = float(quota_raw)
         except (TypeError, ValueError):
             return None, None, "api.err.quota.num"
+        # inf/nan از float() رد می‌شوند و از «<= 0» هم: inf در DB می‌نشست و
+        # json.dumps آن را به Infinity ِ خام می‌برد که JSON.parse ِ مرورگر رد
+        # می‌کند — کلِ /api/stats برای همه‌ی تب‌ها می‌شکست؛ nan سهمیه را
+        # بی‌صدا غیرفعال می‌کرد.
+        if not math.isfinite(quota):
+            return None, None, "api.err.quota.num"
         if quota <= 0:
             quota = None
     expires = str(expires_raw or "").strip()
@@ -9245,9 +9258,12 @@ def parse_rate_mbit(raw):
     if raw in (None, ""):
         return None, None
     try:
-        rate = int(float(raw))
+        rate = float(raw)
     except (TypeError, ValueError):
         return None, "api.err.rate.num"
+    if not math.isfinite(rate):          # int(inf) → OverflowError
+        return None, "api.err.rate.num"
+    rate = int(rate)
     if rate <= 0:
         return None, None
     if rate > 10000:
@@ -9306,6 +9322,8 @@ def _parse_total_action(body):
         try:
             total = float(raw)
         except (TypeError, ValueError):
+            return None, "api.err.total.num"
+        if not math.isfinite(total):
             return None, "api.err.total.num"
         if total <= 0:
             total = None
@@ -9838,17 +9856,42 @@ _login_user_lock = threading.Lock()
 
 def login_user_allowed(username):
     now = time.time()
+    u = str(username)
     with _login_user_lock:
-        a = [t for t in _login_attempts_user.get(str(username), [])
+        a = [t for t in _login_attempts_user.get(u, [])
              if now - t < _LOGIN_USER_WINDOW]
-        _login_attempts_user[str(username)] = a
-        return len(a) < _LOGIN_USER_MAX
+        if len(a) >= _LOGIN_USER_MAX:
+            _login_attempts_user[u] = a
+            return False
+        a.append(now)                         # رزروِ اتمیک (رجوع به login_allowed)
+        _login_attempts_user[u] = a
+        _login_pending_user[u] = _login_pending_user.get(u, 0) + 1
+        return True
+
+
+def login_user_succeeded(username):
+    u = str(username)
+    with _login_user_lock:
+        if _login_pending_user.get(u, 0) > 0:
+            _login_pending_user[u] -= 1
+            a = _login_attempts_user.get(u)
+            if a:
+                a.pop()
+            if not _login_pending_user[u]:
+                _login_pending_user.pop(u, None)
 
 
 def login_user_failed(username):
     now = time.time()
+    u = str(username)
     with _login_user_lock:
-        _login_attempts_user.setdefault(str(username), []).append(now)
+        if _login_pending_user.get(u, 0) > 0:
+            _login_pending_user[u] -= 1
+            if not _login_pending_user[u]:
+                _login_pending_user.pop(u, None)
+            _login_attempts_user.setdefault(u, [])
+        else:
+            _login_attempts_user.setdefault(u, []).append(now)
         if len(_login_attempts_user) > 4096:      # همان ثابت‌های بقیه
             for k in [k for k, v in _login_attempts_user.items()
                       if not v or now - v[-1] > 3600]:
@@ -9926,21 +9969,56 @@ _login_attempts = {}
 # IPای که یک بار حمله کرده دیگر هرگز هشدار نمی‌گیرد.
 _login_alerted = {}
 _login_lock = threading.Lock()
-_totp_pending = {}  # username -> secret در انتظار تأیید
+_totp_pending = {}  # username -> (secret, مهلت) در انتظار تأیید
+_TOTP_PENDING_TTL = 600
+
+
+# جای‌های رزروشده: تلاش‌هایی که login_allowed پذیرفته ولی هنوز نتیجه‌شان
+# معلوم نیست. 🪤 پیش از این سنجش و ثبت از هم جدا بودند (check-then-act):
+# N درخواستِ هم‌زمان همه از «< 5» رد می‌شدند، ~۱۵۰ms PBKDF2 می‌گرفتند و
+# بعد ثبت می‌شدند — یعنی سقفِ ۵ تلاش با موازی‌سازی دور می‌خورد. حالا جا
+# در همان لحظه‌ی سنجش گرفته می‌شود؛ شکست همان جا را نگه می‌دارد و موفقیت
+# پس می‌دهد.
+_login_pending = {}          # ip → تعدادِ رزروهای بازِ
+_login_pending_user = {}     # username → همان
 
 
 def login_allowed(ip):
     now = time.time()
     with _login_lock:
         attempts = [t for t in _login_attempts.get(ip, []) if now - t < 60]
+        if len(attempts) >= 5:
+            _login_attempts[ip] = attempts
+            return False
+        attempts.append(now)                  # رزروِ اتمیک
         _login_attempts[ip] = attempts
-        return len(attempts) < 5
+        _login_pending[ip] = _login_pending.get(ip, 0) + 1
+        return True
+
+
+def login_succeeded(ip):
+    """ورودِ موفق: رزروِ login_allowed پس داده می‌شود (موفقیت تلاشِ ناموفق نیست)."""
+    with _login_lock:
+        if _login_pending.get(ip, 0) > 0:
+            _login_pending[ip] -= 1
+            a = _login_attempts.get(ip)
+            if a:
+                a.pop()
+            if not _login_pending[ip]:
+                _login_pending.pop(ip, None)
 
 
 def login_failed(ip):
     now = time.time()
     with _login_lock:
-        _login_attempts.setdefault(ip, []).append(now)
+        if _login_pending.get(ip, 0) > 0:
+            # رزروِ همین تلاش از قبل در فهرست است؛ فقط «باز» نیست دیگر
+            _login_pending[ip] -= 1
+            if not _login_pending[ip]:
+                _login_pending.pop(ip, None)
+            _login_attempts.setdefault(ip, [])
+        else:
+            _login_attempts.setdefault(ip, []).append(now)
         # نشتِ حافظه: IPهایی که مدتی خطا نداشته‌اند را دور بریز
         if len(_login_attempts) > 4096:
             for k in [k for k, v in _login_attempts.items()
@@ -11664,13 +11742,6 @@ SHAPER_LINE_MBIT = 1000          # کلاسِ پیش‌فرض (عملاً نام
 _DEFAULT_CLASSID = "4095"        # minor کلاسِ پیش‌فرض (بزرگ‌تر از هر octet)
 
 
-def _ip_last_octet(ip):
-    try:
-        return int(ip.split("/")[0].split(".")[-1])
-    except (ValueError, IndexError):
-        return 0
-
-
 def _tc(args, ok_fail=False):
     """اجرای یک دستور tc/ip؛ خطاها لاگ می‌شوند (مگر ok_fail)."""
     rc, out, err = run(args, timeout=10)
@@ -11684,6 +11755,9 @@ class TrafficShaper:
 
     def __init__(self):
         self.sig = {}   # iface -> امضای آخرین وضعیت اعمال‌شده
+        # kick() از UI و TunnelCache هر ۱۰ ثانیه هر دو reconcile می‌زنند؛
+        # بدونِ قفل دو ساختِ tc درهم می‌رفتند.
+        self._lock = threading.Lock()
 
     def _ifb(self, iface):
         # نامِ دستگاه ifb (سقف ۱۵ کاراکتر برای نامِ اینترفیس)
@@ -11707,8 +11781,32 @@ class TrafficShaper:
             if rate <= 0:
                 continue
             ip = peer_ip(iface, name)
-            if ip:
-                out.setdefault(iface, {})[ip] = rate
+            if not ip:
+                continue
+            try:
+                if ipaddress.ip_address(ip).version != 4:
+                    continue        # فیلترهای u32 ِ پایین فقط IPv4 هستند
+            except ValueError:
+                continue
+            out.setdefault(iface, {})[ip] = rate
+        return out
+
+    @staticmethod
+    def _classids(limits):
+        """[(ip, mbit, classid)] با minor ِ یکتا به ازای هر IP.
+
+        🪤 پیش از این minor از آخرین بایتِ IP ساخته می‌شد: با user_subnets
+        بزرگ‌تر از /24، دو کاربرِ 10.0.0.5 و 10.0.1.5 یک classid می‌گرفتند،
+        `tc class add` ِ دوم «File exists» می‌داد و فیلترش به کلاسِ کاربرِ
+        اول می‌رفت (هر دو یک نرخ). شماره‌گذاریِ ترتیبی از ۱، با پرش از
+        minor ِ کلاسِ پیش‌فرض.
+        """
+        out, minor = [], 0
+        for ip in sorted(limits, key=lambda a: int(ipaddress.ip_address(a))):
+            minor += 1
+            if "%x" % minor == _DEFAULT_CLASSID.lower():
+                minor += 1
+            out.append((ip, limits[ip], "1:%x" % minor))
         return out
 
     def _root_installed(self, dev):
@@ -11733,8 +11831,8 @@ class TrafficShaper:
              "htb", "default", _DEFAULT_CLASSID, "r2q", "1000"])
         _tc(["tc", "class", "add", "dev", iface, "parent", "1:",
              "classid", "1:" + _DEFAULT_CLASSID, "htb", "rate", line, "ceil", line])
-        for ip, mbit in limits.items():
-            cid = "1:%d" % _ip_last_octet(ip)
+        classes = self._classids(limits)
+        for ip, mbit, cid in classes:
             r = "%dmbit" % mbit
             _tc(["tc", "class", "add", "dev", iface, "parent", "1:",
                  "classid", cid, "htb", "rate", r, "ceil", r])
@@ -11754,8 +11852,7 @@ class TrafficShaper:
         _tc(["tc", "filter", "add", "dev", iface, "parent", "ffff:",
              "protocol", "ip", "u32", "match", "u32", "0", "0",
              "action", "mirred", "egress", "redirect", "dev", ifb])
-        for ip, mbit in limits.items():
-            cid = "1:%d" % _ip_last_octet(ip)
+        for ip, mbit, cid in classes:
             r = "%dmbit" % mbit
             _tc(["tc", "class", "add", "dev", ifb, "parent", "1:",
                  "classid", cid, "htb", "rate", r, "ceil", r])
@@ -11765,6 +11862,10 @@ class TrafficShaper:
 
     def reconcile(self):
         """وضعیت tc را با متادیتا هماهنگ می‌کند (خوددرمان هر ۱۰ ثانیه)."""
+        with self._lock:
+            self._reconcile()
+
+    def _reconcile(self):
         desired = self._desired()
         live = live_interfaces()
         for iface in server_ifaces():
@@ -11887,21 +11988,31 @@ def proxy_hash(pw):
 
 
 def _write_root_file(path, text, mode=0o644, owner=None):
-    """نوشتنِ اتمیک (tmp+rename) با مالک/دسترسیِ مشخص."""
-    tmp = path + ".tmp"
-    # مود در خودِ os.open. یکی از فراخوان‌ها SQUID_PASSWD است (فایلِ رمز،
-    # ۰۶۴۰) — دقیقاً همان چیزی که نباید حتی یک لحظه ۰۶۴۴ باشد.
-    # os.open را umask می‌تراشد، پس chmod ِ بعدی مقدار را قطعی می‌کند.
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode)
-    with os.fdopen(fd, "w", encoding="utf-8") as f:
-        f.write(text)
-    os.chmod(tmp, mode)
-    if owner:
+    """نوشتنِ اتمیک (tmp+rename) با مالک/دسترسیِ مشخص.
+
+    فایلِ موقت نامِ یکتا دارد (mkstemp)، نه path+".tmp" ِ ثابت: دو نویسنده‌ی
+    هم‌زمان با O_TRUNC روی یک نام، فایلِ نیمه‌ی هم را منتشر می‌کردند.
+    mkstemp با 0600 می‌سازد و chmod ِ بعدی مود را قطعی می‌کند — یکی از
+    فراخوان‌ها SQUID_PASSWD است که نباید حتی یک لحظه بازتر باشد.
+    """
+    fd, tmp = tempfile.mkstemp(prefix=os.path.basename(path) + ".",
+                               suffix=".tmp", dir=os.path.dirname(path) or ".")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+        os.chmod(tmp, mode)
+        if owner:
+            try:
+                shutil.chown(tmp, user=owner, group=owner)
+            except (LookupError, PermissionError, OSError):
+                pass
+        os.replace(tmp, path)
+    except BaseException:
         try:
-            shutil.chown(tmp, user=owner, group=owner)
-        except (LookupError, PermissionError, OSError):
+            os.remove(tmp)
+        except OSError:
             pass
-    os.replace(tmp, path)
+        raise
 
 
 def _proxy_id_acl(u):
@@ -12002,6 +12113,9 @@ class ProxyManager:
 
     def __init__(self):
         self.sig = None
+        # kick() و TunnelCache هم‌زمان: دو نویسنده روی passwd/squid.conf
+        # فایلِ نیمه/خالی منتشر می‌کردند.
+        self._lock = threading.Lock()
 
     def _active(self):
         rc, out, _ = run(["systemctl", "is-active", "squid"], timeout=10)
@@ -12018,6 +12132,10 @@ class ProxyManager:
                 run(["systemctl", "stop", "squid"], timeout=20)
 
     def reconcile(self):
+        with self._lock:
+            self._reconcile()
+
+    def _reconcile(self):
         users = META.proxy_users()
         if not users:
             if self.sig != "":
@@ -12065,7 +12183,8 @@ class ProxyManager:
                 pct = used / (u["quota_gb"] * GB) * 100 if u["quota_gb"] else 0
                 thr = alert_cfg()["quota_pct"]
                 ALERTS.edge("pxquota:" + name, pct >= thr,
-                            A('alert.reconcile.1', p0=name, p1=round(pct), p2=used / GB, p3=u['quota_gb']))
+                            A('alert.reconcile.1', p0=name, p1=round(pct), p2=used / GB, p3=u['quota_gb']),
+                            category="quota")
             if not reason and (u["pass_hash"] or noauth):
                 proto = u.get("protocol") or "both"
                 if proto not in ("http", "https", "both"):
@@ -12240,7 +12359,10 @@ PROXYLOG = ProxyLogParser()
 
 def proxy_recent_log(n=200):
     """آخرین n خطِ access.log را به رکوردهای ساختاریافته تبدیل می‌کند (برای UI)."""
-    n = max(1, min(int(n), 1000))
+    try:
+        n = max(1, min(int(n), 1000))
+    except (TypeError, ValueError, OverflowError):
+        n = 200
     try:
         with open(SQUID_LOG, "rb") as f:
             f.seek(0, os.SEEK_END)
@@ -14943,12 +15065,19 @@ class AlertManager:
             self.emit(text)
 
     # لبه‌یاب: فقط وقتی وضعیت عوض شد emit کن (ضدِ اسپم)
-    def edge(self, key, now_state, text_on_change):
+    def edge(self, key, now_state, text_on_change, category=None):
+        """لبه‌یاب. category (اختیاری) = کلیدِ ALERT_EVENTS؛ اگر آن دسته در
+        تنظیمات خاموش باشد وضعیت ثبت می‌شود ولی پیامی نمی‌رود. پیش از این
+        edge مستقیم emit می‌زد و کلیدهای events.tunnel/events.swap بی‌اثر
+        بودند."""
         with self.lock:
             prev = self.state.get(key)
             self.state[key] = now_state
         if prev is not None and prev != now_state:
-            self.emit(text_on_change)
+            if category is None:
+                self.emit(text_on_change)
+            else:
+                self.event(category, text_on_change)
         return prev
 
     def _run(self):
@@ -15111,7 +15240,7 @@ class AlertMonitor(threading.Thread):
             # خودِ فراخوانی بنشینند.
             msg = (A('alert.tunnel.up', p0=iface) if good
                    else A('alert.tunnel.down', p0=iface, p1=st))
-            prev = ALERTS.edge("tun:" + iface, good, msg)
+            prev = ALERTS.edge("tun:" + iface, good, msg, category="tunnel")
             if prev is not None and prev != good:
                 # ثبتِ گذر برای نشانگرِ رویداد/باندِ قطعی روی گراف تونل
                 audit("sys:monitor", "tunnel",
@@ -15123,7 +15252,8 @@ class AlertMonitor(threading.Thread):
                 "tunloop:" + iface, not info.get("loop"),
                 A('alert.check_tunnels.1', p0=iface)
                 if not info.get("loop") else
-                A('alert.check_tunnels.2', p0=iface, p1=info.get('loop_dev') or '?'))
+                A('alert.check_tunnels.2', p0=iface, p1=info.get('loop_dev') or '?'),
+                category="tunnel")
             if prev_l is not None and prev_l != (not info.get("loop")):
                 audit("sys:monitor", "tunnel",
                       "iface.loop.fix" if not info.get("loop")
@@ -15336,28 +15466,86 @@ class AlertMonitor(threading.Thread):
         heavy = used > 256 * 1024
         ALERTS.edge("swap", heavy,
                     (A('alert.check_swap.1', p0=used // 1024, p1=_host_label())) if heavy else
-                    (A('alert.check_swap.2', p0=_host_label())))
+                    (A('alert.check_swap.2', p0=_host_label())),
+                    category="swap")
 
-    def _check_expiry(self):
-        # فقط یک‌بار در روز (نه هر ۳۰ث)
-        now = time.time()
-        if getattr(self, "_last_expiry", 0) + 6 * 3600 > now:
-            return
-        self._last_expiry = now
-        c = alert_cfg()
-        soon = datetime.now() + timedelta(days=c["expiry_days"])
+    def _expiry_mark(self, today):
+        self._last_expiry_day = today
+        try:
+            tmp = EXPIRY_STATE + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                f.write(today + "\n")
+            os.replace(tmp, EXPIRY_STATE)
+        except OSError:
+            pass
+
+    def _expiry_last_day(self):
+        d = getattr(self, "_last_expiry_day", None)
+        if d is None:
+            try:
+                with open(EXPIRY_STATE, encoding="utf-8") as f:
+                    d = f.read().strip()
+            except OSError:
+                d = ""
+            self._last_expiry_day = d
+        return d
+
+    def expiring_accounts(self, days=None):
+        """[(kind, name, expires)] حساب‌هایی که تا `days` روزِ دیگر منقضی
+        می‌شوند — وایرگارد (متادیتا) و پروکسی؛ همان منطقِ دایجست."""
+        if days is None:
+            days = alert_cfg()["expiry_days"]
+        now = datetime.now()
+        soon = now + timedelta(days=days)
         hits = []
-        for u in META.proxy_users():
-            exp = (u.get("expires") or "").strip()
-            if exp:
+        try:
+            for (iface, name), m in META.meta_all().items():
+                e = (m.get("expires") or "").strip()
+                if not e:
+                    continue
                 try:
-                    d = datetime.strptime(exp, "%Y-%m-%d")
-                    if datetime.now() <= d <= soon:
-                        hits.append("پروکسی/%s (%s)" % (u["username"], exp))
+                    if now <= datetime.strptime(e, "%Y-%m-%d") <= soon:
+                        hits.append(("wg", "%s@%s" % (name, iface), e))
                 except ValueError:
                     pass
-        if hits:
-            ALERTS.event("expiry", A('alert.check_expiry.1', p0=c['expiry_days'], p1='\n'.join(hits[:20])))
+        except Exception as ex:
+            log_action("expiry check (wg) error: %r" % ex)
+        for u in META.proxy_users():
+            e = (u.get("expires") or "").strip()
+            if not e:
+                continue
+            try:
+                if now <= datetime.strptime(e, "%Y-%m-%d") <= soon:
+                    hits.append(("px", u["username"], e))
+            except ValueError:
+                pass
+        hits.sort(key=lambda h: (h[2], 0 if h[0] == "wg" else 1, h[1]))
+        return hits
+
+    def _check_expiry(self):
+        """یک‌بار در هر روزِ تقویمی (ماندگار روی دیسک، مثلِ دایجست).
+
+        🪤 پیش از این: گاردِ ۶ ساعته در حافظه (هر ری‌استارت دوباره می‌فرستاد،
+        هر حساب ~۴ بار در روز) و فقط کاربرانِ پروکسی — حساب‌های وایرگارد که
+        README قولِ گزارششان را می‌دهد اصلاً دیده نمی‌شدند."""
+        c = alert_cfg()
+        if not (c["enabled"] and c["events"].get("expiry", True)):
+            return
+        today = datetime.now().strftime("%Y-%m-%d")
+        if self._expiry_last_day() == today:
+            return
+        hits = self.expiring_accounts(c["expiry_days"])
+        # روزِ امروز ثبت می‌شود حتی بدونِ hit، تا هر ۳۰ ثانیه دوباره DB را نگردیم
+        self._expiry_mark(today)
+        if not hits:
+            return
+        lines = ["%s/%s (%s)" % (A("alert.kind.wg") if k == "wg"
+                                 else A("alert.kind.px"), n, e)
+                 for k, n, e in hits[:20]]
+        if len(hits) > 20:
+            lines.append("… +%d" % (len(hits) - 20))
+        ALERTS.event("expiry", A('alert.check_expiry.1', p0=c['expiry_days'],
+                                 p1='\n'.join(lines)))
 
 
 ALERTMON = AlertMonitor()
@@ -15439,6 +15627,7 @@ WARP_LAST_SYNC = "/opt/wg-panel/warp-last-sync"    # مهرِ آخرین اجر�
 # است و ممکن است اصلاً نصب نباشد، پس نبودِ فایل حالتِ عادی است نه خطا.
 WARP_AUTODETECT_STATE = "/opt/wg-panel/warp-autodetect.state"
 DIGEST_STATE = "/opt/wg-panel/alert-digest.last"   # تاریخِ آخرین دایجستِ ارسالی
+EXPIRY_STATE = "/opt/wg-panel/alert-expiry.last"   # روزِ آخرین هشدارِ نزدیکِ انقضا
 REPORT_STATE = "/opt/wg-panel/alert-report.last"   # تاریخِ آخرین گزارشِ تصویری
 
 
@@ -15925,6 +16114,22 @@ def warp_protected_ips():
                 nets.add(ipaddress.ip_network(v + "/32", strict=False))
             except ValueError:
                 pass
+    # 🪤 کلِ استخرِ endpointها، نه فقط endpointِ فعلیِ sync.sh: WarpGuard
+    # endpoint را در WARP_EP_POOL می‌چرخاند؛ هدفی مثل 188.114.96.0/24 با
+    # endpointِ امروز تداخل نداشت و پذیرفته می‌شد، و بعد از چرخش بسته‌های
+    # رمزشده‌ی WARP خودشان به wgwarp می‌رفتند (همان حلقه‌ی بالا).
+    for ep in list(WARP_EP_POOL) + [WARP_EP_IP]:
+        try:
+            nets.add(ipaddress.ip_network(ep + "/32"))
+        except ValueError:
+            pass
+    rc, out, _ = run(["wg", "show", WARP_IFACE, "endpoints"], timeout=5)
+    if rc == 0:
+        for m in re.finditer(r"(\d+\.\d+\.\d+\.\d+):\d+", out or ""):
+            try:
+                nets.add(ipaddress.ip_network(m.group(1) + "/32"))
+            except ValueError:
+                pass
     rc, out, _ = run(["ip", "-4", "-o", "addr", "show"], timeout=5)
     if rc == 0:
         for m in re.finditer(r"inet\s+(\d+\.\d+\.\d+\.\d+/\d+)", out or ""):
@@ -16007,10 +16212,21 @@ def warp_autodetect_state():
     return d if isinstance(d, dict) else {}
 
 
+# چهار نویسنده (API، ربات، presetها، autodetect ِ بیرونی) read→modify→write
+# می‌کنند. قفل هم نوشتن را یکی می‌کند هم — وقتی فراخوان دورِ read+write
+# بگیرد (RLock) — گم‌شدنِ تغییرِ هم‌زمان را.
+_WARP_TARGETS_LOCK = threading.RLock()
+
+
 def warp_targets_write(entries, by):
     """نوشتنِ اتمیکِ فایلِ مقصدها با بکاپ → (ok، خطا).
 
     همهٔ ورودی‌ها دوباره اعتبارسنجی می‌شوند (حتی اگر قبلاً شده باشند)."""
+    with _WARP_TARGETS_LOCK:
+        return _warp_targets_write_locked(entries, by)
+
+
+def _warp_targets_write_locked(entries, by):
     protected = warp_protected_ips()
     clean, seen = [], set()
     for e in entries:
@@ -16027,15 +16243,25 @@ def warp_targets_write(entries, by):
             "# آخرین تغییر: %s توسط %s"
             % (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), by), ""]
     body += [v for _k, v in clean]
+    tmp = None
     try:
         if os.path.exists(WARP_TARGETS):
             shutil.copy2(WARP_TARGETS, WARP_TARGETS + ".bak")
-        tmp = WARP_TARGETS + ".tmp"
-        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        # نامِ یکتا، نه .tmp ِ ثابت (رجوع به _write_root_file)
+        fd, tmp = tempfile.mkstemp(prefix="warp-targets.", suffix=".tmp",
+                                   dir=os.path.dirname(WARP_TARGETS) or ".")
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write("\n".join(body) + "\n")
+            f.flush()
+            os.fsync(f.fileno())          # اسکریپتِ root ِ sync آن را می‌خواند
+        os.chmod(tmp, 0o600)
         os.replace(tmp, WARP_TARGETS)
     except OSError as e:
+        if tmp:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
         return False, aerr("api.err.write", v=e)
     return True, ""
 
@@ -20044,8 +20270,8 @@ class TelegramBot(threading.Thread):
             self.convo.pop(frm, None)
             if "bot.manage" not in p:
                 return
-            uid = text.strip()
-            if not re.fullmatch(r"-?\d{1,20}", uid):
+            uid = _fa_digits_en(text.strip())
+            if not re.fullmatch(r"-?[0-9]{1,20}", uid):
                 self.send(chat, self._rtl(self.T('bot.convo_step.5')),
                           [[{"text": self.T('bot.bu_add_user.4'), "callback_data": "bu:list"}]])
                 return
@@ -20065,6 +20291,10 @@ class TelegramBot(threading.Thread):
 
     # ---- ورودیِ مقدار برای تمدید/سهمیه/سرعت → تأیید
     def _input_step(self, frm, chat, st, text, p):
+        # ارقامِ فارسی/عربی → لاتین. 🪤 \d ِ regex ارقامِ فارسی را هم می‌گیرد،
+        # پس «۲۰۲۶-۱۰-۰۱» بی‌تبدیل ذخیره می‌شد؛ اعمالِ انقضا مقایسه‌ی رشته‌ای
+        # با تاریخِ لاتین است و کاربر هرگز منقضی نمی‌شد.
+        text = _fa_digits_en(text.strip())
         act = st["act"]
         if act == "ren":
             if st["kind"] == "wg":
@@ -20099,10 +20329,14 @@ class TelegramBot(threading.Thread):
         self._ask_confirm(frm, chat, st, summary)
 
     def _parse_expiry_input(self, text, st):
-        text = text.strip()
-        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
+        text = _fa_digits_en(text.strip())
+        if re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", text):
+            try:
+                datetime.strptime(text, "%Y-%m-%d")
+            except ValueError:
+                return None
             return text
-        if re.fullmatch(r"\d{1,4}", text):
+        if re.fullmatch(r"[0-9]{1,4}", text):
             base = datetime.now()
             cur = st.get("_curexp")
             if cur:
@@ -20328,7 +20562,8 @@ class TelegramBot(threading.Thread):
         if role == "admin" and role not in self._bu_roles(frm):
             self.send(chat, self._rtl(self.T('bot.bu_add_user.5')), back)
             return
-        if not re.fullmatch(r"-?\d{1,20}", str(uid)) \
+        uid = _fa_digits_en(str(uid))
+        if not re.fullmatch(r"-?[0-9]{1,20}", uid) \
                 or role not in self._bu_roles(frm):
             self.send(chat, self.T('bot.bu_add_user.1'), back)
             return
@@ -21972,6 +22207,10 @@ PAGE_HTML = r"""<!doctype html>
   --muted:#8b949e; --green:#3fb950; --red:#f85149; --blue:#58a6ff;
   --amber:#d29922; --rx:#58a6ff; --tx:#3fb950; --gold:#e3b341;
   --btn:#21262d; --panel2:#1c2129; --border2:#3d4753;
+  /* --line/--accent در چند جا (تب‌های کاربران/نقش‌ها، chipهای مجوز،
+     جداکننده‌های مودالِ هشدار) استفاده می‌شوند و تعریف نداشتند: تبِ فعال
+     در تمِ روشن سفید-روی-سفید بود و کادرها نمی‌آمدند. */
+  --line:var(--border); --accent:var(--blue);
   --chart-tip-bg:rgba(13,17,23,.94); --chart-png-bg:#0d1117;
   /* پالت مرکزی گراف‌ها — هر دو تم مقدار خودشان را می‌دهند تا هیچ رسمی
      رنگ hard-code تمِ تیره نگیرد */
@@ -29199,7 +29438,7 @@ function showAllowModal(){
     '<div class="msg" id="a-msg"></div>' +
     '<label>' + _t('ui.js.showAllowModal.2') + ' = ' + _t('ui.js.showAllowModal.3') +
     ' ' + _t('ui.js.showAllowModal.4') + '</label>' +
-    '<textarea id="a-ips" rows="5" style="width:100%;background:#0d1117;' +
+    '<textarea id="a-ips" rows="5" style="width:100%;background:var(--bg);' +
     'border:1px solid var(--border);color:var(--fg);border-radius:6px;' +
     'padding:8px;direction:ltr;font-family:ui-monospace,monospace">' +
     esc(cur.join('\n')) + '</textarea>' +
@@ -29231,7 +29470,7 @@ function showBackupModal(){
     '<input type="file" id="b-file" accept=".gz,.tgz,application/gzip" ' +
       'style="width:100%;margin-bottom:8px">' +
     '<input type="password" id="b-pw" placeholder="' + _t('ui.js.showBackupModal.10') + ')" ' +
-      'style="width:100%;background:#0d1117;border:1px solid var(--border);' +
+      'style="width:100%;background:var(--bg);border:1px solid var(--border);' +
       'color:var(--fg);border-radius:6px;padding:9px;margin-bottom:8px;direction:ltr">' +
     '<div class="mrow"><button class="danger" onclick="doRestore()">' + _t('ui.js.showBackupModal.11') + ')</button></div>'
     : '<div class="mut" style="font-size:11.5px;margin-top:8px">' + _t('ui.js.showBackupModal.12') + '</div>');
@@ -30185,6 +30424,17 @@ export function start(opts){
 
 # ------------------------------------------------------------------ HTTP سرور
 
+def _json_finite(obj):
+    """کپیِ obj با جای‌گذاریِ float ِ غیرمتناهی → None (برای json.dumps)."""
+    if isinstance(obj, float):
+        return obj if math.isfinite(obj) else None
+    if isinstance(obj, dict):
+        return {k: _json_finite(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_json_finite(v) for v in obj]
+    return obj
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "wg-panel"
     protocol_version = "HTTP/1.1"
@@ -30209,6 +30459,7 @@ class Handler(BaseHTTPRequestHandler):
         # می‌گیرد؛ چشم از رویش می‌پرد.
         # پیش از send_response است تا Content-Length ِ پایین‌تر خودبه‌خود
         # طولِ فشرده را ببیند.
+        self._responded = True
         enc = None
         if (len(data) >= self._GZIP_MIN
                 and ctype.split(";")[0].strip() in self._GZIP_TYPES
@@ -30270,8 +30521,15 @@ class Handler(BaseHTTPRequestHandler):
             for k in ("error", "message"):
                 if k in obj:
                     obj[k] = self._msg(obj[k], lang)
-        self._send(code, json.dumps(obj, ensure_ascii=False),
-                   extra_headers=extra_headers)
+        try:
+            data = json.dumps(obj, ensure_ascii=False, allow_nan=False)
+        except ValueError:
+            # NaN/Infinity در JSON معتبر نیست و JSON.parse ِ مرورگر رد می‌کند.
+            # پارسرها ورودی را می‌گیرند؛ این تورِ آخر است تا یک مقدارِ
+            # محاسباتی همه‌ی پاسخ را نشکند.
+            log_action("json: non-finite number replaced with null")
+            data = json.dumps(_json_finite(obj), ensure_ascii=False)
+        self._send(code, data, extra_headers=extra_headers)
 
     def _query_lang(self):
         """زبانِ صریحاً خواسته‌شده در ?lang= — یا None اگر نبود/نامعتبر بود."""
@@ -30392,9 +30650,13 @@ class Handler(BaseHTTPRequestHandler):
                 self.close_connection = True
             return self.BODY_TOO_LARGE
         try:
-            return json.loads(self.rfile.read(n) or b"{}")
+            body = json.loads(self.rfile.read(n) or b"{}")
         except (ValueError, OSError):
             return None
+        # هر مسیر body.get(...) می‌زند؛ آرایه/رشته/عدد به‌جای شیء تا این‌جا
+        # AttributeError می‌داد و اتصال بی‌پاسخ بسته می‌شد (حتی در /api/login
+        # بدونِ احراز هویت).
+        return body if isinstance(body, dict) else None
 
     def _client_ip(self):
         return self.client_address[0]
@@ -30410,8 +30672,41 @@ class Handler(BaseHTTPRequestHandler):
         who = actor or (s["u"] if s else "?")
         audit(who, category, action, target, detail, self._client_ip(), ok)
 
-    # --- GET
+    def _guarded(self, fn):
+        """هر استثنای ناگرفته‌ی یک مسیر → ۵۰۰ ِ JSON + لاگ، نه اتصالِ بی‌پاسخ.
+
+        BaseHTTPRequestHandler استثنا را به process_request_thread می‌رساند
+        که فقط traceback به stderr می‌نویسد؛ کلاینت هیچ پاسخی نمی‌گرفت و
+        اپراتور «پنل الکی از کار افتاد» می‌دید. قطعِ اتصال از سمتِ کلاینت
+        (BrokenPipe/Reset) خطای ما نیست و بی‌صدا رد می‌شود.
+        """
+        self._responded = False
+        try:
+            fn()
+        except (BrokenPipeError, ConnectionResetError, socket.timeout):
+            self.close_connection = True
+        except Exception as e:
+            log_action("unhandled %s %s: %s: %s"
+                       % (self.command, urlparse(self.path).path,
+                          type(e).__name__, str(e)[:200]))
+            # بدنه‌ی نخوانده ممکن است در سوکت مانده باشد؛ اتصال قابلِ
+            # اعتماد نیست.
+            self.close_connection = True
+            if not self._responded:
+                try:
+                    self._json({"ok": False, "error": "api.err.internal"},
+                               500)
+                except OSError:
+                    pass
+
     def do_GET(self):
+        self._guarded(self._do_get)
+
+    def do_POST(self):
+        self._guarded(self._do_post)
+
+    # --- GET
+    def _do_get(self):
         path = urlparse(self.path).path
         # لینک اشتراک: بدون احراز هویت و بدون allowlist (برای کاربر راه دور)
         # ولی محدودیت نرخ، توکن هش‌شده، انقضای کوتاه و ۴۰۴ عمومی دارد.
@@ -31101,11 +31396,12 @@ class Handler(BaseHTTPRequestHandler):
             if err:
                 self._json({"ok": False, "error": err})
                 return True
-            cur = warp_targets_read()
-            if val in cur:
-                self._json({"ok": False, "error": "api.err.warp.target_exists"})
-                return True
-            ok, werr = warp_targets_write(cur + [val], sess["u"])
+            with _WARP_TARGETS_LOCK:       # read+write یک‌جا، نه گم‌شدنِ تغییرِ هم‌زمان
+                cur = warp_targets_read()
+                if val in cur:
+                    self._json({"ok": False, "error": "api.err.warp.target_exists"})
+                    return True
+                ok, werr = warp_targets_write(cur + [val], sess["u"])
             if not ok:
                 self._json({"ok": False, "error": werr})
                 return True
@@ -31120,15 +31416,16 @@ class Handler(BaseHTTPRequestHandler):
                         "targets": warp_targets_read()})
         elif path == "/api/warp/target/del":
             val = str(body.get("target", "")).strip().lower()
-            cur = warp_targets_read()
-            if val not in cur:
-                self._json({"ok": False, "error": "api.err.warp.target_missing"})
-                return True
-            rest = [t for t in cur if t != val]
-            if not rest:
-                self._json({"ok": False, "error": "api.err.warp.target_last"})
-                return True
-            ok, werr = warp_targets_write(rest, sess["u"])
+            with _WARP_TARGETS_LOCK:
+                cur = warp_targets_read()
+                if val not in cur:
+                    self._json({"ok": False, "error": "api.err.warp.target_missing"})
+                    return True
+                rest = [t for t in cur if t != val]
+                if not rest:
+                    self._json({"ok": False, "error": "api.err.warp.target_last"})
+                    return True
+                ok, werr = warp_targets_write(rest, sess["u"])
             if not ok:
                 self._json({"ok": False, "error": werr})
                 return True
@@ -31169,7 +31466,7 @@ class Handler(BaseHTTPRequestHandler):
             return False
         return True
 
-    def do_POST(self):
+    def _do_post(self):
         path = urlparse(self.path).path
         if self._deny_ip():
             return
@@ -31293,6 +31590,10 @@ class Handler(BaseHTTPRequestHandler):
                 if user.get("totp"):
                     code = str(body.get("totp", "")).strip()
                     if not code:
+                        # رمز درست بود؛ این مرحله‌ی طبیعیِ ورودِ دومرحله‌ای است،
+                        # نه تلاشِ ناموفق — جا پس داده می‌شود.
+                        login_succeeded(ip)
+                        login_user_succeeded(user["username"])
                         self._json({"ok": False, "totp_required": True,
                                     "error": "api.err.auth.totp_needed"})
                         return
@@ -31321,6 +31622,8 @@ class Handler(BaseHTTPRequestHandler):
                                     "error": "api.err.auth.tg_not_confirmed"},
                                    403)
                         return
+                login_succeeded(ip)
+                login_user_succeeded(user["username"])
                 with config_txn():
                     user["last_login"] = int(time.time())
                     user["last_ip"] = ip
@@ -31608,7 +31911,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"ok": False, "error": "api.err.role.name_taken"})
                 return
             perms = body.get("perms", [])
-            if not isinstance(perms, list):
+            if not isinstance(perms, list) \
+                    or not all(isinstance(p, str) for p in perms):
                 self._json({"ok": False, "error": "bad request"}, 400)
                 return
             bad = [p for p in perms if p not in ALL_PERMS]
@@ -31659,8 +31963,15 @@ class Handler(BaseHTTPRequestHandler):
             self._audit("panel-user", "role.del", name, "")
             self._json({"ok": True})
         elif path == "/api/totp/setup":
+            # 🪤 تعویضِ عاملِ دوم با یک کوکیِ سرقتی/مرورگرِ رهاشده: وقتی TOTP
+            # از قبل فعال است، شروعِ ثبتِ تازه رمزِ فعلی می‌خواهد — همان
+            # قاعده‌ای که /api/totp/disable از اول داشت.
+            if me and me.get("totp") and not check_user_password(
+                    me, str(body.get("password", ""))):
+                self._json({"ok": False, "error": "api.err.auth.pw_bad"}, 403)
+                return
             secret = base64.b32encode(secrets.token_bytes(20)).decode().rstrip("=")
-            _totp_pending[sess["u"]] = secret
+            _totp_pending[sess["u"]] = (secret, time.time() + _TOTP_PENDING_TTL)
             uri = ("otpauth://totp/wg-panel:%s?secret=%s&issuer=wg-panel"
                    % (sess["u"], secret))
             self._json({"ok": True, "secret": secret, "uri": uri})
@@ -31668,21 +31979,31 @@ class Handler(BaseHTTPRequestHandler):
             if not me:
                 self._json({"ok": False, "error": "unauthorized"}, 401)
                 return
-            secret = _totp_pending.get(sess["u"])
-            if not secret:
+            pend = _totp_pending.get(sess["u"])
+            if pend and pend[1] < time.time():         # مهلتِ ۱۰ دقیقه گذشت
+                _totp_pending.pop(sess["u"], None)
+                pend = None
+            if not pend:
                 self._json({"ok": False, "error": "api.err.totp.setup_first"})
                 return
+            secret = pend[0]
             _code = str(body.get("code", ""))
             if not (totp_verify(secret, _code)
                     and totp_consume(sess["u"], _code)):     # ← همان دلیلِ ورود
                 self._json({"ok": False, "error": "api.err.totp.code_bad"})
                 return
+            had = bool(me.get("totp"))
             with config_txn():
                 me["totp"] = secret
+                # عاملِ دوم عوض شد: نشست‌های دیگر (از جمله سشنِ احتمالیِ
+                # مهاجم) باطل شوند؛ کوکیِ تازه برای همین مرورگر می‌رود.
+                me["stoken"] = secrets.token_hex(8)
             _totp_pending.pop(sess["u"], None)
-            log_action("totp enabled for %s" % sess["u"])
+            log_action("totp %s for %s" % ("replaced" if had else "enabled",
+                                           sess["u"]))
             self._audit("auth", "auth.totp.on", sess["u"], "")
-            self._json({"ok": True})
+            self._json({"ok": True}, extra_headers={
+                "Set-Cookie": self._session_cookie_header(me)})
         elif path == "/api/totp/disable":
             if not me or not check_user_password(
                     me, str(body.get("password", ""))):
@@ -31775,6 +32096,9 @@ class Handler(BaseHTTPRequestHandler):
             cur["chat_id"] = str(body.get("chat_id", "")).strip()
             cur["iface"] = str(body.get("iface", "")).strip()
             ev = body.get("events") or {}
+            if not isinstance(ev, dict):
+                self._json({"ok": False, "error": "bad request"}, 400)
+                return
             cur["events"] = {k: bool(ev.get(k, True)) for k in ALERT_EVENT_KEYS}
             for k, lo, hi in (("cpu_pct", 1, 100), ("ram_pct", 1, 100),
                               ("disk_pct", 1, 100), ("sustain_min", 1, 120),
@@ -31848,8 +32172,13 @@ class Handler(BaseHTTPRequestHandler):
                 except (ValueError, TypeError):
                     pass
             groups, seen = [], set()
-            for raw in (body.get("groups") or []):
-                g = dict(ECMP_GROUP_DEFAULTS, **(raw or {}))
+            raw_groups = body.get("groups") or []
+            if not isinstance(raw_groups, list) \
+                    or not all(isinstance(g, dict) for g in raw_groups):
+                self._json({"ok": False, "error": "bad request"}, 400)
+                return
+            for raw in raw_groups:
+                g = dict(ECMP_GROUP_DEFAULTS, **raw)
                 name = str(g.get("name", "")).strip()[:40]
                 rf = str(g.get("routes_file", "")).strip()
                 if not name or not rf:
@@ -31968,7 +32297,12 @@ class Handler(BaseHTTPRequestHandler):
                         "alerts_ready": bool(alert_cfg()["bot_token"])})
         elif path == "/api/bot/save":
             users = []
-            for u in (body.get("users") or []):
+            raw_users = body.get("users") or []
+            if not isinstance(raw_users, list) \
+                    or not all(isinstance(u, dict) for u in raw_users):
+                self._json({"ok": False, "error": "bad request"}, 400)
+                return
+            for u in raw_users:
                 tid = str(u.get("id", "")).strip()
                 role = str(u.get("role", "viewer"))
                 if not re.fullmatch(r"-?[0-9]{1,20}", tid):   # \d = ارقامِ فارسی هم
@@ -32222,7 +32556,10 @@ class Handler(BaseHTTPRequestHandler):
                     self._json({"ok": False, "error": err})
                 else:
                     host = self.headers.get("Host", "")
-                    url = "https://%s/s/%s" % (host, token)
+                    # همان schemeی که پنل واقعاً سرو می‌کند؛ لینکِ https برای
+                    # پنلِ بدونِ TLS (docker با WG_TLS_ENABLED=false) کار نمی‌کرد.
+                    scheme = "https" if CONFIG.get("tls_cert") else "http"
+                    url = "%s://%s/s/%s" % (scheme, host, token)
                     self._audit("peer", "peer.share.new",
                                 "%s @ %s" % (name, iface),
                                 adet("ui.audit.det.linkmade",

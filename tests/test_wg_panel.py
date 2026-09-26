@@ -19,6 +19,7 @@ import pathlib
 import re
 import shutil
 import subprocess as real_subprocess
+import stat
 import sys
 import tempfile
 import threading
@@ -1950,10 +1951,70 @@ class PanelTestCase(unittest.TestCase):
 
     def test_shaper_classid_and_desired(self):
         m = self.m
-        self.assertEqual(m._ip_last_octet("192.168.188.11/32"), 11)
-        self.assertEqual(m._ip_last_octet("10.0.0.254"), 254)
         # نامِ ifb کوتاه‌تر از ۱۵ کاراکتر
         self.assertLessEqual(len(m.SHAPER._ifb("wg1udp")), 15)
+
+    def test_shaper_classids_are_unique_beyond_a_slash24(self):
+        """🪤 minor پیش از این آخرین بایتِ IP بود: 10.0.0.5 و 10.0.1.5 یک
+        classid می‌گرفتند، `tc class add` ِ دوم «File exists» می‌داد و فیلترش
+        به کلاسِ کاربرِ اول می‌رفت."""
+        m = self.m
+        limits = {"10.0.1.5": 7, "10.0.0.5": 5, "10.0.0.254": 9,
+                  "10.0.2.254": 3}
+        rows = m.SHAPER._classids(limits)
+        cids = [c for _ip, _r, c in rows]
+        self.assertEqual(len(set(cids)), len(limits))
+        self.assertNotIn("1:" + m._DEFAULT_CLASSID, cids)
+        for _ip, _r, c in rows:
+            self.assertRegex(c, r"^1:[0-9a-f]+$")
+        # پرش از minor ِ کلاسِ پیش‌فرض
+        big = {"10.%d.%d.%d" % (i // 65536 % 256, i // 256 % 256, i % 256): 1
+               for i in range(1, int(m._DEFAULT_CLASSID, 16) + 3)}
+        cids = [c for _ip, _r, c in m.SHAPER._classids(big)]
+        self.assertNotIn("1:" + m._DEFAULT_CLASSID.lower(), cids)
+        self.assertEqual(len(set(cids)), len(big))
+        # _build: هر IP یک کلاس و یک فیلتر با همان flowid، روی iface و ifb
+        del m._run_calls[:]
+        m.SHAPER._build("wgtest", {"10.0.0.5": 5, "10.0.1.5": 7})
+        adds = [c for c in m._run_calls if c[:3] == ["tc", "class", "add"]]
+        by_dev = {}
+        for c in adds:
+            by_dev.setdefault(c[4], []).append(c[c.index("classid") + 1])
+        for dev, ids in by_dev.items():
+            self.assertEqual(len(ids), len(set(ids)), (dev, ids))
+        flows = [c[c.index("flowid") + 1] for c in m._run_calls
+                 if c[:3] == ["tc", "filter", "add"] and "flowid" in c]
+        self.assertTrue(set(flows) <= set(by_dev["wgtest"]))
+
+    def test_shaper_and_proxy_reconcile_are_serialised(self):
+        m = self.m
+        seen = []
+        m.SHAPER._reconcile = lambda: seen.append(m.SHAPER._lock.locked())
+        m.SHAPER.reconcile()
+        m.PROXY._reconcile = lambda: seen.append(m.PROXY._lock.locked())
+        m.PROXY.reconcile()
+        self.assertEqual(seen, [True, True])
+
+    def test_shaper_desired_skips_ipv6_peers(self):
+        m = self.m
+        m.META.meta_update("wgtest", "v6", {"rate_mbit": 5})
+        m.META.meta_update("wgtest", "v4", {"rate_mbit": 6})
+        orig = m.peer_ip
+        m.peer_ip = lambda iface, name: {"v6": "fd00::5", "v4": "10.0.0.5"}[name]
+        try:
+            self.assertEqual(m.SHAPER._desired(), {"wgtest": {"10.0.0.5": 6}})
+        finally:
+            m.peer_ip = orig
+
+    def test_write_root_file_uses_a_unique_tmp_and_keeps_the_mode(self):
+        m = self.m
+        path = os.path.join(self.tmp, "rootfile.txt")
+        m._write_root_file(path, "hello\n", 0o640)
+        with open(path) as f:
+            self.assertEqual(f.read(), "hello\n")
+        self.assertEqual(stat.S_IMODE(os.stat(path).st_mode), 0o640)
+        self.assertEqual([f for f in os.listdir(self.tmp)
+                          if f.startswith("rootfile.txt.")], [])
 
     def test_path_summary_and_mos(self):
         m = self.m
@@ -2434,6 +2495,82 @@ class AlertTests(unittest.TestCase):
         self.assertEqual(c["cpu_pct"], 75)
         self.assertFalse(c["events"]["tunnel"])
         self.assertTrue(c["events"]["login"])   # کلیدِ نداده = پیش‌فرض true
+
+    def test_edge_honours_the_event_category(self):
+        """🪤 edge مستقیم emit می‌زد، پس کلیدهای events.tunnel/events.swap
+        بی‌اثر بودند؛ با category باید از فیلترِ دسته رد شود."""
+        m = self.m
+        m.CONFIG["alerts"] = {"enabled": True, "events": {"tunnel": False}}
+        sent = []
+        m.ALERTS.emit = lambda t, html=False: sent.append(t)
+        m.ALERTS.state.clear()
+        m.ALERTS.edge("t", True, "x", category="tunnel")
+        m.ALERTS.edge("t", False, "tunnel-down", category="tunnel")
+        self.assertEqual(sent, [])                    # دسته خاموش
+        m.ALERTS.edge("s", True, "x", category="swap")
+        m.ALERTS.edge("s", False, "swap-ok", category="swap")
+        self.assertEqual(sent, ["swap-ok"])           # دسته‌ی روشن (پیش‌فرض)
+        m.ALERTS.edge("u", True, "x")
+        m.ALERTS.edge("u", False, "plain")
+        self.assertEqual(sent, ["swap-ok", "plain"])  # بدونِ دسته: مثلِ قبل
+
+    def test_tunnel_and_swap_checks_respect_their_toggles(self):
+        m = self.m
+        m.CONFIG["alerts"] = {"enabled": True,
+                              "events": {"tunnel": False, "swap": False}}
+        sent = []
+        m.ALERTS.emit = lambda t, html=False: sent.append(t)
+        m.ALERTS.state.clear()
+        mon = m.AlertMonitor()
+        m.TUNNELS.data = {"wg21": {"systemd": "failed", "endpoint": ""}}
+        mon._check_tunnels()
+        m.TUNNELS.data = {"wg21": {"systemd": "active", "endpoint": ""}}
+        mon._check_tunnels()
+        self.assertEqual(sent, [])
+        # ولی ردِ ممیزیِ گذر همچنان نوشته می‌شود (نشانگرِ روی گراف)
+        rows = m.META.audit_list(category="tunnel", limit=5)
+        self.assertTrue(any(r["action"] == "tun.monitor.up" for r in rows))
+
+    def test_expiry_alert_covers_wireguard_and_proxy_once_a_day(self):
+        """🪤 پیش از این فقط پروکسی، هر ۶ ساعت، و بی‌حافظه بینِ ری‌استارت‌ها."""
+        m = self.m
+        m.EXPIRY_STATE = os.path.join(self.tmp, "alert-expiry.last")
+        m.CONFIG["alerts"] = {"enabled": True, "expiry_days": 3}
+        from datetime import datetime as _dt, timedelta as _td
+        soon = (_dt.now() + _td(days=2)).strftime("%Y-%m-%d")
+        far = (_dt.now() + _td(days=30)).strftime("%Y-%m-%d")
+        m.META.meta_update("wgtest", "alice", {"expires": soon})
+        m.META.meta_update("wgtest", "bob", {"expires": far})
+        m.META.proxy_user_upsert("carol", {"pass_hash": "x", "rate_kbit": 0,
+                                           "quota_gb": 0, "expires": soon,
+                                           "enabled": 1, "note": ""})
+        events = []
+        m.ALERTS.event = lambda key, text: events.append((key, text))
+        mon = m.AlertMonitor()
+        hits = mon.expiring_accounts()
+        self.assertEqual([(k, n) for k, n, _e in hits],
+                         [("wg", "alice@wgtest"), ("px", "carol")])
+        mon._check_expiry()
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0][0], "expiry")
+        self.assertIn("alice@wgtest", events[0][1])
+        self.assertIn("carol", events[0][1])
+        self.assertNotIn("bob", events[0][1])
+        # همان روز، دوباره (و بعد از «ری‌استارت» = نمونه‌ی تازه) → بی‌صدا
+        mon._check_expiry()
+        m.AlertMonitor()._check_expiry()
+        self.assertEqual(len(events), 1)
+        with open(m.EXPIRY_STATE) as f:
+            self.assertEqual(f.read().strip(), _dt.now().strftime("%Y-%m-%d"))
+        # روزِ بعد → دوباره
+        mon._last_expiry_day = "1999-01-01"
+        mon._check_expiry()
+        self.assertEqual(len(events), 2)
+        # دسته‌ی خاموش → هیچ
+        m.CONFIG["alerts"]["events"] = {"expiry": False}
+        mon._last_expiry_day = "1999-01-01"
+        mon._check_expiry()
+        self.assertEqual(len(events), 2)
 
     def test_alert_edge_only_on_change(self):
         m = self.m
@@ -3378,6 +3515,24 @@ class BotTests(unittest.TestCase):
         self.assertEqual(got, exp2)
         # نامعتبر
         self.assertIsNone(b._parse_expiry_input("abc", {}))
+        # 🪤 ارقامِ فارسی: \d آن‌ها را می‌گرفت و «۲۰۲۷-۰۳-۲۱» بی‌تبدیل ذخیره
+        # می‌شد؛ اعمالِ انقضا مقایسه‌ی رشته‌ای با تاریخِ لاتین است و کاربر
+        # هرگز منقضی نمی‌شد.
+        self.assertEqual(b._parse_expiry_input("۲۰۲۷-۰۳-۲۱", {}), "2027-03-21")
+        self.assertEqual(b._parse_expiry_input("۳۰", {}), exp)
+        # تاریخِ بدشکلِ ولی عددی هم رد شود
+        self.assertIsNone(b._parse_expiry_input("2027-13-45", {}))
+
+    def test_input_step_normalises_persian_digits(self):
+        m = self.m
+        b = m.BOT
+        sent = []
+        b.send = lambda chat, text, kb=None, **kw: sent.append(text)
+        asked = []
+        b._ask_confirm = lambda frm, chat, st, summary: asked.append(st)
+        st = {"kind": "px", "act": "ren", "name": "nobody"}
+        b._input_step("1", "1", st, "۲۰۲۷-۰۳-۲۱", set())
+        self.assertEqual(asked and asked[0]["val"], "2027-03-21")
 
     def test_bot_commands_defined(self):
         # اطمینان از اینکه ثبتِ دستور خطای ساختاری ندارد (بدون شبکه)
@@ -6008,7 +6163,10 @@ class PostRouteInventoryTests(unittest.TestCase):
         for n in ast.walk(tree):
             if not isinstance(n, ast.FunctionDef):
                 continue
-            if not (n.name == "do_POST" or n.name.startswith("_post_")):
+            # do_POST فقط پوششِ try/except است (پلنِ ۵۰۰ ِ JSON); شاخه‌ها در
+            # _do_post زندگی می‌کنند.
+            if not (n.name in ("do_POST", "_do_post")
+                    or n.name.startswith("_post_")):
                 continue
             scanned.append(n.name)
             for l in lines[n.lineno - 1:n.end_lineno]:
@@ -6108,7 +6266,7 @@ class PostRouteInventoryTests(unittest.TestCase):
     def test_the_scan_covers_do_post_and_every_extracted_group(self):
         """گاردِ خودِ گارد: اگر پویش متدی را جا بیندازد بی‌صدا سست می‌شود."""
         _paths, scanned = self._scanned()
-        self.assertIn("do_POST", scanned)
+        self.assertIn("_do_post", scanned)
         groups = [n for n in scanned if n.startswith("_post_")]
         self.assertGreaterEqual(len(groups), 1,
                                 "هیچ گروهِ استخراج‌شده‌ای پیدا نشد — "
@@ -10124,9 +10282,12 @@ class SecretFileModeTests(unittest.TestCase):
         """گاردِ بالا با نبودِ tmp هم سبز می‌ماند — پس وجودِ الگو را
         هم بسنج، وگرنه تستی داریم که هیچ نمی‌سنجد."""
         src = _read_panel_source()
-        n = src.count("os.O_WRONLY | os.O_CREAT | os.O_TRUNC")
+        # دو الگویِ درست: os.open با مودِ صریح، یا tempfile.mkstemp که روی
+        # POSIX خودش با ۰۶۰۰ می‌سازد (فایل‌های موقتِ نامِ یکتا).
+        n = (src.count("os.O_WRONLY | os.O_CREAT | os.O_TRUNC")
+             + src.count("tempfile.mkstemp("))
         self.assertGreaterEqual(n, 5,
-                                "فقط %d جا مود را در os.open می‌دهد" % n)
+                                "فقط %d جا فایل با مودِ نهایی ساخته می‌شود" % n)
 
 
 class BotDispatchTests(unittest.TestCase):
@@ -10428,6 +10589,278 @@ console.log('BAD=' + bad);
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("BAD=0", r.stdout, r.stdout)
         self.assertIn("OLD_PATTERN_VULNERABLE", r.stdout)
+
+
+class RequestHardeningTests(unittest.TestCase):
+    """دستهٔ دومِ بازبینی: بدنه‌ی بدشکل، inf/nan، ۵۰۰ ِ JSON، لینکِ اشتراک،
+    rate-limit ِ اتمیک، TOTP با رمز، استخرِ WARP، فایل‌های موقتِ یکتا."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="wgpanel-hard-")
+        self.m = load_module(self.tmp)
+        m = self.m
+        with open(os.path.join(self.tmp, "wgtest.conf"), "w",
+                  encoding="utf-8") as f:
+            f.write(FIXTURE_CONF)
+        salt = "a" * 32
+        m.CONFIG["users"] = [
+            {"username": "admin", "salt": salt,
+             "hash": m.hash_password("secret-pw", salt),
+             "role": "admin", "totp": "", "stoken": "s1", "active": True}]
+        m.save_config = lambda: None
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _post(self, path, body=None, raw=None, session="admin", headers=None):
+        h = make_fake_handler(
+            self.m, path=path, method="POST",
+            body=(raw if raw is not None else (body or {})),
+            headers=headers,
+            session=({"u": "admin", "r": "admin"} if session else None))
+        h.do_POST()
+        code = dict(h.sent).get("__code__")
+        txt = b"".join(h.body).decode("utf-8") or "{}"
+        return code, json.loads(txt), h
+
+    # ---- بدنه و فیلدهای بدنوع ---------------------------------------------
+    def test_a_non_object_json_body_is_a_400_even_before_login(self):
+        for raw in (b"[]", b'"x"', b"7", b"null"):
+            with self.subTest(raw=raw):
+                code, obj, _h = self._post("/api/login", raw=raw, session=None)
+                self.assertEqual(code, 400)
+                self.assertFalse(obj["ok"])
+
+    def test_wrongly_typed_fields_are_400_not_tracebacks(self):
+        cases = [
+            ("/api/roles/save", {"name": "rr", "perms": [{}]}),
+            ("/api/roles/save", {"name": "rr", "perms": "wg.view"}),
+            ("/api/bot/save", {"users": ["x"]}),
+            ("/api/bot/save", {"users": {"id": 1}}),
+            ("/api/ecmp/save", {"groups": [[1]]}),
+            ("/api/alerts/save", {"events": [1], "bot_token": "t",
+                                  "chat_id": "1"}),
+        ]
+        for path, body in cases:
+            with self.subTest(path=path, body=body):
+                code, obj, _h = self._post(path, body)
+                self.assertEqual(code, 400)
+                self.assertFalse(obj["ok"])
+
+    def test_proxy_log_count_tolerates_garbage(self):
+        m = self.m
+        for n in ("abc", None, [], 1e400):
+            with self.subTest(n=n):
+                self.assertEqual(m.proxy_recent_log(n), [])   # فایلِ لاگ نیست
+
+    def test_parsers_reject_non_finite_numbers(self):
+        m = self.m
+        for raw in ("inf", "-inf", "nan", "1e400", float("inf"), float("nan")):
+            with self.subTest(raw=raw):
+                self.assertIsNotNone(m.parse_quota_expires(raw, "")[2])
+                self.assertIsNotNone(m.parse_rate_mbit(raw)[1])
+                self.assertIsNotNone(m._parse_total_action({"total_gb": raw})[1])
+        self.assertEqual(m.parse_quota_expires("2.5", "")[0], 2.5)
+        self.assertEqual(m.parse_rate_mbit("20.7"), (20, None))
+
+    def test_json_never_emits_nan_or_infinity(self):
+        h = make_fake_handler(self.m, path="/x")
+        h._json({"a": float("nan"), "b": [float("inf"), 1.5], "c": {"d": -float("inf")}})
+        body = b"".join(h.body).decode()
+        self.assertNotIn("NaN", body)
+        self.assertNotIn("Infinity", body)
+        self.assertEqual(json.loads(body), {"a": None, "b": [None, 1.5],
+                                            "c": {"d": None}})
+
+    def test_an_unhandled_exception_becomes_a_json_500(self):
+        m = self.m
+        m.build_stats = lambda: 1 / 0
+        h = make_fake_handler(self.m, path="/api/stats", method="GET",
+                              session={"u": "admin", "r": "admin"})
+        h.do_GET()                                    # نباید استثنا بالا بیاید
+        self.assertEqual(dict(h.sent).get("__code__"), 500)
+        obj = json.loads(b"".join(h.body).decode())
+        self.assertFalse(obj["ok"])
+        self.assertIn("actions.log", obj["error"])
+        self.assertTrue(h.close_connection)
+        with open(m.ACTION_LOG, encoding="utf-8") as f:
+            self.assertIn("unhandled GET /api/stats: ZeroDivisionError", f.read())
+
+    def test_a_route_that_already_answered_is_not_answered_twice(self):
+        m = self.m
+        orig = m.Handler._do_get
+
+        def boom(self_):
+            self_._json({"ok": True})
+            raise RuntimeError("after response")
+        m.Handler._do_get = boom
+        try:
+            h = make_fake_handler(self.m, path="/x", method="GET")
+            h.do_GET()
+        finally:
+            m.Handler._do_get = orig
+        codes = [c for k, c in h.sent if k == "__code__"]
+        self.assertEqual(codes, [200])
+
+    # ---- لینکِ اشتراک -------------------------------------------------------
+    def test_share_url_scheme_follows_tls_config(self):
+        m = self.m
+        m.add_peer("wgtest", "sh", use_psk=False)
+        m.CONFIG.pop("tls_cert", None)
+        code, obj, _h = self._post("/api/peer/share",
+                                   {"iface": "wgtest", "name": "sh", "minutes": 5},
+                                   headers={"Host": "panel.test:8787"})
+        self.assertTrue(obj["ok"], obj)
+        self.assertTrue(obj["url"].startswith("http://panel.test:8787/s/"), obj["url"])
+        m.CONFIG["tls_cert"] = "/x/cert.pem"
+        code, obj, _h = self._post("/api/peer/share",
+                                   {"iface": "wgtest", "name": "sh", "minutes": 5},
+                                   headers={"Host": "panel.test"})
+        self.assertTrue(obj["url"].startswith("https://panel.test/s/"), obj["url"])
+
+    # ---- rate-limit ِ اتمیک -----------------------------------------------
+    def test_login_limiter_reserves_the_slot_at_check_time(self):
+        """🪤 پنج درخواستِ هم‌زمان همه از «< 5» رد می‌شدند چون ثبت بعد از
+        PBKDF2 بود؛ حالا جا در لحظه‌ی سنجش گرفته می‌شود."""
+        m = self.m
+        m._login_attempts.clear()
+        ip = "203.0.113.50"
+        for i in range(5):
+            self.assertTrue(m.login_allowed(ip), i)     # همه «در جریان»
+        self.assertFalse(m.login_allowed(ip))
+        m.login_succeeded(ip)                             # یکی موفق شد → جا برگشت
+        self.assertTrue(m.login_allowed(ip))
+        self.assertFalse(m.login_allowed(ip))
+        # شکست، رزرو را به تلاشِ ناموفق تبدیل می‌کند نه دو تا
+        m.login_failed(ip)
+        self.assertEqual(len(m._login_attempts[ip]), 5)
+        # موفقیتِ بی‌رزرو بی‌اثر است
+        m._login_attempts[ip] = []
+        m.login_succeeded(ip)
+        self.assertEqual(m._login_attempts[ip], [])
+
+    def test_account_limiter_reserves_the_slot_at_check_time(self):
+        m = self.m
+        m._login_attempts_user.clear()
+        for _ in range(m._LOGIN_USER_MAX):
+            self.assertTrue(m.login_user_allowed("admin"))
+        self.assertFalse(m.login_user_allowed("admin"))
+        m.login_user_succeeded("admin")
+        self.assertTrue(m.login_user_allowed("admin"))
+        m.login_user_failed("admin")
+        self.assertEqual(len(m._login_attempts_user["admin"]), m._LOGIN_USER_MAX)
+
+    def test_a_successful_login_does_not_consume_the_budget(self):
+        m = self.m
+        m._login_attempts.clear(); m._login_attempts_user.clear()
+        for i in range(7):
+            code, obj, _h = self._post("/api/login", {"username": "admin",
+                                                     "password": "secret-pw"},
+                                       session=None)
+            self.assertEqual((i, code, obj.get("ok")), (i, 200, True))
+        self.assertEqual(m._login_attempts.get("127.0.0.1", []), [])
+        # و رمزِ غلط می‌شمارد
+        for _ in range(5):
+            self._post("/api/login", {"username": "admin", "password": "no"},
+                       session=None)
+        code, obj, _h = self._post("/api/login", {"username": "admin",
+                                                 "password": "secret-pw"},
+                                   session=None)
+        self.assertEqual(code, 429)
+
+    def test_totp_required_step_does_not_consume_the_budget(self):
+        m = self.m
+        m._login_attempts.clear(); m._login_attempts_user.clear()
+        m.CONFIG["users"][0]["totp"] = "JBSWY3DPEHPK3PXP"
+        for _ in range(7):
+            code, obj, _h = self._post("/api/login", {"username": "admin",
+                                                     "password": "secret-pw"},
+                                       session=None)
+            self.assertTrue(obj.get("totp_required"), obj)
+        self.assertEqual(m._login_attempts.get("127.0.0.1", []), [])
+
+    # ---- TOTP ---------------------------------------------------------------
+    def test_replacing_an_existing_totp_needs_the_password(self):
+        m = self.m
+        m.CONFIG["users"][0]["totp"] = "JBSWY3DPEHPK3PXP"
+        code, obj, _h = self._post("/api/totp/setup", {})
+        self.assertEqual(code, 403)
+        code, obj, _h = self._post("/api/totp/setup", {"password": "wrong"})
+        self.assertEqual(code, 403)
+        code, obj, _h = self._post("/api/totp/setup", {"password": "secret-pw"})
+        self.assertTrue(obj["ok"], obj)
+        self.assertIn("secret", obj)
+        # بدونِ TOTP ِ قبلی رمز لازم نیست (رفتارِ قبلی)
+        m.CONFIG["users"][0]["totp"] = ""
+        code, obj, _h = self._post("/api/totp/setup", {})
+        self.assertTrue(obj["ok"], obj)
+
+    def test_confirming_totp_rotates_the_session_token(self):
+        m = self.m
+        code, obj, _h = self._post("/api/totp/setup", {})
+        secret = obj["secret"]
+        before = m.CONFIG["users"][0]["stoken"]
+        code, obj, h = self._post("/api/totp/confirm",
+                                  {"code": m.totp_code(secret)})
+        self.assertTrue(obj["ok"], obj)
+        self.assertEqual(m.CONFIG["users"][0]["totp"], secret)
+        self.assertNotEqual(m.CONFIG["users"][0]["stoken"], before)
+        self.assertTrue(any(k == "Set-Cookie" and v.startswith("wgs=")
+                            for k, v in h.sent))
+        self.assertNotIn("admin", m._totp_pending)
+
+    def test_a_pending_totp_secret_expires(self):
+        m = self.m
+        code, obj, _h = self._post("/api/totp/setup", {})
+        secret = obj["secret"]
+        m._totp_pending["admin"] = (secret, time.time() - 1)
+        code, obj, _h = self._post("/api/totp/confirm",
+                                   {"code": m.totp_code(secret)})
+        self.assertFalse(obj["ok"])
+        self.assertNotIn("admin", m._totp_pending)
+        self.assertEqual(m.CONFIG["users"][0]["totp"], "")
+
+    # ---- WARP -----------------------------------------------------------------
+    def test_warp_endpoint_pool_and_live_endpoint_are_protected(self):
+        """🪤 هدفی که با endpointِ امروز تداخل نداشت پذیرفته می‌شد و بعد از
+        چرخشِ گارد، بسته‌های رمزشده‌ی WARP خودشان به تونل می‌رفتند."""
+        m = self.m
+        orig = m.run
+
+        def fake(cmd, timeout=20):
+            if cmd[:2] == ["wg", "show"] and cmd[-1] == "endpoints":
+                return 0, "PUBKEY=\t162.159.200.77:2408\n", ""
+            return orig(cmd, timeout)
+        m.run = fake
+        prot = m.warp_protected_ips()
+        for ep in list(m.WARP_EP_POOL) + [m.WARP_EP_IP, "162.159.200.77"]:
+            with self.subTest(ep=ep):
+                self.assertTrue(any(m.ipaddress.ip_address(ep) in n for n in prot))
+        for bad in ("188.114.96.0/24", "162.159.192.0/23", "162.159.200.77"):
+            with self.subTest(target=bad):
+                _k, _v, err = m.warp_validate_target(bad, prot)
+                self.assertTrue(err)
+        self.assertEqual(m.warp_validate_target("34.120.0.0/16", prot)[2], "")
+
+    def test_warp_targets_write_uses_a_unique_tmp_and_a_reentrant_lock(self):
+        m = self.m
+        m.WARP_TARGETS = os.path.join(self.tmp, "warp-targets.conf")
+        with m._WARP_TARGETS_LOCK:                   # RLock: دوباره گرفتنی
+            ok, err = m.warp_targets_write(["gemini.google.com"], "admin")
+        self.assertTrue(ok, err)
+        self.assertEqual(m.warp_targets_read(), ["gemini.google.com"])
+        self.assertEqual([f for f in os.listdir(self.tmp)
+                          if f.startswith("warp-targets") and f.endswith(".tmp")], [])
+        self.assertEqual(stat.S_IMODE(os.stat(m.WARP_TARGETS).st_mode), 0o600)
+
+    # ---- CSS ------------------------------------------------------------------
+    def test_css_tokens_used_by_the_rbac_ui_are_defined(self):
+        src = _read_panel_source()
+        root = re.search(r":root\{(.*?)\}", src, re.S).group(1)
+        self.assertIn("--line:", root)
+        self.assertIn("--accent:", root)
+        # هیچ پس‌زمینه‌ی تیره‌ی هاردکد داخلِ HTML ِ ساخته‌شده در JS (تمِ روشن)
+        self.assertIsNone(re.search(r"'[^'\n]*background:#0d1117", src))
 
 
 if __name__ == "__main__":
