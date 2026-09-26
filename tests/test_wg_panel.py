@@ -8860,6 +8860,33 @@ class ApiErrorLanguageTests(unittest.TestCase):
         bad = re.findall(r'"error":[^,}\n]*[؀-ۿ][^,}\n]*', src)
         self.assertEqual(bad, [], "پیامِ فارسی در مقدارِ error: %s" % bad)
 
+    def test_no_persian_reaches_message_in_any_shape(self):
+        """همتای گاردِ بالا برای خانهٔ `message` (پیامِ موفقیت در toast).
+
+        `/api/report/test` تا این‌جا «در حالِ ساخت و ارسال…» ِ فارسیِ ثابت
+        برمی‌گرداند و کاربرِ en/ru/zh همان را در toast می‌دید؛ گاردِ `error`
+        آن را نمی‌دید چون خانه‌اش `message` بود.
+        """
+        src = _read_panel_source()
+        bad = re.findall(r'"message":[^,}\n]*[؀-ۿ][^,}\n]*', src)
+        self.assertEqual(bad, [], "پیامِ فارسی در مقدارِ message: %s" % bad)
+
+    def test_report_test_message_follows_the_request_language(self):
+        m = self.m
+        m.CONFIG["users"] = [{"username": "admin", "salt": "a" * 32,
+                              "hash": "h", "role": "admin", "totp": "T" * 16,
+                              "stoken": "s1"}]
+        m.send_periodic_report = lambda: (True, "api.ok.sent")
+        h = make_fake_handler(m, path="/api/report/test", method="POST",
+                              body={}, headers={"Cookie": "wgl=en"},
+                              session={"u": "admin", "r": "admin"})
+        h.do_POST()
+        r = json.loads(b"".join(h.body).decode("utf-8"))
+        self.assertTrue(r["ok"], r)
+        self.assertEqual(r["message"],
+                         "Building and sending — check Telegram in a few "
+                         "seconds")
+
     def test_every_aerr_call_matches_its_catalog_placeholders(self):
         """پارامترهای aerr باید دقیقاً جای‌گیرهای همان کلید باشند.
 

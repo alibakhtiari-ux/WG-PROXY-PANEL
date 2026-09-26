@@ -6515,6 +6515,13 @@ I18N = {
     "api.ok.pw.changed": ("رمز عبور تغییر کرد", "The password was changed",
                           "Пароль изменён", "密码已更改"),
     "api.ok.sent": ("ارسال شد", "Sent", "Отправлено", "已发送"),
+    "api.ok.report.queued": ("در حالِ ساخت و ارسال — چند ثانیه‌ی دیگر تلگرام "
+                             "را ببینید",
+                             "Building and sending — check Telegram in a few "
+                             "seconds",
+                             "Отчёт готовится и отправляется — проверьте "
+                             "Telegram через несколько секунд",
+                             "正在生成并发送——几秒后请查看 Telegram"),
     "api.ok.restore": ("{n} فایل بازیابی شد (وضعیت قبلی در restore-backups "
                        "ذخیره شد)",
                        "{n} file(s) restored (the previous state was saved in "
@@ -31590,8 +31597,7 @@ class Handler(BaseHTTPRequestHandler):
             self._audit("settings", "alert.report", "telegram",
                         adet("ui.audit.det.testsend"))
             self._json({"ok": True,
-                        "message": "در حالِ ساخت و ارسال — چند ثانیه‌ی "
-                                   "دیگر تلگرام را ببینید"})
+                        "message": "api.ok.report.queued"})
         elif path == "/api/alerts/get":
             c = alert_cfg()
             tuns = [i for i in list_tunnel_confs()
