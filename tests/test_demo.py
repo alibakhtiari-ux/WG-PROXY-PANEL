@@ -73,6 +73,22 @@ class DemoToolsTests(unittest.TestCase):
                 self.assertEqual(fake_tools.main(["x", tool, "-v"]), 1)
 
 
+class DemoSandboxTests(unittest.TestCase):
+    def test_paths_already_inside_the_demo_folder_are_left_alone(self):
+        """روی macOS ‎$TMPDIR زیرِ ‎/var/folders است؛ مسیرهای خودِ پنل که همین
+        حالا داخلِ پوشه‌ی دمو اند نباید دوباره پیشوند بگیرند. این شکل روی
+        CI ِ لینوکس (‎/tmp) هرگز پیش نمی‌آید، پس این‌جا شبیه‌سازی می‌شود."""
+        import types
+        state = "/var/folders/xy/T/wgpanel-demo/demo"
+        m = types.SimpleNamespace(
+            CONFIG_PATH=state + "/panel/config.json",
+            WG_DIR="/etc/wireguard", NOTE="not a path")
+        demo.sandbox(m, state)
+        self.assertEqual(m.CONFIG_PATH, state + "/panel/config.json")
+        self.assertEqual(m.WG_DIR, state + "/root/etc/wireguard")
+        self.assertEqual(m.NOTE, "not a path")
+
+
 class DemoSeedTests(unittest.TestCase):
     """دمو را واقعاً می‌سازد (بدونِ بالا آوردنِ سرور)."""
 
@@ -81,11 +97,16 @@ class DemoSeedTests(unittest.TestCase):
         cls.saved_env = dict(os.environ)
         cls.saved_mod = sys.modules.get("wg_panel")
         cls.tmp = tempfile.mkdtemp(prefix="wgpanel-demo-test-")
+        # addClassCleanup نه tearDownClass: اگر setUpClass بشکند unittest
+        # tearDownClass را صدا نمی‌زند، و PATH ِ آلوده به ابزارهای ساختگی
+        # (openssl، curl …) به تست‌های بعدیِ همین اجرا نشت می‌کرد — ساختِ
+        # کاربرِ پروکسی در BotTests با openssl ِ ساختگی بی‌صدا شکست می‌خورد.
+        cls.addClassCleanup(cls._restore)
         cls.state = os.path.join(cls.tmp, "demo")
         cls.m = demo.prepare(cls.state, reset=True)
 
     @classmethod
-    def tearDownClass(cls):
+    def _restore(cls):
         os.environ.clear()
         os.environ.update(cls.saved_env)
         if cls.saved_mod is None:
