@@ -2870,6 +2870,10 @@ class BotTests(unittest.TestCase):
         bot._px_add_cb(1, 1, "go", p)
         self.assertNotIn(1, bot.convo)
         u = m.META.proxy_user_get("pxuser1")
+        self.assertIsNotNone(u, "کاربر ساخته نشد: %s" % (sent[-1:],))
+        # نوعِ سرویس ترجمه شود، نه کلیدِ خامِ bot.proto.* در پیش‌نمایش/پیام
+        self.assertFalse([t for t, _ in sent if "bot.proto." in t],
+                         "کلیدِ خامِ bot.proto.* به کاربر رسید")
         self.assertEqual(u["rate_kbit"], 20000)       # Mbit → kbit
         self.assertEqual(u["quota_gb"], 50.0)
         self.assertEqual(u["protocol"], "https")

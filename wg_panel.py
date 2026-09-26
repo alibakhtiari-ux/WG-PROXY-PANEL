@@ -19675,7 +19675,7 @@ class TelegramBot(threading.Thread):
                           if st["rate"] else self.T('bot.wg_add_create.12')),
                  self._kv(self.T('bot.wg_add_create.8'), _fa_num("%g GB" % st["quota"])
                           if st["quota"] else self.T('bot.wg_add_create.12')),
-                 self._kv(self.T('bot.px_add_create.10'), self._PROTO_FA[st["proto"]]),
+                 self._kv(self.T('bot.px_add_create.10'), self.T(self._PROTO_FA[st["proto"]])),
                  self._kv(self.T('bot.px_add_prompt.19'), self.T('bot.px_add_prompt.21') if not st["src"] else ""),
                  ]
             if st["src"]:
@@ -19832,7 +19832,7 @@ class TelegramBot(threading.Thread):
               username, det, "", True)
         host = CONFIG.get("server_host") or ""
         L = [self._rtl(self.T('bot.px_add_create.9', p0=esc_html(username))), "",
-             self._kv(self.T('bot.px_add_create.10'), self._PROTO_FA[st["proto"]]),
+             self._kv(self.T('bot.px_add_create.10'), self.T(self._PROTO_FA[st["proto"]])),
              self._kv(self.T('bot.wg_add_create.10'), _fa_num("%d Mbit/s" % st["rate"])
                       if st["rate"] else self.T('bot.wg_add_create.12')),
              self._kv(self.T('bot.wg_add_create.8'), _fa_num("%g GB" % st["quota"])
