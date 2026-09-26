@@ -20613,6 +20613,11 @@ class TelegramBot(threading.Thread):
         return [i for i in ifs if i in allowed] if allowed else ifs
 
     def _start_wg_add(self, frm, chat):
+        # خروجیِ ویزارد کانفیگ با کلیدِ خصوصی است. بدونِ این گارد peer در
+        # گروه ساخته می‌شد و بعد _send_wg_conf تحویلش را رد می‌کرد: کاربری
+        # بی‌کانفیگ، و نام/سهمیه‌اش جلوی همه.
+        if self._refuse_in_group(chat):
+            return
         ifs = self._wg_add_ifaces()
         if not ifs:
             self.send(chat, self.T('bot.start_wg_add.1'), [self._back_row()])
@@ -20702,6 +20707,8 @@ class TelegramBot(threading.Thread):
 
     def _wg_add_cb(self, frm, chat, arg, p):
         """دکمه‌های ویزاردِ ساخت: wg:addw:<field>|<val> یا go/cancel."""
+        if self._refuse_in_group(chat):
+            return
         st = self.convo.get(frm)
         if not st or st.get("flow") != "wg_add":
             self.send(chat, self._rtl(self.T('bot.wg_add_cb.1')), [self._back_row()])
@@ -20822,6 +20829,9 @@ class TelegramBot(threading.Thread):
 
     # ---- گفت‌وگوی ساختِ کاربرِ پروکسی (ویزاردِ کامل مثلِ مودالِ وب)
     def _start_px_add(self, frm, chat):
+        # رمزِ پروکسی هم در مرحله‌ی تأیید و هم در پیامِ نهایی چاپ می‌شود.
+        if self._refuse_in_group(chat):
+            return
         self.convo[frm] = {"flow": "px_add", "step": "name", "name": "",
                            "noauth": False, "pw": "", "rate": None,
                            "quota": None, "proto": "both", "src": [],
@@ -20930,6 +20940,8 @@ class TelegramBot(threading.Thread):
 
     def _px_add_cb(self, frm, chat, arg, p):
         """دکمه‌های ویزاردِ ساختِ پروکسی: px:addw:<field>|<val> یا go/cancel."""
+        if self._refuse_in_group(chat):
+            return
         st = self.convo.get(frm)
         if not st or st.get("flow") != "px_add":
             self.send(chat, self._rtl(self.T('bot.px_add_cb.1')), [self._back_row()])
@@ -21106,6 +21118,12 @@ class TelegramBot(threading.Thread):
         if not st:
             return
         p = bot_perms(frm) or set()
+        # گفت‌وگو با frm کلید خورده نه با چت: ویزاردی که در خصوصی باز است،
+        # پیامِ بعدیِ همان کاربر در **گروه** را ورودیِ خودش می‌گرفت — رمزِ
+        # پروکسی از گروه، و پاسخِ مرحله (با رمز) به گروه. متنِ گروهی ورودیِ
+        # ویزارد نیست؛ بی‌صدا، تا گفت‌وگوی معمولیِ گروه پر از خطا نشود.
+        if st["flow"] in ("wg_add", "px_add") and not self._private():
+            return
         if st["flow"] == "wg_add":
             if "wg.add" not in p:
                 self.convo.pop(frm, None)

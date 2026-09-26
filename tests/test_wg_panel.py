@@ -11804,6 +11804,42 @@ class ProductUxI18nTests(unittest.TestCase):
         b._px_conf(7, "pxu")
         self.assertIn("secret-pw", json.dumps([p for _m, p in sent], ensure_ascii=False))
 
+    def test_creation_wizards_are_refused_in_a_group(self):
+        """ویزاردهای ساختِ وایرگارد/پروکسی فقط در چتِ خصوصی.
+
+        ویزاردِ وایرگارد در گروه peer را می‌ساخت و بعد تحویلِ کانفیگ رد
+        می‌شد؛ ویزاردِ پروکسی رمز را در تأیید و پیامِ نهایی چاپ می‌کرد.
+        """
+        m = self.m
+        b, sent = self._bot()
+        m.CONFIG["bot"] = {"enabled": True, "users": [{"id": "1", "role": "admin",
+                                                        "lang": "en"}]}
+        b._chat_type = "supergroup"
+        b._start_wg_add(1, -5)
+        b._start_px_add(1, -5)
+        b._wg_add_cb(1, -5, "go", set())
+        b._px_add_cb(1, -5, "go", set())
+        self.assertEqual(b.convo, {})
+        self.assertEqual(len(sent), 4)
+        self.assertTrue(all("private chat" in p["text"] for _mth, p in sent))
+
+    def test_group_text_is_not_input_to_a_private_wizard(self):
+        """گفت‌وگو با کاربر کلید خورده، نه با چت: متنِ گروهی نباید مرحله‌ی
+        رمزِ ویزاردِ خصوصی را پر کند."""
+        m = self.m
+        b, sent = self._bot()
+        m.CONFIG["bot"] = {"enabled": True, "users": [{"id": "1", "role": "admin",
+                                                        "lang": "en"}]}
+        b._chat_type = "private"
+        b._start_px_add(1, 1)
+        b.convo[1]["step"] = "pass"
+        sent.clear()
+        b._chat_type = "supergroup"
+        b._convo_step(1, -5, "group-typed-secret")
+        self.assertEqual(sent, [])
+        self.assertEqual(b.convo[1]["pw"], "")
+        self.assertEqual(b.convo[1]["step"], "pass")
+
     def test_bot_stays_silent_for_strangers_in_groups(self):
         m = self.m
         b, sent = self._bot()
