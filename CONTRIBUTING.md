@@ -48,6 +48,45 @@ open the panel, use the part you changed, and check the browser console.
 In your pull request, say which of these checks you ran and what they
 reported.
 
+## Trying a change without a server
+
+`python3 demo/run.py` starts the panel at `http://127.0.0.1:8787` (user
+`admin`, password `demo`) with made-up clients, an egress tunnel, six months of
+traffic history, gauges, speed tests and audit events. It loads a copy of
+`wg_panel.py` from a temporary folder and redirects every `/etc`, `/var` and
+`/opt` path into it. It also puts fake versions of `wg`, `ip`, `systemctl`
+and every other program the panel calls in front of the real ones, and
+listens only on localhost. It needs no WireGuard and no root.
+`--reset` throws the data away and seeds it again.
+
+If you add a call to a new system program, add it to `TOOLS` in
+`demo/run.py`: `tests/test_demo.py` fails otherwise, because the demo would
+run the real program.
+
+If a change alters how the interface looks, regenerate the screenshots:
+
+```bash
+python3 demo/screenshots.py
+```
+
+This needs Node.js and Playwright (`npm install playwright`); if Pillow is
+installed, the images are compressed.
+
+## Releasing
+
+1. Move the entries under `## [Unreleased]` in `CHANGELOG.md` into a new
+   `## [X.Y.Z] — date` section, and add its link at the bottom.
+2. Merge that to `main`, then tag it:
+
+   ```bash
+   git tag vX.Y.Z && git push origin vX.Y.Z
+   ```
+
+The release workflow runs the tests again and publishes a GitHub release with
+`wg_panel.py`, `wg-panel.service` and `SHA256SUMS`. The notes are that
+version's CHANGELOG section plus the build id. A tag without a CHANGELOG
+section fails and publishes nothing.
+
 ## Conventions
 
 - **Translations.** Every user-facing string lives in the `I18N` catalog in
