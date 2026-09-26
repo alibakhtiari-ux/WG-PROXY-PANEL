@@ -67,12 +67,46 @@ prints as its version.
   domain; entries not checked for seven days are pruned.
 - A negative `Content-Length` made a request thread wait until the client
   closed the connection.
-- The systemd install steps did not download `three.LICENSE.txt`, which is
-  listed in `SHA256SUMS`, so `sha256sum -c` failed.
 - The login rate limiter's cleanup left open reservations behind; the next
   failure from that address was then not counted.
 - `/api/totp/setup` and `/api/totp/disable` checked the password without a
   rate limit; they now share the per-account login budget.
+
+## [1.2.1] — 2026-09-26
+
+### Changed
+
+- The Telegram bot's command menu is shown in each bot user's language (the
+  one chosen with `/lang`); chats of users who are not authorized see the
+  owner's language. The descriptions used to be Persian in every language.
+- The periodic picture report (`report`) is written in the owner's language,
+  like the other alerts; it used to be Persian only.
+- `deploy/wg-panel-verify-backup.sh` checks the full-host backup chain only
+  when it is in use (`FULL_PREFIX` set in `/etc/wg-panel-s4.env`, or the
+  chain has uploaded at least once). An install that backs up only the panel
+  no longer fails every week with "no backup on MEGA".
+- README, in all four languages, checked against the code: new sections on
+  setting up the Telegram bot, the Squid proxy, backups, TLS and reverse
+  proxies, outbound connections, limitations and uninstalling; the optional
+  programs and ports to open; more configuration keys with their defaults
+  and the permission catalog. The upgrade step now installs
+  `wg-panel.service` and the bundled files too.
+
+### Fixed
+
+- Per-client **upload** limits were never applied under the shipped systemd
+  unit: `ProtectKernelModules=yes` stopped the panel from loading the `ifb`
+  module, and the limit failed with only a line in `actions.log`. The unit
+  now loads `ifb` before the panel starts, and the Docker installers
+  (`host-setup.sh`, the offline `install.sh`) load it on the host.
+  **Existing systemd installs must install the new `wg-panel.service`**
+  (see Upgrading in the README).
+- Saving the bot users from the panel erased each user's `/lang` choice,
+  because the form does not carry it. For the owner this also switched the
+  alerts back to Persian. The language is now kept.
+- The systemd install step in the READMEs did not download
+  `three.LICENSE.txt`, so `sha256sum -c SHA256SUMS` failed on a correct
+  download.
 
 ## [1.2.0] — 2026-09-26
 
@@ -284,7 +318,8 @@ prints as its version.
 
 First public release.
 
-[Unreleased]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/compare/81faf06...v1.1.0
 [1.0.0]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/commit/81faf06

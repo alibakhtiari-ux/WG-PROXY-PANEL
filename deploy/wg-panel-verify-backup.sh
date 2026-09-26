@@ -1,6 +1,6 @@
 #!/bin/bash
 # صحت‌سنجیِ دوره‌ایِ بکاپ‌ها — نسخه‌ی MEGA-محور (سیاست: بکاپی روی سرور نمی‌ماند).
-# برای هر دو بکاپ (پنل + کاملِ سرور) از خودِ MEGA S4:
+# برای بکاپِ پنل — و بکاپِ کاملِ سرور، اگر آن زنجیره به‌کار است — از خودِ MEGA S4:
 #   تازگی (state + فهرستِ ریموت) + تطبیقِ sha256 استریمِ ریموت با sidecar
 #   + سالم‌بودنِ آرشیو (tar از استریم) + وجودِ فایل‌های کلیدی
 #   + یکپارچگیِ دیتابیسِ پنل (PRAGMA integrity_check روی نسخه‌ی داخلِ بکاپ).
@@ -22,6 +22,26 @@ else
     . "$ENV_FILE"
 fi
 PREFIX="${PREFIX:-wg-panel}"
+
+# زنجیره‌ی «بکاپِ کاملِ سرور» (host-backup-*.tar.gz) اسکریپتِ جدایی دارد که در
+# این مخزن نیست. پیش‌تر همیشه سنجیده می‌شد، پس روی هر نصبی جز استقرارِ
+# نگه‌دارنده این یونیت هر هفته «هیچ بکاپی روی MEGA نیست» می‌داد و failed
+# می‌ماند. حالا فقط وقتی سنجیده می‌شود که به‌کار باشد: FULL_PREFIX صریحاً در
+# $ENV_FILE آمده، یا state نشان می‌دهد این زنجیره دست‌کم یک بار آپلود کرده است.
+# (همین دومی استقرارِ موجود را بی‌تغییر نگه می‌دارد، و زنجیره‌ای که زمانی
+# کار می‌کرده و بعد خاموش شده همچنان گزارش می‌شود.)
+full_in_use() {
+    [ -n "${FULL_PREFIX:-}" ] && return 0
+    python3 - "$STATE" <<'PY' 2>/dev/null
+import json, sys
+try:
+    sys.exit(0 if "full" in json.load(open(sys.argv[1])) else 1)
+except Exception:
+    sys.exit(1)
+PY
+}
+CHECK_FULL=0
+full_in_use && CHECK_FULL=1
 FULL_PREFIX="${FULL_PREFIX:-host-full}"
 
 # $1=prefix  $2=name-pattern → جدیدترین آبجکت روی stdout
@@ -91,7 +111,8 @@ PY
 
 [ -n "${REMOTE:-}" ] && {
     check_remote "پنل"  "$PREFIX"      '^wg-panel-.*\.tar\.gz$'    "wg-panel/config.json" "panel"
-    check_remote "سرور" "$FULL_PREFIX" '^host-backup-.*\.tar\.gz$' "etc/letsencrypt"    "full"
+    [ "$CHECK_FULL" = 1 ] \
+        && check_remote "سرور" "$FULL_PREFIX" '^host-backup-.*\.tar\.gz$' "etc/letsencrypt" "full"
 }
 
 # یکپارچگیِ عمیقِ دیتابیسِ پنل از نسخه‌ی داخلِ بکاپِ ریموت
@@ -139,4 +160,8 @@ except Exception:
 PY
     exit 1
 fi
-echo "backup verify OK (پنل + سرور روی MEGA سالم/تازه، sha256 تطبیق، سرور بدونِ نسخه‌ی محلی)"
+if [ "$CHECK_FULL" = 1 ]; then
+    echo "backup verify OK (پنل + سرور روی MEGA سالم/تازه، sha256 تطبیق، سرور بدونِ نسخه‌ی محلی)"
+else
+    echo "backup verify OK (پنل روی MEGA سالم/تازه، sha256 تطبیق، سرور بدونِ نسخه‌ی محلی؛ بکاپِ کاملِ سرور به‌کار نیست)"
+fi

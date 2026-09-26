@@ -43,9 +43,16 @@ WireGuard 接口的 Web 面板：每个客户端的实时流量、添加和停�
 - [使用 systemd 安装](#install-with-systemd)
 - [升级](#upgrading)
 - [配置](#configuration)
+- [设置 Telegram 机器人](#telegram-bot-setup)
+- [Squid 代理](#squid-proxy)
+- [备份](#backups)
+- [TLS 与反向代理](#tls-and-reverse-proxies)
 - [Prometheus](#prometheus)
 - [安全](#security)
+- [出站连接](#outbound-connections)
+- [局限](#limitations)
 - [故障排查](#troubleshooting)
+- [卸载](#uninstalling)
 - [开发](#development)
 - [仓库结构](#repository-layout)
 - [参与贡献](#contributing)
@@ -133,8 +140,8 @@ WireGuard 接口的 Web 面板：每个客户端的实时流量、添加和停�
 机器人运行在面板进程内部，无需额外服务。它是管理服务器的第二条完整途径——
 不需要 SSH，也不需要浏览器：
 
-- **18 条命令**和按钮菜单：创建、查看、重命名、启用/停用和删除 WireGuard
-  客户端及代理用户；设置**配额**和**限速**；发送**配置文件**和**二维码**
+- **18 条命令**（其中 `/botwatch` 仅限所有者使用）和按钮菜单：创建、查看、
+  重命名、启用/停用和删除 WireGuard 客户端及代理用户；设置**配额**和**限速**；发送**配置文件**和**二维码**
 - **以图片形式发送图表**——机器人自己绘制 PNG（纯 Python，不依赖图像库）：
   客户端流量（24 小时 / 7 天 / 30 天 / 6 个月）、代理流量和测速结果，并在说明
   中附上总量、平均值和峰值
@@ -143,7 +150,8 @@ WireGuard 接口的 Web 面板：每个客户端的实时流量、添加和停�
 - **12 类告警**：出口隧道断开/恢复、达到配额、账户即将到期、CPU/RAM/磁盘占用
   过高、swap 使用、多次登录失败、备份上传失败、网速下降、面板重启等
 - 在 Telegram 中一键**批准面板登录**（可选）
-- 机器人用户的角色（`owner`、`admin`、`viewer`），每个会话可使用不同语言
+- 机器人用户的角色（`owner`、`admin`、`viewer`），每位用户可使用不同语言
+  （`/lang`）
 
 ### 其他功能
 
@@ -162,8 +170,9 @@ WireGuard 接口的 Web 面板：每个客户端的实时流量、添加和停�
 
 - 出口隧道状态：endpoint、实时速率、systemd 单元状态
 - 支持 WireGuard 和 AmneziaWG 接口
-- Squid 代理用户管理
+- Squid 代理用户管理——参见 [Squid 代理](#squid-proxy)
 - Cloudflare WARP 状态，以及一个可选的 SNI 分流服务，按目标主机名路由连接
+  （这些功能需要本仓库中没有的辅助脚本——参见[局限](#limitations)）
 - 只读的泄漏审计（路由；DNS 和 IPv6 通过 Telegram 机器人）
 - 备份与恢复；每个配置文件在写入前都会自动备份，且写入是原子操作
 - 记录所有操作的审计日志：谁、做了什么、结果如何
@@ -285,7 +294,7 @@ Telegram 机器人无法运行浏览器，所以面板也会在服务器端用�
 | 位置 | 语言的选择方式 |
 |---|---|
 | 面板、登录页、分享页 | `?lang=` → `wgl` Cookie → 浏览器 `Accept-Language` → 波斯语 |
-| Telegram 机器人 | 按会话单独设置——每位用户通过 `/lang` 选择 |
+| Telegram 机器人 | 按用户单独设置——每位用户通过 `/lang` 选择 |
 | Telegram 告警 | 机器人所有者的语言 |
 
 波斯语页面从右到左显示，其他语言从左到右；样式表使用 CSS 逻辑属性，因此布局
@@ -301,7 +310,30 @@ CDN 加载资源，因此面板在无法访问互联网的服务器上同样可�
 
 - Ubuntu 22.04 或 24.04（x86_64 或 arm64），具有 root 权限
 - 发行版自带的 Python 3.10 或更高版本——无需 pip 包，无需 virtualenv
-- `wireguard-tools`
+- systemd、`wireguard-tools` 和 `iproute2`
+
+其他一切都是可选的。缺少某个程序时，只会关闭依赖它的那项功能：
+
+| 程序 | 用途 |
+|---|---|
+| `squid`、`openssl` | 代理用户——参见 [Squid 代理](#squid-proxy) |
+| `tc`（来自 `iproute2`）和 `ifb` 内核模块 | 按客户端限速 |
+| `qrencode` | Telegram 机器人发送的二维码（没有它时，机器人改为发送 `.conf` 文件） |
+| `speedtest`（Ookla CLI，不在 Ubuntu 软件源中） | 测速 |
+| `curl`、`dig`、`ping`、`traceroute` | 服务诊断和 WARP 检查 |
+| `iptables`、`ipset` | WARP 路由 |
+| `awg`、`awg-quick` | AmneziaWG 隧道 |
+| `rclone` | 将备份上传到 MEGA S4（`deploy/`） |
+
+Docker 镜像包含以上所有程序，`speedtest` 除外。
+
+需要在防火墙中开放的端口：
+
+| 端口 | 用途 |
+|---|---|
+| `8787/tcp`（`port`） | 面板和分享链接 |
+| 每个客户端接口的 `ListenPort`（Docker 下为 `51820/udp`） | WireGuard 客户端 |
+| `18080/tcp` | Squid 代理，仅在创建了代理用户时需要 |
 
 > [!NOTE]
 > 本面板管理 WireGuard 接口，但不负责设计你的网络拓扑。Docker 安装会为你创建
@@ -322,7 +354,9 @@ sudo bash host-setup.sh
 ```
 
 打开 `.env`，至少设置 `WG_SERVER_HOST`——客户端将要连接的公网 IP 地址或域名。
-然后：
+如果留空，首次启动时会向 `https://ifconfig.me` 查询服务器的地址。同一个文件还
+可以设置 Telegram 机器人（`WG_BOT_TOKEN`、`WG_BOT_OWNER_ID`、`WG_BOT_CHAT_ID`）
+和 IP 白名单（`WG_PANEL_ALLOW_IPS`）。然后：
 
 ```bash
 docker compose up -d --build
@@ -343,7 +377,7 @@ cd docker/airgap && bash build-offline-bundle.sh --arch amd64
 ```
 
 详情：[docker/README.md](docker/README.md) ·
-[docker/airgap/README.md](docker/airgap/README.md)
+[docker/airgap/README.md](docker/airgap/README.md)（波斯语）
 
 <a id="install-with-systemd"></a>
 
@@ -355,8 +389,8 @@ cd docker/airgap && bash build-offline-bundle.sh --arch amd64
 ```bash
 base=https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/releases/latest/download
 curl -fLO "$base/wg_panel.py" -O "$base/wg-panel.service" -O "$base/qr.js" \
-     -O "$base/three.module.min.js.gz" -O "$base/three.core.min.js.gz" -O "$base/three.LICENSE.txt" \
-     -O "$base/SHA256SUMS"
+     -O "$base/three.module.min.js.gz" -O "$base/three.core.min.js.gz" \
+     -O "$base/three.LICENSE.txt" -O "$base/SHA256SUMS"
 sha256sum -c SHA256SUMS
 ```
 
@@ -388,8 +422,17 @@ sudo install -m644 wg-panel.service /etc/systemd/system/
 sudo systemctl enable --now wg-panel
 ```
 
+首次启动时，面板会补上示例中省略的内容：会话密钥（`secret`）、随机的
+`metrics_token`，以及空的 `allow_ips`、`roles` 和 `bot` 部分。请立即登录——
+与 Docker 一样，你输入的第一个密码会成为管理员密码。
+
+面板管理它在 `/etc/wireguard` 中找到的客户端接口：带有 `ListenPort` 且没有
+peer `Endpoint` 的配置被视为客户端接口，其余所有 `wg*` 配置则视为出口隧道。
+新客户端从接口 `Address` 所在的子网中获取地址。如需明确指定，请在
+`config.json` 中设置 `server_ifaces` 和 `user_subnets`。
+
 用于备份、日志轮转、OOM 保护的可选单元以及 fail2ban 规则位于
-[deploy/](deploy/) 目录。
+[deploy/](deploy/) 目录——参见[备份](#backups)。
 
 <a id="upgrading"></a>
 
@@ -402,6 +445,9 @@ sudo systemctl enable --now wg-panel
 
 ```bash
 sudo install -m600 -o root -g root wg_panel.py /opt/wg-panel/wg_panel.py
+sudo install -m644 -t /opt/wg-panel qr.js three.module.min.js.gz three.core.min.js.gz
+sudo install -m644 wg-panel.service /etc/systemd/system/
+sudo systemctl daemon-reload
 sudo systemctl restart wg-panel
 ```
 
@@ -417,8 +463,9 @@ docker compose up -d --build
 ```
 
 > [!TIP]
-> 升级前请先备份——使用面板中的 **备份 / 恢复** 按钮，或复制
-> `/opt/wg-panel/`（Docker 为 `docker/data/`）。
+> 升级前请先备份：复制 `/opt/wg-panel/`（Docker 为 `docker/data/`）。仅靠面板
+> 中的 **备份 / 恢复** 按钮是不够的，因为它生成的归档不包含 `config.json`——
+> 参见[备份](#backups)。
 
 <a id="configuration"></a>
 
@@ -434,13 +481,137 @@ docker compose up -d --build
 | `users` | 面板账户（PBKDF2 密码哈希）及其角色 |
 | `roles` | 自定义角色及其权限 |
 | `server_host` · `server_endpoint` | 写入生成的客户端配置中的地址 |
-| `client_dns` · `client_mtu` · `client_allowed` | 生成客户端配置时的默认值 |
+| `server_label` | 机器人和告警中显示的简短服务器名称（默认：`server_host`，其次为主机名） |
+| `server_ifaces` · `user_subnets` | 客户端接口及其地址池，例如 `{"wg0": "10.66.66.0/24"}`（默认：从 WireGuard 配置中检测） |
+| `client_dns` · `client_mtu` · `client_allowed` | 生成客户端配置时的默认值（`1.1.1.1, 8.8.8.8` · `1420` · `0.0.0.0/0, ::/0`） |
 | `allow_ips` | 可选的 IP 白名单（`127.0.0.1` 始终允许） |
 | `metrics_token` | `/metrics` 与 `/api/health` 的 Bearer 令牌 |
 | `trusted_proxies` | 面板前置反向代理的 IP/CIDR；仅此时才从 `X-Forwarded-For` / `X-Real-IP` 读取客户端 IP，并采纳 `X-Forwarded-Proto: https`（https 分享链接、`Secure` Cookie） |
 | `session_idle_min` | 空闲多少分钟后自动登出（`0`/未设置 = 仅 12 小时绝对上限） |
-| `bot` | Telegram 机器人令牌和授权用户 |
-| `alerts` | Telegram 告警及其阈值 |
+| `secret` | 为会话 Cookie 签名的密钥；首次启动时创建。更改它会让所有人登出 |
+| `bot` | Telegram 机器人是否启用、其授权用户及其角色 |
+| `alerts` | 机器人令牌、告警会话、发送哪些告警及其阈值 |
+| `login_2fa` | 通过 Telegram 批准每次面板登录 |
+| `report` | Telegram 中的定期图片报告：`mode` `off`/`daily`/`weekly`、`time`、`dow` |
+| `svc_enabled` · `svc_interval` | 服务诊断的开关（默认开启）及其间隔秒数（默认 `300`） |
+| `speedtest_server` · `speedtest_ifaces` | Ookla 服务器 id 以及运行测速的接口 |
+
+`alerts` 中的告警阈值及其默认值：`cpu_pct`、`ram_pct` 和 `disk_pct` 为 `90`，
+需持续 `sustain_min` `5` 分钟；`quota_pct` 为 `90`；`expiry_days` 为 `3`；
+`login_fails` 为 10 分钟内 `10` 次登录失败。12 类告警中的每一类都可以在
+`alerts.events` 下单独关闭。
+
+### 角色与权限
+
+除内置的 `admin` 和 `viewer`（`wg.view`、`tun.view`、`net.view`、`sys.view`）
+外，还可以在面板中用以下权限构建自定义角色：
+
+| 范围 | 权限 |
+|---|---|
+| WireGuard 客户端 | `wg.view`、`wg.add`、`wg.edit`、`wg.del`、`wg.conf`（配置、二维码、分享链接） |
+| 代理用户 | `proxy.view`、`proxy.add`、`proxy.edit`、`proxy.del`、`proxy.conf` |
+| 隧道和服务器 | `tun.view`、`tun.toggle`、`net.view`、`sys.view` |
+| 服务诊断 | `svc.view`、`svc.edit` |
+| 审计日志 | `audit.view` |
+| 管理 | `users.manage`、`alerts.manage`、`bot.manage`、`ecmp.manage`、`warp.manage`、`settings.ips`、`backup.get`、`backup.restore` |
+
+`users.manage` 与完整管理员权限相当，因为它可以授予任何权限。角色还可以要求
+启用双因素认证。
+
+<a id="telegram-bot-setup"></a>
+
+## 设置 Telegram 机器人
+
+1. 通过 [@BotFather](https://t.me/BotFather) 创建一个机器人并复制其令牌。
+2. 在面板中打开 Telegram 告警设置，粘贴令牌，并设置接收告警的会话。机器人和
+   告警共用这个令牌（`alerts.bot_token`）。
+3. 在私聊中给机器人发送任意消息。由于你尚未获得授权，它会回复你的 Telegram
+   数字 id。
+4. 把自己设为所有者。所有者无法在面板中添加或更改，因此请停止面板，编辑
+   `config.json`，然后重新启动：
+
+   ```json
+   "bot": {"enabled": true, "users": [{"id": "123456789", "role": "owner", "name": ""}]}
+   ```
+
+   使用 Docker 时，`.env` 中的 `WG_BOT_TOKEN`、`WG_BOT_OWNER_ID` 和
+   `WG_BOT_CHAT_ID` 会在首次启动时完成以上全部设置。
+5. 发送 `/start`。之后即可在面板中添加其他机器人用户（`admin`、`viewer`）。
+
+机器人只在私聊中发送配置、预共享密钥和代理密码。告警使用所有者的语言。如果
+服务器无法直接访问 `api.telegram.org`，机器人会依次尝试每条出口隧道。
+
+<a id="squid-proxy"></a>
+
+## Squid 代理
+
+代理用户由 Squid 在 **18080** 端口（固定）上提供服务，使用 HTTP 基本认证；
+对于无密码用户，则按源 IP 认证。用户可以被限制为仅 HTTP 或仅 HTTPS，并且与
+WireGuard 客户端一样拥有配额、限速和到期日期。
+
+> [!CAUTION]
+> 面板**独占** `/etc/squid/squid.conf` 和 `/etc/squid/passwd`，并会完整地重写
+> 它们。不要在 Squid 已用于其他用途的服务器上使用本面板。
+
+- 创建第一个代理用户时启动 Squid，删除最后一个代理用户时停止 Squid。
+- 生成的配置把 DNS 查询发往 `127.0.0.1`，因此服务器需要在该地址上运行本地
+  解析器（例如 `systemd-resolved` 或 `unbound`）。
+- 代理流量根据 Squid 的访问日志统计。
+
+<a id="backups"></a>
+
+## 备份
+
+备份有两种，它们包含的内容不同：
+
+| | 面板按钮（**备份 / 恢复**） | `deploy/wg-panel-backup.sh`（每晚定时器） |
+|---|---|---|
+| WireGuard 配置 | ✅ | ✅ |
+| 客户端配置（`clients/`） | ✅ | ✅ |
+| 流量历史（`traffic.db`） | ✅ | ✅ |
+| `config.json`（面板用户、角色、密钥、机器人令牌） | ❌ | ✅ |
+| Squid 配置 | ❌ | ✅ |
+
+从面板恢复时，会先显示预览（归档将添加、删除或更改哪些客户端），再次要求输入
+密码，仅允许第一个管理员账户执行，并在写入任何内容之前把当前状态保存到
+`/opt/wg-panel/restore-backups/`。面板每次写入 WireGuard 配置时，也会把上一个
+版本保存在 `/etc/wireguard/backups/` 中（每个文件保留最近 50 个版本）。
+
+[deploy/](deploy/) 中的文件应安装到以下位置：
+
+| 文件 | 安装到 | 作用 |
+|---|---|---|
+| `wg-panel-backup.sh` · `.service` · `.timer` | `/usr/local/sbin/` · `/etc/systemd/system/` | 每晚 04:30 在 `/var/backups/wg-panel/` 中生成归档，保留 14 份 |
+| `wg-panel-s4-upload.sh` · `.service` · `.timer` | 同上 | 04:55 用 `rclone` 把归档上传到 MEGA S4，**然后删除本地副本**。需要 `/etc/wg-panel-s4.env`（`REMOTE`、`BUCKET`，可选 `PREFIX`）和 `/etc/wg-panel-rclone.conf` |
+| `wg-panel-verify-backup.sh` · `.service` · `.timer` | 同上 | 每周检查已上传的备份：新鲜度、校验和、归档内容以及数据库完整性。整机备份链（不在本仓库中）在至少上传过一次之后也会被检查 |
+| `wg-panel-oom.conf` | `/etc/systemd/system/wg-panel.service.d/` | 让 OOM killer 不杀死面板 |
+| `wg-quick-oom.conf` | `/etc/systemd/system/wg-quick@.service.d/` | 对 WireGuard 接口做同样的保护 |
+| `wg-panel.logrotate` | `/etc/logrotate.d/wg-panel` | 每月轮转 `actions.log`，保留 12 份 |
+| `fail2ban-wg-panel.filter.conf` · `.jail.conf` | `/etc/fail2ban/filter.d/wg-panel.conf` · `/etc/fail2ban/jail.d/wg-panel.conf` | 某个 IP 在 10 分钟内登录失败 5 次后将其封禁。规则中写的是 `port = 8787`；如果你修改了 `port`，请同步修改 |
+
+单元文件调用的是 `/usr/local/sbin/` 中的脚本，因此请把脚本安装到那里。复制单元
+后运行 `sudo systemctl daemon-reload`，然后启用所需的定时器，例如
+`sudo systemctl enable --now wg-panel-backup.timer`。
+
+<a id="tls-and-reverse-proxies"></a>
+
+## TLS 与反向代理
+
+**使用正式证书。** 将 `tls_cert` 和 `tls_key` 指向证书链和私钥（例如来自
+Let's Encrypt），然后重启面板。面板接受 TLS 1.2 及更高版本。它只在启动时读取
+这些文件，因此每次续期后都要重启面板（例如通过 certbot 的 deploy hook）。
+
+**在 nginx 或 Caddy 之后。** 面板也可以以普通 HTTP 运行在终止 TLS 的反向代理
+之后。此时：
+
+- 把代理的地址写入 `trusted_proxies`，这样白名单、频率限制和审计日志才能从
+  `X-Forwarded-For` 看到真实的客户端 IP；
+- 原样转发 `Host` 头——如果 `POST` 请求的 `Origin` 与 `Host` 不一致，面板会
+  拒绝该请求；
+- 只允许代理直接访问面板端口（面板监听所有 IPv4 地址）。
+
+没有 `tls_cert` 时，面板认为自己使用的是普通 HTTP：会话 Cookie 不带 `Secure`
+标志，分享链接以 `http://` 开头。
 
 <a id="prometheus"></a>
 
@@ -463,6 +634,9 @@ scrape_configs:
 
 `GET /api/health`（同一 Bearer 令牌，或具有 `sys.view` 的已登录用户）报告每个后台线程的心跳，若有线程停止则返回 `503`——适合外部监控或 Docker healthcheck。
 
+这两个端点同样受 `allow_ips` 约束，因此如果使用白名单，请把 Prometheus 服务器
+的地址加进去。
+
 <a id="security"></a>
 
 ## 安全
@@ -474,14 +648,51 @@ scrape_configs:
 - **分享链接包含客户端的私钥。** 链接有效期很短，可设为一次性并可撤销，页面
   响应带有 `Referrer-Policy: no-referrer` 和 `X-Robots-Tag: noindex`——但仍请
   把每个链接当作机密对待。
-- 登录限制为每个 IP 每分钟 5 次尝试，连续失败可触发 Telegram 告警。fail2ban
-  过滤器和规则位于 `deploy/`。
+- 登录失败次数限制为每个 IP 每分钟 5 次、每个账户每 5 分钟 10 次（锁定会自动
+  解除），连续失败可触发 Telegram 告警。fail2ban 过滤器和规则位于 `deploy/`。
 - Telegram 机器人是完整的管理途径：授权用户列表中的任何人都可以在不使用 SSH、
   不登录面板的情况下修改服务器。
 - 请用 `allow_ips` 或防火墙保护面板。使用 Docker 时请注意，`ufw` 不会过滤
   Docker 发布的端口——参见 [docker/README.md](docker/README.md)。
+- 分享链接在面板端口上提供，并且按设计绕过 `allow_ips`，以便接收者能够打开。
+- 会话 Cookie 设置为 `SameSite=Strict`，`Origin` 头与 `Host` 不一致的 `POST`
+  请求会被拒绝。
 
 报告安全漏洞请参阅 [SECURITY.md](SECURITY.md)。
+
+<a id="outbound-connections"></a>
+
+## 出站连接
+
+面板不会向任何地方回传数据，但某些功能会自行发出请求。如果这对你的服务器
+很重要，下面列出会发出哪些请求以及如何关闭：
+
+| 内容 | 时机 | 如何关闭 |
+|---|---|---|
+| 服务诊断：向 YouTube、YouTube Music、x.com、Telegram 和 Tidal 发出 HTTPS 请求，以及一次 `traceroute` | 每 5 分钟；traceroute 每小时一次 | `"svc_enabled": false`，或在页面上移除服务 |
+| 在每个接口上运行 Ookla 测速 | 每 12 小时（03:00 至 06:00 之间除外），前提是已安装 `speedtest` | 不安装 `speedtest`，或用 `speedtest_ifaces` 加以限制 |
+| Telegram Bot API（`api.telegram.org`） | 机器人或告警开启期间 | 关闭机器人和告警 |
+| `https://ifconfig.me` | 测试 WARP 目标时；使用 Docker 且 `WG_SERVER_HOST` 为空时的首次启动 | 设置 `WG_SERVER_HOST` |
+
+<a id="limitations"></a>
+
+## 局限
+
+- **客户端仅支持 IPv4。** 新客户端获得的是 IPv4 地址。默认的 `AllowedIPs`
+  包含 `::/0`，因此客户端的 IPv6 流量会进入隧道并在那里被丢弃，客户端随后
+  回退到 IPv4。面板本身也只监听 IPv4。
+- **WARP、ECMP 守护和 SNI 分流器**是为维护者自己的网络拓扑构建的。它们需要本
+  仓库中没有的辅助脚本和接口（`/usr/local/sbin/warp-gemini-sync.sh`、
+  `/usr/local/sbin/awg-ecmp-from-file.sh`、`wgwarp` 接口），缺少这些时保持
+  未启用状态。`deploy/cleanup-dead-iface-rules.sh` 中也写有该拓扑的接口名称；
+  运行前请先阅读。
+- **波斯语是后备语言。** 如果浏览器请求的语言不在四种语言之列，就会显示波斯语；
+  添加一次 `?lang=en`，选择就会保存在 Cookie 中。在设置机器人所有者之前，告警
+  使用波斯语。
+- **地区性默认值。** Docker 的 `.env.example` 设置了 `TZ=Asia/Tehran`，
+  `deploy/setup-deps.sh` 从伊朗的 Ubuntu 镜像安装（仅 24.04、amd64），服务诊断
+  探测的是在伊朗被封锁的服务。请根据你的服务器修改这些设置。
+- **一个面板管理一台服务器。** 面板管理它所运行的那台机器，没有多节点模式。
 
 <a id="troubleshooting"></a>
 
@@ -522,6 +733,36 @@ scrape_configs:
 </details>
 
 <details>
+<summary><b>在反向代理之后，面板中的每项修改都失败</b></summary>
+
+<br>
+
+面板会拒绝 `Origin` 头与 `Host` 不一致的 `POST` 请求。请让代理转发原始的
+`Host`（nginx：`proxy_set_header Host $host;`），并把代理加入
+`trusted_proxies`——参见 [TLS 与反向代理](#tls-and-reverse-proxies)。
+
+</details>
+
+<details>
+<summary><b>限速对上传不起作用</b></summary>
+
+<br>
+
+上传通过 `ifb` 设备限速。systemd 单元会在面板启动前加载 `ifb` 模块；使用
+Docker 时，`host-setup.sh` 会在宿主机上加载它。如果你用的是旧版
+`wg-panel.service`，请安装当前版本，或自行在开机时加载该模块：
+
+```bash
+echo ifb | sudo tee /etc/modules-load.d/ifb.conf
+sudo modprobe ifb
+```
+
+如果 `modprobe ifb` 失败，说明内核没有 `ifb` 模块，上传限速无法生效；面板会将此
+写入 `actions.log`。
+
+</details>
+
+<details>
 <summary><b>修改代码后页面一片空白</b></summary>
 
 <br>
@@ -530,6 +771,28 @@ scrape_configs:
 一节中的说明，并检查浏览器控制台。
 
 </details>
+
+<a id="uninstalling"></a>
+
+## 卸载
+
+使用 systemd 时：
+
+```bash
+sudo systemctl disable --now wg-panel
+sudo rm /etc/systemd/system/wg-panel.service
+sudo systemctl daemon-reload
+sudo rm -rf /opt/wg-panel      # config, traffic history and client keys — back up first
+```
+
+`/etc/wireguard/` 中的 WireGuard 配置会保留。如果使用过代理用户，请停止 Squid
+并替换面板写入的 `/etc/squid/squid.conf`。如果使用过限速，
+`sudo tc qdisc del dev <interface> root` 和
+`sudo tc qdisc del dev <interface> ingress` 可以移除接口上的流量整形（重启也
+可以）。已安装的 `deploy/` 单元，按与面板单元相同的方式移除即可。
+
+使用 Docker 时，在 `docker/` 中运行 `docker compose down`；数据位于
+`docker/data/`。
 
 <a id="development"></a>
 
@@ -574,8 +837,12 @@ Docker 构建上下文；测试数据使用 RFC 5737 文档地址。本仓库中
 | `docs/screenshots/` | README 中使用的截图 |
 | `demo/` | 演示模式与截图生成器 |
 | `CHANGELOG.md` | 各版本的变更 |
-| `fonts/` | Vazirmatn 字体子集 |
-| `qr.js` · `three.*.min.js.gz` · `three.LICENSE.txt` | 随附的二维码库和 three.js |
+| `fonts/` | Vazirmatn 字体子集的源文件（已内嵌在 `wg_panel.py` 中） |
+| `qr.js` · `three.*.min.js.gz` | 随附的二维码库和 three.js |
+| `.github/` | CI、发布工作流、issue 和 pull request 模板 |
+| `SECURITY.md` · `CONTRIBUTING.md` | 漏洞报告与贡献指南 |
+| `README.*.md` | 本 README 的波斯语、俄语和中文版本 |
+| `three.LICENSE.txt` · `LICENSE` | three.js 的许可证和本项目的许可证 |
 
 <a id="contributing"></a>
 

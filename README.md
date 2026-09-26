@@ -44,9 +44,16 @@ means copying one file.
 - [Install with systemd](#install-with-systemd)
 - [Upgrading](#upgrading)
 - [Configuration](#configuration)
+- [Telegram bot setup](#telegram-bot-setup)
+- [Squid proxy](#squid-proxy)
+- [Backups](#backups)
+- [TLS and reverse proxies](#tls-and-reverse-proxies)
 - [Prometheus](#prometheus)
 - [Security](#security)
+- [Outbound connections](#outbound-connections)
+- [Limitations](#limitations)
 - [Troubleshooting](#troubleshooting)
+- [Uninstalling](#uninstalling)
 - [Development](#development)
 - [Repository layout](#repository-layout)
 - [Contributing](#contributing)
@@ -136,7 +143,8 @@ How it works, and everything it can do: [The chart engine](#chart-engine).
 The bot runs inside the panel process, so it needs no extra service. It is a
 complete second way to manage the server — no SSH, no browser:
 
-- **18 commands** and a button menu: create, show, rename, enable/disable and
+- **18 commands** (one of them, `/botwatch`, only for the owner) and a button
+  menu: create, show, rename, enable/disable and
   delete WireGuard clients and proxy users; set **quotas** and **speed
   limits**; send the **config file** and the **QR code**
 - **Charts as images** — the bot draws the PNG itself (pure Python, no image
@@ -149,7 +157,7 @@ complete second way to manage the server — no SSH, no browser:
   backup upload, speed drop, panel restart, and more
 - **Approve panel logins** with one tap in Telegram (optional)
 - Roles for bot users (`owner`, `admin`, `viewer`), and a separate language
-  for every chat
+  for every user (`/lang`)
 
 ### More features
 
@@ -171,9 +179,10 @@ complete second way to manage the server — no SSH, no browser:
 
 - Status of egress tunnels: endpoint, live throughput, systemd unit state
 - WireGuard and AmneziaWG interfaces
-- Squid proxy user management
+- Squid proxy user management — see [Squid proxy](#squid-proxy)
 - Cloudflare WARP status, and an optional SNI-splitting daemon that routes
-  connections by destination hostname
+  connections by destination hostname (these need helper scripts that are not
+  in this repository — see [Limitations](#limitations))
 - Read-only leak audits (routing; DNS and IPv6 from the Telegram bot)
 - Backup and restore; every config file is backed up automatically before it
   is written, and writes are atomic
@@ -313,7 +322,7 @@ panel still deploys as a single file.
 | Where | How the language is chosen |
 |---|---|
 | Panel, login page, share page | `?lang=` → `wgl` cookie → browser `Accept-Language` → Persian |
-| Telegram bot | Per chat — each user chooses with `/lang` |
+| Telegram bot | Per user — each user chooses with `/lang` |
 | Telegram alerts | The bot owner's language |
 
 Persian pages are right-to-left, the others left-to-right; the stylesheet uses
@@ -329,7 +338,31 @@ servers without internet access.
 
 - Ubuntu 22.04 or 24.04 (x86_64 or arm64) with root access
 - Python 3.10 or newer from the distribution — no pip packages, no virtualenv
-- `wireguard-tools`
+- systemd, `wireguard-tools` and `iproute2`
+
+Everything else is optional. A missing program switches off only the feature
+that needs it:
+
+| Program | Needed for |
+|---|---|
+| `squid`, `openssl` | Proxy users — see [Squid proxy](#squid-proxy) |
+| `tc` (from `iproute2`) and the `ifb` kernel module | Per-client speed limits |
+| `qrencode` | QR codes sent by the Telegram bot (without it, the bot sends the `.conf` file) |
+| `speedtest` (Ookla CLI, not in the Ubuntu repository) | Speed tests |
+| `curl`, `dig`, `ping`, `traceroute` | Service diagnostics and the WARP checks |
+| `iptables`, `ipset` | WARP routing |
+| `awg`, `awg-quick` | AmneziaWG tunnels |
+| `rclone` | Uploading backups to MEGA S4 (`deploy/`) |
+
+The Docker image includes all of them except `speedtest`.
+
+Ports to open in the firewall:
+
+| Port | Used by |
+|---|---|
+| `8787/tcp` (`port`) | The panel and share links |
+| the `ListenPort` of each client interface (`51820/udp` with Docker) | WireGuard clients |
+| `18080/tcp` | The Squid proxy, only if you create proxy users |
 
 > [!NOTE]
 > The panel manages WireGuard interfaces; it does not design your network
@@ -350,7 +383,10 @@ sudo bash host-setup.sh
 ```
 
 Open `.env` and set at least `WG_SERVER_HOST` — the public IP address or
-domain that clients will connect to. Then:
+domain that clients will connect to. If it is left empty, the first start asks
+`https://ifconfig.me` for the server's address. The same file can set up the
+Telegram bot (`WG_BOT_TOKEN`, `WG_BOT_OWNER_ID`, `WG_BOT_CHAT_ID`) and an IP
+allowlist (`WG_PANEL_ALLOW_IPS`). Then:
 
 ```bash
 docker compose up -d --build
@@ -371,7 +407,7 @@ cd docker/airgap && bash build-offline-bundle.sh --arch amd64
 ```
 
 Details: [docker/README.md](docker/README.md) ·
-[docker/airgap/README.md](docker/airgap/README.md)
+[docker/airgap/README.md](docker/airgap/README.md) (in Persian)
 
 ## Install with systemd
 
@@ -382,8 +418,8 @@ too):
 ```bash
 base=https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/releases/latest/download
 curl -fLO "$base/wg_panel.py" -O "$base/wg-panel.service" -O "$base/qr.js" \
-     -O "$base/three.module.min.js.gz" -O "$base/three.core.min.js.gz" -O "$base/three.LICENSE.txt" \
-     -O "$base/SHA256SUMS"
+     -O "$base/three.module.min.js.gz" -O "$base/three.core.min.js.gz" \
+     -O "$base/three.LICENSE.txt" -O "$base/SHA256SUMS"
 sha256sum -c SHA256SUMS
 ```
 
@@ -416,8 +452,19 @@ without `tls_cert`/`tls_key` the panel serves plain HTTP:
 sudo systemctl enable --now wg-panel
 ```
 
+On the first start the panel adds what the example leaves out: the session
+key (`secret`), a random `metrics_token`, and empty `allow_ips`, `roles` and
+`bot` sections. Sign in right away — as with Docker, the first password you
+type becomes the admin password.
+
+The panel manages the client interfaces it finds in `/etc/wireguard`: a
+config with a `ListenPort` and no peer `Endpoint` counts as a client
+interface, every other `wg*` config as an egress tunnel. New clients get an
+address from the interface's `Address` subnet. Set `server_ifaces` and
+`user_subnets` in `config.json` to choose them explicitly.
+
 Optional units for backups, log rotation, OOM protection and a fail2ban jail
-are in [deploy/](deploy/).
+are in [deploy/](deploy/) — see [Backups](#backups).
 
 ## Upgrading
 
@@ -430,6 +477,9 @@ brought up to date automatically when the panel starts.
 
 ```bash
 sudo install -m600 -o root -g root wg_panel.py /opt/wg-panel/wg_panel.py
+sudo install -m644 -t /opt/wg-panel qr.js three.module.min.js.gz three.core.min.js.gz
+sudo install -m644 wg-panel.service /etc/systemd/system/
+sudo systemctl daemon-reload
 sudo systemctl restart wg-panel
 ```
 
@@ -446,8 +496,9 @@ docker compose up -d --build
 ```
 
 > [!TIP]
-> Take a backup before upgrading — the **Backup / restore** button in the
-> panel, or a copy of `/opt/wg-panel/` (`docker/data/` with Docker).
+> Take a backup before upgrading: a copy of `/opt/wg-panel/` (`docker/data/`
+> with Docker). The panel's **Backup / restore** button alone is not enough,
+> because its archive leaves out `config.json` — see [Backups](#backups).
 
 ## Configuration
 
@@ -461,13 +512,140 @@ changed from the panel. The most important keys:
 | `users` | Panel accounts (PBKDF2 password hashes) and their roles |
 | `roles` | Custom roles and their permissions |
 | `server_host` · `server_endpoint` | The address written into generated client configs |
-| `client_dns` · `client_mtu` · `client_allowed` | Defaults for generated client configs |
+| `server_label` | Short server name in the bot and alerts (default: `server_host`, then the hostname) |
+| `server_ifaces` · `user_subnets` | Client interfaces and their address pools, e.g. `{"wg0": "10.66.66.0/24"}` (default: detected from the WireGuard configs) |
+| `client_dns` · `client_mtu` · `client_allowed` | Defaults for generated client configs (`1.1.1.1, 8.8.8.8` · `1420` · `0.0.0.0/0, ::/0`) |
 | `allow_ips` | Optional IP allowlist (`127.0.0.1` is always allowed) |
 | `metrics_token` | Bearer token for `/metrics` and `/api/health` |
 | `trusted_proxies` | IPs/CIDRs of a reverse proxy in front of the panel; only then is the client IP read from `X-Forwarded-For` / `X-Real-IP` and `X-Forwarded-Proto: https` honoured (https share links, `Secure` cookie) |
 | `session_idle_min` | Sign out a session after this many idle minutes (`0`/absent = only the 12-hour absolute limit) |
-| `bot` | Telegram bot token and authorized users |
-| `alerts` | Telegram alerts and their thresholds |
+| `secret` | Key that signs session cookies; created on the first start. Changing it signs everyone out |
+| `bot` | Whether the Telegram bot is on, its authorized users and their roles |
+| `alerts` | The bot token, the alert chat, which alerts are sent, and their thresholds |
+| `login_2fa` | Approval of every panel login from Telegram |
+| `report` | Periodic picture report in Telegram: `mode` `off`/`daily`/`weekly`, `time`, `dow` |
+| `svc_enabled` · `svc_interval` | Service diagnostics on/off (default on) and its interval in seconds (default `300`) |
+| `speedtest_server` · `speedtest_ifaces` | Ookla server id and the interfaces the speed test runs on |
+
+The alert thresholds in `alerts` and their defaults: `cpu_pct`, `ram_pct` and
+`disk_pct` `90` sustained for `sustain_min` `5` minutes, `quota_pct` `90`,
+`expiry_days` `3`, and `login_fails` `10` failed logins in 10 minutes. Each of
+the 12 alert kinds can be switched off under `alerts.events`.
+
+### Roles and permissions
+
+Besides the built-in `admin` and `viewer` (`wg.view`, `tun.view`,
+`net.view`, `sys.view`), custom roles can be built in the panel from these
+permissions:
+
+| Area | Permissions |
+|---|---|
+| WireGuard clients | `wg.view`, `wg.add`, `wg.edit`, `wg.del`, `wg.conf` (config, QR, share link) |
+| Proxy users | `proxy.view`, `proxy.add`, `proxy.edit`, `proxy.del`, `proxy.conf` |
+| Tunnels and server | `tun.view`, `tun.toggle`, `net.view`, `sys.view` |
+| Service diagnostics | `svc.view`, `svc.edit` |
+| Audit log | `audit.view` |
+| Administration | `users.manage`, `alerts.manage`, `bot.manage`, `ecmp.manage`, `warp.manage`, `settings.ips`, `backup.get`, `backup.restore` |
+
+`users.manage` is as powerful as a full admin, because it can grant any
+permission. A role can also require two-factor authentication.
+
+## Telegram bot setup
+
+1. Create a bot with [@BotFather](https://t.me/BotFather) and copy its token.
+2. In the panel, open the Telegram alerts settings, paste the token, and set
+   the chat that receives alerts. The bot and the alerts share this token
+   (`alerts.bot_token`).
+3. Send any message to the bot in a private chat. Because you are not
+   authorized yet, it answers with your numeric Telegram id.
+4. Make yourself the owner. The owner cannot be added or changed from the
+   panel, so stop the panel, edit `config.json`, and start it again:
+
+   ```json
+   "bot": {"enabled": true, "users": [{"id": "123456789", "role": "owner", "name": ""}]}
+   ```
+
+   With Docker, `WG_BOT_TOKEN`, `WG_BOT_OWNER_ID` and `WG_BOT_CHAT_ID` in
+   `.env` do all of this on the first start.
+5. Send `/start`. Other bot users (`admin`, `viewer`) can then be added from
+   the panel.
+
+The bot sends configs, preshared keys and proxy passwords only in a private
+chat. Alerts use the owner's language. If the server cannot reach
+`api.telegram.org` directly, the bot tries each egress tunnel in turn.
+
+## Squid proxy
+
+Proxy users are served by Squid on port **18080** (fixed), with HTTP basic
+authentication or, for password-less users, by source IP. A user can be
+limited to HTTP or HTTPS only, and gets the same quota, speed limit and expiry
+as a WireGuard client.
+
+> [!CAUTION]
+> The panel **owns** `/etc/squid/squid.conf` and `/etc/squid/passwd` and
+> rewrites them completely. Do not use it on a server where Squid already
+> serves something else.
+
+- Squid is started when the first proxy user is created and stopped when the
+  last one is removed.
+- The generated config sends DNS queries to `127.0.0.1`, so the server needs a
+  local resolver there (for example `systemd-resolved` or `unbound`).
+- Proxy traffic is measured from Squid's access log.
+
+## Backups
+
+There are two kinds of backup, and they contain different things:
+
+| | Panel button (**Backup / restore**) | `deploy/wg-panel-backup.sh` (nightly timer) |
+|---|---|---|
+| WireGuard configs | ✅ | ✅ |
+| Client configs (`clients/`) | ✅ | ✅ |
+| Traffic history (`traffic.db`) | ✅ | ✅ |
+| `config.json` (panel users, roles, secrets, bot token) | ❌ | ✅ |
+| Squid configuration | ❌ | ✅ |
+
+Restoring from the panel shows a preview first (which clients the archive
+would add, remove or change), asks for the password again, is allowed only
+for the first admin account, and saves the current state to
+`/opt/wg-panel/restore-backups/` before writing anything. Every time the panel
+writes a WireGuard config, it also keeps the previous version in
+`/etc/wireguard/backups/` (the last 50 of each file).
+
+The files in [deploy/](deploy/) go to these places:
+
+| File | Install to | What it does |
+|---|---|---|
+| `wg-panel-backup.sh` · `.service` · `.timer` | `/usr/local/sbin/` · `/etc/systemd/system/` | Nightly archive at 04:30 in `/var/backups/wg-panel/`, 14 kept |
+| `wg-panel-s4-upload.sh` · `.service` · `.timer` | same | Uploads the archive to MEGA S4 with `rclone` at 04:55, **then deletes the local copy**. Needs `/etc/wg-panel-s4.env` (`REMOTE`, `BUCKET`, optional `PREFIX`) and `/etc/wg-panel-rclone.conf` |
+| `wg-panel-verify-backup.sh` · `.service` · `.timer` | same | Weekly check of the uploaded backups: freshness, checksum, archive contents and the database's integrity. A full-host backup chain (not in this repository) is checked too once it has uploaded |
+| `wg-panel-oom.conf` | `/etc/systemd/system/wg-panel.service.d/` | Makes the OOM killer spare the panel |
+| `wg-quick-oom.conf` | `/etc/systemd/system/wg-quick@.service.d/` | The same for the WireGuard interfaces |
+| `wg-panel.logrotate` | `/etc/logrotate.d/wg-panel` | Monthly rotation of `actions.log`, 12 kept |
+| `fail2ban-wg-panel.filter.conf` · `.jail.conf` | `/etc/fail2ban/filter.d/wg-panel.conf` · `/etc/fail2ban/jail.d/wg-panel.conf` | Bans an IP after 5 failed logins in 10 minutes. The jail has `port = 8787`; change it if you changed `port` |
+
+The unit files call the scripts in `/usr/local/sbin/`, so install them there.
+Run `sudo systemctl daemon-reload` after copying units, then enable the
+timers you want, for example `sudo systemctl enable --now wg-panel-backup.timer`.
+
+## TLS and reverse proxies
+
+**A real certificate.** Point `tls_cert` and `tls_key` at the certificate
+chain and key, for example from Let's Encrypt, and restart the panel. The
+panel accepts TLS 1.2 and newer. It only reads the files at start-up, so
+restart it after each renewal (for example from a certbot deploy hook).
+
+**Behind nginx or Caddy.** The panel can also run as plain HTTP behind a
+reverse proxy that terminates TLS. Then:
+
+- put the proxy's address in `trusted_proxies`, so that the allowlist, rate
+  limit and audit log see the real client IP from `X-Forwarded-For`;
+- pass the original `Host` header on — the panel refuses a `POST` whose
+  `Origin` does not match `Host`;
+- limit direct access to the panel port to the proxy (the panel listens on
+  every IPv4 address).
+
+Without `tls_cert`, the panel treats itself as plain HTTP: session cookies
+lose the `Secure` flag and share links start with `http://`.
 
 ## Prometheus
 
@@ -490,6 +668,9 @@ or give Prometheus the certificate.
 reports the heartbeat of every background thread and answers `503` when one
 has stopped — suitable for an external uptime check or a Docker healthcheck.
 
+Both endpoints also obey `allow_ips`, so add the Prometheus server's address
+there if you use an allowlist.
+
 ## Security
 
 - The service runs as root, because it changes network interfaces and
@@ -501,15 +682,54 @@ has stopped — suitable for an external uptime check or a Docker healthcheck.
   can be single-use and revoked, and are served with
   `Referrer-Policy: no-referrer` and `X-Robots-Tag: noindex` — still, treat
   every link as a secret.
-- Login is limited to 5 attempts per minute per IP, and repeated failures can
-  trigger a Telegram alert. A fail2ban filter and jail are in `deploy/`.
+- Failed logins are limited to 5 per minute per IP and 10 per 5 minutes per
+  account (the lock lifts by itself), and repeated failures can trigger a
+  Telegram alert. A fail2ban filter and jail are in `deploy/`.
 - The Telegram bot is a full management path: anyone on its authorized-user
   list can change the server without SSH or a panel login.
 - Put the panel behind `allow_ips` or a firewall. With Docker, note that `ufw`
   does not filter ports published by Docker — see
   [docker/README.md](docker/README.md).
+- Share links are served on the panel port and bypass `allow_ips` by design,
+  so the recipient can open them.
+- Session cookies are `SameSite=Strict`, and a `POST` whose `Origin` header
+  does not match `Host` is refused.
 
 To report a vulnerability, see [SECURITY.md](SECURITY.md).
+
+## Outbound connections
+
+The panel does not phone home, but some features make requests of their own.
+If that matters on your server, here is what goes out and how to stop it:
+
+| What | When | How to turn it off |
+|---|---|---|
+| Service diagnostics: HTTPS requests to YouTube, YouTube Music, x.com, Telegram and Tidal, and a `traceroute` | every 5 minutes; traces every hour | `"svc_enabled": false`, or remove services on the page |
+| Ookla speed test on every interface | every 12 hours (not between 03:00 and 06:00), if `speedtest` is installed | do not install `speedtest`, or limit it with `speedtest_ifaces` |
+| Telegram Bot API (`api.telegram.org`) | while the bot or alerts are on | switch off the bot and alerts |
+| `https://ifconfig.me` | when you test a WARP destination; with Docker, on the first start if `WG_SERVER_HOST` is empty | set `WG_SERVER_HOST` |
+
+## Limitations
+
+- **IPv4 only for clients.** New clients get IPv4 addresses. The default
+  `AllowedIPs` includes `::/0`, so a client's IPv6 traffic enters the tunnel
+  and is dropped there, and the client falls back to IPv4. The panel itself
+  listens on IPv4 only.
+- **WARP, the ECMP guard and the SNI splitter** are built for the maintainer's
+  own topology. They need helper scripts and interfaces that are not in this
+  repository (`/usr/local/sbin/warp-gemini-sync.sh`,
+  `/usr/local/sbin/awg-ecmp-from-file.sh`, the `wgwarp` interface), and stay
+  inactive without them. `deploy/cleanup-dead-iface-rules.sh` also names that
+  topology's interfaces; read it before running it.
+- **Persian is the fallback language.** A browser that asks for none of the
+  four languages gets Persian; add `?lang=en` once and the choice is kept in a
+  cookie. Alerts are in Persian until a bot owner is set.
+- **Regional defaults.** The Docker `.env.example` sets `TZ=Asia/Tehran`,
+  `deploy/setup-deps.sh` installs from an Iranian Ubuntu mirror (24.04, amd64
+  only), and service diagnostics probe services that are blocked in Iran.
+  Change these to suit your server.
+- **One server per panel.** The panel manages the machine it runs on; it has no
+  multi-node mode.
 
 ## Troubleshooting
 
@@ -550,6 +770,38 @@ of these happened. Create a new link from the client's row.
 </details>
 
 <details>
+<summary><b>Every change in the panel fails behind a reverse proxy</b></summary>
+
+<br>
+
+The panel refuses a `POST` whose `Origin` header does not match `Host`. Make
+the proxy pass the original `Host` (nginx: `proxy_set_header Host $host;`),
+and add the proxy to `trusted_proxies` — see
+[TLS and reverse proxies](#tls-and-reverse-proxies).
+
+</details>
+
+<details>
+<summary><b>Speed limits have no effect on upload</b></summary>
+
+<br>
+
+Upload is shaped through an `ifb` device. The systemd unit loads the `ifb`
+module before the panel starts, and with Docker `host-setup.sh` loads it on
+the host. If you use an older copy of `wg-panel.service`, install the current
+one, or load the module at boot yourself:
+
+```bash
+echo ifb | sudo tee /etc/modules-load.d/ifb.conf
+sudo modprobe ifb
+```
+
+If `modprobe ifb` fails, the kernel has no `ifb` module and upload limits
+cannot be enforced; the panel writes this to `actions.log`.
+
+</details>
+
+<details>
 <summary><b>The page is blank after I changed the code</b></summary>
 
 <br>
@@ -558,6 +810,27 @@ This almost always means a JavaScript error inside the Python strings — see
 the note under [Development](#development) and check the browser console.
 
 </details>
+
+## Uninstalling
+
+With systemd:
+
+```bash
+sudo systemctl disable --now wg-panel
+sudo rm /etc/systemd/system/wg-panel.service
+sudo systemctl daemon-reload
+sudo rm -rf /opt/wg-panel      # config, traffic history and client keys — back up first
+```
+
+Your WireGuard configs in `/etc/wireguard/` stay. If you used proxy users,
+stop Squid and replace `/etc/squid/squid.conf`, which the panel wrote. If you
+used speed limits, `sudo tc qdisc del dev <interface> root` and
+`sudo tc qdisc del dev <interface> ingress` remove the shaping from an
+interface (a reboot does too). Remove any `deploy/` units you
+installed the same way as the panel's unit.
+
+With Docker, run `docker compose down` in `docker/`; the data is in
+`docker/data/`.
 
 ## Development
 
@@ -586,9 +859,9 @@ they check deployment tooling that is not published here.
 **Demo mode.** `python3 demo/run.py` starts the panel at
 `http://127.0.0.1:8787` (user `admin`, password `demo`) with made-up clients,
 six months of traffic history and fake system tools. It needs no WireGuard and
-no root, and it writes nothing outside a temporary folder. `python3
-demo/screenshots.py` rebuilds every image in `docs/screenshots/`; it needs
-Node.js and Playwright, and compresses the images if Pillow is installed.
+no root, and it writes nothing outside a temporary folder.
+`python3 demo/screenshots.py` rebuilds every image in `docs/screenshots/`; it
+needs Node.js and Playwright, and compresses the images if Pillow is installed.
 
 ## Repository layout
 
@@ -602,8 +875,12 @@ Node.js and Playwright, and compresses the images if Pillow is installed.
 | `docs/screenshots/` | The screenshots used in the READMEs |
 | `demo/` | Demo mode and the screenshot generator |
 | `CHANGELOG.md` | Changes in each version |
-| `fonts/` | Vazirmatn font subset |
-| `qr.js` · `three.*.min.js.gz` · `three.LICENSE.txt` | Bundled QR code and three.js libraries |
+| `fonts/` | Source of the Vazirmatn font subset (it is embedded in `wg_panel.py`) |
+| `qr.js` · `three.*.min.js.gz` | Bundled QR code and three.js libraries |
+| `.github/` | CI, release workflow, issue and pull request templates |
+| `SECURITY.md` · `CONTRIBUTING.md` | Vulnerability reporting and contribution guide |
+| `README.*.md` | This README in Persian, Russian and Chinese |
+| `three.LICENSE.txt` · `LICENSE` | The three.js license and the project's license |
 
 ## Contributing
 

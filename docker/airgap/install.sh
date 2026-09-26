@@ -77,6 +77,14 @@ if [ -e /sys/module/wireguard ] || grep -qw wireguard /proc/modules 2>/dev/null;
 else
     die "ماژولِ wireguard لود نشد — کرنلِ این میزبان وایرگارد ندارد؟ (اوبونتوی ۲۲.۰۴+ آن را دارد)"
 fi
+# ifb: شکل‌دهیِ آپلودِ محدودیتِ سرعت؛ کانتینر نمی‌تواند لودش کند. اختیاری.
+modprobe ifb 2>/dev/null || true
+if [ -e /sys/module/ifb ]; then
+    echo ifb > /etc/modules-load.d/ifb.conf
+    ok "ماژولِ ifb (محدودیتِ آپلود) در دسترس و ماندگار شد"
+else
+    say "⚠️ ماژولِ ifb لود نشد — محدودیتِ سرعتِ آپلودِ کاربران اعمال نمی‌شود"
+fi
 
 # ---------- ۴) بارگذاریِ ایمیج ----------
 _img_tar="$(ls "${SELF_DIR}"/wg-panel-image-*.tar.gz 2>/dev/null | head -1)"
