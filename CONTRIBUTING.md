@@ -83,7 +83,8 @@ installed, the images are compressed.
    ```
 
 The release workflow runs the tests again and publishes a GitHub release with
-`wg_panel.py`, `wg-panel.service` and `SHA256SUMS`. The notes are that
+`wg_panel.py`, `wg-panel.service`, the bundled `qr.js`, three.js files and
+`three.LICENSE.txt`, and `SHA256SUMS`. The notes are that
 version's CHANGELOG section plus the build id. A tag without a CHANGELOG
 section fails and publishes nothing.
 
