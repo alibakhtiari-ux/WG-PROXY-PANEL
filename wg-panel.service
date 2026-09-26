@@ -4,6 +4,11 @@ After=network.target
 
 [Service]
 Type=simple
+# ماژولِ ifb برای شکل‌دهیِ آپلود (محدودیتِ سرعتِ هر کاربر). پنل خودش
+# modprobe می‌زند ولی ProtectKernelModules=yes ِ پایین آن را می‌بندد و
+# محدودیتِ آپلود بی‌صدا اعمال نمی‌شد. «+» این یک خط را بیرونِ sandbox اجرا
+# می‌کند و «-» یعنی کرنلِ بدونِ ifb مانعِ بالا آمدنِ پنل نشود.
+ExecStartPre=-+/sbin/modprobe -q ifb
 ExecStart=/usr/bin/python3 /opt/wg-panel/wg_panel.py
 WorkingDirectory=/opt/wg-panel
 Restart=always

@@ -11,6 +11,34 @@ prints as its version.
 
 ## [Unreleased]
 
+### Changed
+
+- The Telegram bot's command menu is shown in each bot user's language (the
+  one chosen with `/lang`); chats of users who are not authorized see the
+  owner's language. The descriptions used to be Persian in every language.
+- The periodic picture report (`report`) is written in the owner's language,
+  like the other alerts; it used to be Persian only.
+- `deploy/wg-panel-verify-backup.sh` checks the full-host backup chain only
+  when it is in use (`FULL_PREFIX` set in `/etc/wg-panel-s4.env`, or the
+  chain has uploaded at least once). An install that backs up only the panel
+  no longer fails every week with "no backup on MEGA".
+
+### Fixed
+
+- Per-client **upload** limits were never applied under the shipped systemd
+  unit: `ProtectKernelModules=yes` stopped the panel from loading the `ifb`
+  module, and the limit failed with only a line in `actions.log`. The unit
+  now loads `ifb` before the panel starts, and the Docker installers
+  (`host-setup.sh`, the offline `install.sh`) load it on the host.
+  **Existing systemd installs must install the new `wg-panel.service`**
+  (see Upgrading in the README).
+- Saving the bot users from the panel erased each user's `/lang` choice,
+  because the form does not carry it. For the owner this also switched the
+  alerts back to Persian. The language is now kept.
+- The systemd install step in the READMEs did not download
+  `three.LICENSE.txt`, so `sha256sum -c SHA256SUMS` failed on a correct
+  download.
+
 ## [1.2.0] — 2026-09-26
 
 ### Added

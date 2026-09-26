@@ -9562,6 +9562,119 @@ def _persian_returns(src):
     return out
 
 
+class BotMenuAndReportLanguageTests(unittest.TestCase):
+    """منوی دستورِ ربات و گزارشِ تصویری به زبانِ کاربر، نه فارسیِ ثابت.
+
+    پیش‌تر توضیحِ دستورهای منو و زیرنویسِ گزارشِ دوره‌ای در کد ثابت و
+    فارسی بودند، در هر زبانی که کاربر با /lang برگزیده بود.
+    """
+
+    FA = re.compile(r"[؀-ۿ]")
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="wgpanel-botlang-")
+        self.m = load_module(self.tmp)
+        self.calls = []
+        self._orig_api = self.m.tg_api
+        self.m.tg_api = lambda tok, method, p=None, **kw: (
+            self.calls.append((method, p)) or (True, {}))
+        self.m.CONFIG["users"] = [
+            {"username": "admin", "salt": "a" * 32, "hash": "h",
+             "role": "admin", "totp": "", "stoken": "s1"}]
+        self.m.CONFIG["alerts"] = {"bot_token": "123:abc", "chat_id": "-1"}
+        self.m.CONFIG["bot"] = {"enabled": True, "users": [
+            {"id": "11", "role": "owner", "name": "", "lang": "en"},
+            {"id": "22", "role": "viewer", "name": "", "lang": "ru"},
+            {"id": "33", "role": "viewer", "name": ""}]}
+
+    def tearDown(self):
+        self.m.tg_api = self._orig_api
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _menus(self):
+        self.calls.clear()
+        self.m.bot_setcommands()
+        out = {}
+        for method, p in self.calls:
+            self.assertEqual(method, "setMyCommands")
+            key = (p.get("scope") or {}).get("chat_id", "default")
+            out[key] = {c["command"]: c["description"] for c in p["commands"]}
+        return out
+
+    def test_menu_follows_each_users_language(self):
+        menus = self._menus()
+        self.assertEqual(set(menus), {"default", 11, 22, 33})
+        # پیش‌فرض = زبانِ مالک (همان زبانِ هشدارها)
+        self.assertEqual(menus["default"]["digest"], "Status summary")
+        self.assertEqual(menus[11]["digest"], "Status summary")
+        self.assertEqual(menus[22]["digest"], "Сводка состояния")
+        # کاربری که /lang نزده: زبانِ پیش‌فرضِ ربات، همان زبانِ پاسخ‌هایش
+        self.assertEqual(menus[33]["digest"], "خلاصه‌ی وضعیت")
+        for key in ("default", 11, 22):
+            for cmd, desc in menus[key].items():
+                with self.subTest(menu=key, cmd=cmd):
+                    self.assertNotRegex(desc, self.FA)
+
+    def test_only_the_owner_sees_botwatch(self):
+        menus = self._menus()
+        self.assertIn("botwatch", menus[11])
+        for key in ("default", 22, 33):
+            self.assertNotIn("botwatch", menus[key])
+        self.assertEqual(len(menus[11]), 18)
+        self.assertEqual(len(menus[22]), 17)
+
+    def test_every_menu_description_is_translated(self):
+        src = _read_panel_source()
+        body = src[src.index("def bot_setcommands"):
+                   src.index("BOT = TelegramBot()")]
+        keys = re.findall(r'"(bot\.cmd\.[a-z]+)"', body)
+        self.assertEqual(len(keys), 18)
+        for k in keys:
+            self.assertIn(k, self.m.I18N)
+
+    def test_panel_save_keeps_the_users_language(self):
+        """ذخیره‌ی کاربرانِ ربات از پنل زبانِ /lang ِ آن‌ها را پاک می‌کرد (فرمِ
+        پنل آن را ندارد)؛ مالک هم با آن هشدارها را دوباره فارسی می‌گرفت."""
+        h = make_fake_handler(
+            self.m, path="/api/bot/save", method="POST",
+            body={"enabled": True, "users": [
+                {"id": "11", "role": "owner", "name": ""},
+                {"id": "22", "role": "admin", "name": "x"},
+                {"id": "44", "role": "viewer", "name": ""}]},
+            session={"u": "admin", "r": "admin"})
+        h.do_POST()
+        r = json.loads(b"".join(h.body).decode("utf-8"))
+        self.assertTrue(r["ok"], r)
+        langs = {u["id"]: u.get("lang")
+                 for u in self.m.CONFIG["bot"]["users"]}
+        self.assertEqual(langs, {"11": "en", "22": "ru", "44": None})
+        self.assertEqual(self.m.alert_lang(), "en")
+
+    def _report_captions(self, lang):
+        self.m.CONFIG["bot"]["users"][0]["lang"] = lang
+        now = time.time()
+        for i in range(3):
+            self.m.META.speedtest_add({
+                "ts": now - 3600 * (i + 1), "iface": "awgx", "server_id": 1,
+                "ping_ms": 20.0, "down_bps": 100e6 * (i + 1),
+                "up_bps": 40e6, "ok": 1, "error": ""})
+        caps = [cap for _png, cap in self.m.build_report_photos()]
+        self.assertTrue(caps)
+        return caps
+
+    def test_report_captions_follow_the_owners_language(self):
+        caps = self._report_captions("en")
+        joined = "\n".join(caps)
+        self.assertIn("Speed test trend", joined)
+        self.assertNotRegex(joined, self.FA)
+        self.assertNotIn("\u200f", joined)   # بدونِ RLM در زبانِ چپ‌به‌راست
+
+    def test_report_captions_stay_persian_for_a_persian_owner(self):
+        joined = "\n".join(self._report_captions("fa"))
+        self.assertIn("روندِ تستِ سرعت", joined)
+        self.assertIn("۳", joined)              # ارقامِ فارسی
+
+
 class PersianReturnGuardTests(unittest.TestCase):
     """پیامی که توابع برمی‌گردانند باید کلیدِ کاتالوگ باشد، نه فارسیِ ثابت.
 
@@ -9581,7 +9694,7 @@ class PersianReturnGuardTests(unittest.TestCase):
         "warp_preset_apply", "warp_validate_target", "warp_targets_write",
         "warp_apply", "warp_src_label", "bot_owner_violation",
         "bot_admin_grant_violation", "parse_login_chat", "verify_login_chat",
-        "svc_add_custom", "svc_probe_one",
+        "svc_add_custom", "svc_probe_one", "send_periodic_report",
     )
 
     # استثناهای عمدی. هر ردیفِ تازه باید دلیل داشته باشد، نه صرفاً سبز کند.
@@ -9592,8 +9705,6 @@ class PersianReturnGuardTests(unittest.TestCase):
         "pct",
         # جداکنندهٔ «، » درونِ هشدارِ تلگرامی که با A() ساخته می‌شود
         "SpeedTester.drop_alert_text",
-        # پیامش فقط به log_action می‌رود («report test: …»)
-        "send_periodic_report",
         # برچسبِ دوم را تنها فراخوانش (svc_probe_one) دور می‌ریزد؛ مرورگر
         # از کدِ verdict و SVC_VERDICT ترجمه می‌کند
         "_verdict",
