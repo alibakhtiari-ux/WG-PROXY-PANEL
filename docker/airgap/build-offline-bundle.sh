@@ -36,7 +36,7 @@ while [ $# -gt 0 ]; do
         *) die "آرگومانِ ناشناخته: $1" ;;
     esac
 done
-case "$ARCH" in amd64|arm64) ;; *) die "معماری فقط amd64 یا arm64 — نه «$ARCH»";; esac
+case "$ARCH" in amd64|arm64) ;; *) die "معماری فقط amd64 یا arm64 — نه «${ARCH}»";; esac
 
 # بسته‌هایی که میزبانِ آفلاین برای اجرای compose لازم دارد — فقط همین‌ها؛
 # بقیه (wireguard-tools، fail2ban، squid، …) داخلِ خودِ ایمیج‌اند.
@@ -52,8 +52,8 @@ log "گیتِ تست: tests/test_docker_bundle + tests/test_docker_airgap"
     || die "تست‌ها قرمزند — اول سبزشان کن، بعد بسته بساز."
 ok "تست‌ها سبز"
 
-VER="$(shasum -a 256 "${REPO_ROOT}/wg_panel.py" 2>/dev/null | cut -c1-12)"
-[ -n "$VER" ] || VER="$(sha256sum "${REPO_ROOT}/wg_panel.py" | cut -c1-12)"
+VER="$(python3 "${REPO_ROOT}/tools/build_pyz.py" --id)"
+[ -n "$VER" ] || die "build id ِ wg_panel.pyz خالی است (tools/build_pyz.py --id)."
 IMAGE_TAG="wg-panel:${VER}"
 BUNDLE_NAME="wg-panel-docker-airgap-${VER}-${ARCH}"
 STAGE="${DIST}/${BUNDLE_NAME}"
@@ -154,7 +154,8 @@ printf '%s\n' "${ARCH}" > "${STAGE}/ARCH"
 
 # ---------- ۴) سدِ نشت (کمربند و بند) ----------
 _leak="$(find "${STAGE}" -name '*.html' -o -name 'CLAUDE.md' -o -name 'SKILL.md' \
-              -o -path '*/.claude/*' -o -name 'wg_panel.py' | head -5)"
+              -o -path '*/.claude/*' -o -name 'wg_panel.py' \
+              -o -name 'wg_panel.pyz' -o -path '*/wgpanel/*' | head -5)"
 [ -z "${_leak}" ] || die "فایلِ ممنوع داخلِ بسته: ${_leak}"
 
 # ---------- ۵) checksums + tarball ----------

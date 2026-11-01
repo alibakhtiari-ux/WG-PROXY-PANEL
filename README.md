@@ -2,7 +2,7 @@
 
 # WG-PROXY-PANEL
 
-**A single-file web panel for monitoring and managing WireGuard and a Squid proxy.**<br>
+**A web panel for monitoring and managing WireGuard and a Squid proxy, deployed as a single file.**<br>
 Pure Python standard library — no pip packages, no build step, four languages.
 
 [![verify](https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/actions/workflows/verify.yml/badge.svg)](https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/actions/workflows/verify.yml)
@@ -17,7 +17,7 @@ Pure Python standard library — no pip packages, no build step, four languages.
 
 ---
 
-The whole application is one file, `wg_panel.py`, that uses **nothing but the
+The whole application deploys as one file, `wg_panel.pyz`, that uses **nothing but the
 Python standard library**. Run it as a systemd service (or in the provided
 Docker container) and you get a web panel for the WireGuard interfaces on that
 machine: live per-client traffic, adding and disabling clients, QR codes and
@@ -152,7 +152,7 @@ complete second way to manage the server — no SSH, no browser:
   traffic and speed tests, with totals, averages and peaks in the caption
 - Online users, search, reports sorted by expiry and by usage, backup status,
   speed test, and a daily or weekly summary
-- **12 kinds of alerts**: egress tunnel down/up, quota reached, accounts about
+- **11 kinds of alerts**: egress tunnel down/up, quota reached, accounts about
   to expire, high CPU/RAM/disk, swap use, repeated failed logins, failed
   backup upload, speed drop, panel restart, and more
 - **Approve panel logins** with one tap in Telegram (optional)
@@ -205,7 +205,7 @@ complete second way to manage the server — no SSH, no browser:
 
 Every chart in the panel comes from a small drawing engine written from
 scratch for this project: plain Canvas 2D in about two thousand lines of
-JavaScript inside `wg_panel.py`. It uses no chart library and no CDN, so it
+JavaScript inside `wgpanel/app.py`. It uses no chart library and no CDN, so it
 works on a server with no internet access, and it knows the data it draws.
 It knows what a quota is, when a client was disabled, and how many bytes a
 tunnel moved in the last ten seconds.
@@ -316,7 +316,7 @@ the client and proxy graphs in the bot and into the periodic report.
 
 The panel, the audit log, API errors, the Telegram bot and the Telegram alerts
 are all available in **English, Persian, Russian and Chinese**. The
-translations live inside `wg_panel.py` itself (about two thousand keys), so the
+translations live inside `wgpanel/app.py` itself (about two thousand keys), so the
 panel still deploys as a single file.
 
 | Where | How the language is chosen |
@@ -417,18 +417,22 @@ too):
 
 ```bash
 base=https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/releases/latest/download
-curl -fLO "$base/wg_panel.py" -O "$base/wg-panel.service" -O "$base/qr.js" \
-     -O "$base/three.module.min.js.gz" -O "$base/three.core.min.js.gz" \
+curl -fLO "$base/wg_panel.pyz" -O "$base/wg_panel.py" -O "$base/wg-panel.service" \
+     -O "$base/qr.js" -O "$base/three.module.min.js.gz" -O "$base/three.core.min.js.gz" \
      -O "$base/three.LICENSE.txt" -O "$base/SHA256SUMS"
 sha256sum -c SHA256SUMS
 ```
 
 The panel does **not** create its own configuration: it reads `config.json`
 from the same directory as `wg_panel.py` and will not start without it.
-Install the file and the unit:
+Install the two panel files side by side — `wg_panel.pyz` is the whole panel and
+`wg_panel.py` is a 20-line launcher at the path the systemd unit has always
+used — and the unit:
 
 ```bash
-sudo install -D -m600 -o root -g root wg_panel.py /opt/wg-panel/wg_panel.py
+sudo install -d -m700 /opt/wg-panel
+sudo install -m600 -o root -g root -t /opt/wg-panel wg_panel.pyz wg_panel.py
+sudo python3 /opt/wg-panel/wg_panel.py --check
 sudo install -m644 -t /opt/wg-panel qr.js three.module.min.js.gz three.core.min.js.gz \
      three.LICENSE.txt
 sudo install -m644 wg-panel.service /etc/systemd/system/
@@ -468,24 +472,39 @@ are in [deploy/](deploy/) — see [Backups](#backups).
 
 ## Upgrading
 
-The panel is one file, so upgrading means replacing that file. The settings in
+The panel is one file (`wg_panel.pyz`) plus its 20-line launcher, so upgrading means replacing those two files. The settings in
 `config.json` and the data in `traffic.db` are kept; older configurations are
 brought up to date automatically when the panel starts.
 
-**With systemd:** download the new release as above, including the
-`sha256sum -c` check, then:
+**With systemd:** download both files of the new release, including the
+`sha256sum -c` check:
 
 ```bash
-sudo install -m600 -o root -g root wg_panel.py /opt/wg-panel/wg_panel.py
+base=https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/releases/latest/download
+curl -fLO "$base/wg_panel.pyz" -O "$base/wg_panel.py" -O "$base/wg-panel.service" \
+     -O "$base/qr.js" -O "$base/three.module.min.js.gz" -O "$base/three.core.min.js.gz" \
+     -O "$base/three.LICENSE.txt" -O "$base/SHA256SUMS"
+sha256sum -c SHA256SUMS
+```
+
+Then install `wg_panel.pyz` first and the launcher second (the argument order
+below does that), run `--check`, and restart. Coming from 1.2.x or earlier this
+is the only change: the unit stays as it is and the data (`config.json`,
+`traffic.db`, `clients/`) stays where it is.
+
+```bash
+sudo install -m600 -o root -g root -t /opt/wg-panel wg_panel.pyz wg_panel.py
 sudo install -m644 -t /opt/wg-panel qr.js three.module.min.js.gz three.core.min.js.gz
 sudo install -m644 wg-panel.service /etc/systemd/system/
+sudo python3 /opt/wg-panel/wg_panel.py --check
 sudo systemctl daemon-reload
 sudo systemctl restart wg-panel
 ```
 
 To see which build a server runs, compare
-`sha256sum /opt/wg-panel/wg_panel.py | cut -c1-12` with the build id in the
-release notes. Changes between versions are listed in
+`sha256sum /opt/wg-panel/wg_panel.pyz | cut -c1-12` with the build id in the
+release notes. It is the same value as `python3 tools/build_pyz.py --id` on the
+source and as the version a Docker install prints. Changes between versions are listed in
 [CHANGELOG.md](CHANGELOG.md).
 
 **With Docker:** bring the new code onto the server (`git pull`), then, in
@@ -530,7 +549,7 @@ changed from the panel. The most important keys:
 The alert thresholds in `alerts` and their defaults: `cpu_pct`, `ram_pct` and
 `disk_pct` `90` sustained for `sustain_min` `5` minutes, `quota_pct` `90`,
 `expiry_days` `3`, and `login_fails` `10` failed logins in 10 minutes. Each of
-the 12 alert kinds can be switched off under `alerts.events`.
+the 11 alert kinds can be switched off under `alerts.events`.
 
 ### Roles and permissions
 
@@ -834,13 +853,20 @@ With Docker, run `docker compose down` in `docker/`; the data is in
 
 ## Development
 
-`wg_panel.py` has more than 30,000 lines, including the whole web interface
+`wgpanel/app.py` has more than 30,000 lines, including the whole web interface
 (HTML, CSS and JavaScript) inside Python strings. Run the tests with:
 
 ```bash
 python3 -m unittest discover -s tests -v
-python3 -m py_compile wg_panel.py
+python3 tools/build_pyz.py && python3 dist/wg_panel.pyz --check
 python3 tests/check_js.py      # JavaScript syntax, needs Node.js
+```
+
+Users only download the built file; contributors build it from the source (the same source always gives the same bytes) or run the panel straight from a checkout:
+
+```bash
+python3 tools/build_pyz.py      # dist/wg_panel.pyz — same source, same bytes
+python3 -m wgpanel             # run the panel straight from a checkout
 ```
 
 The tests check, among other things, that every translation key exists in all
@@ -867,7 +893,11 @@ needs Node.js and Playwright, and compresses the images if Pillow is installed.
 
 | Path | Contents |
 |---|---|
-| `wg_panel.py` | The entire application |
+| `wgpanel/app.py` | The panel (source; `app.py` is the bulk of it) |
+| `wgpanel/__main__.py` | The entry point (`python3 -m wgpanel`) |
+| `wgpanel/_check.py` | The archive self-test (`wg_panel.pyz --check`) |
+| `tools/build_pyz.py` | Reproducible build of `dist/wg_panel.pyz` |
+| `wg_panel.py` | The 20-line launcher the systemd unit starts |
 | `wg-panel.service` | systemd unit |
 | `docker/` | Docker Compose install and the offline bundle builder |
 | `deploy/` | Optional systemd units, fail2ban jail, backup scripts, SNI splitter |
@@ -875,7 +905,7 @@ needs Node.js and Playwright, and compresses the images if Pillow is installed.
 | `docs/screenshots/` | The screenshots used in the READMEs |
 | `demo/` | Demo mode and the screenshot generator |
 | `CHANGELOG.md` | Changes in each version |
-| `fonts/` | Source of the Vazirmatn font subset (it is embedded in `wg_panel.py`) |
+| `fonts/` | Source of the Vazirmatn font subset (it is embedded in `wgpanel/app.py`) |
 | `qr.js` · `three.*.min.js.gz` | Bundled QR code and three.js libraries |
 | `.github/` | CI, release workflow, issue and pull request templates |
 | `SECURITY.md` · `CONTRIBUTING.md` | Vulnerability reporting and contribution guide |

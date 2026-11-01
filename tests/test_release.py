@@ -19,8 +19,15 @@ notes = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(notes)
 
 
+def _changelog_path():
+    """The public changelog: in the private tree CHANGELOG.md is a different
+    document, so publish/CHANGELOG.public.md wins when it exists."""
+    pub = os.path.join(ROOT, "publish", "CHANGELOG.public.md")
+    return pub if os.path.exists(pub) else os.path.join(ROOT, "CHANGELOG.md")
+
+
 def _changelog():
-    with open(os.path.join(ROOT, "CHANGELOG.md"), encoding="utf-8") as f:
+    with open(_changelog_path(), encoding="utf-8") as f:
         return f.read()
 
 
@@ -51,9 +58,47 @@ class ChangelogTests(unittest.TestCase):
         v = re.search(r"^## \[(\d+\.\d+\.\d+)\]", _changelog(), re.M).group(1)
         out = io.StringIO()
         with redirect_stdout(out):
-            self.assertEqual(notes.main(["x", "v" + v]), 0)
-        bid = notes.build_id(os.path.join(ROOT, "wg_panel.py"))
+            self.assertEqual(notes.main(["x", "v" + v], _changelog_path()), 0)
+        import subprocess
+        bid = subprocess.run(
+            ["python3", os.path.join(ROOT, "tools", "build_pyz.py"), "--id",
+             "--allow-untracked"],
+            capture_output=True, text=True, check=True, cwd=ROOT).stdout.strip()
         self.assertIn("`%s`" % bid, out.getvalue())
+
+    def test_build_id_ignores_a_stale_dist_archive(self):
+        """شناسه همیشه از سورس ساخته می‌شود، نه از dist/wg_panel.pyz ِ موجود:
+        dist ِ محلیِ کهنه پیش از این شناسه‌ی قدیمی چاپ می‌کرد و همین تست را
+        بعد از هر تغییرِ سورس قرمز می‌کرد."""
+        import shutil
+        import tempfile
+        tmp = tempfile.mkdtemp(prefix="wgrel-")
+        try:
+            shutil.copytree(os.path.join(ROOT, "wgpanel"),
+                            os.path.join(tmp, "wgpanel"),
+                            ignore=shutil.ignore_patterns("__pycache__"))
+            os.makedirs(os.path.join(tmp, "tools"))
+            shutil.copy(os.path.join(ROOT, "tools", "build_pyz.py"),
+                        os.path.join(tmp, "tools"))
+            os.makedirs(os.path.join(tmp, "dist"))
+            with open(os.path.join(tmp, "dist", "wg_panel.pyz"), "wb") as f:
+                f.write(b"stale archive from an older build")
+            saved = notes.ROOT
+            notes.ROOT = tmp
+            try:
+                got = notes.panel_build_id()
+            finally:
+                notes.ROOT = saved
+            self.assertNotEqual(got, notes.build_id(
+                os.path.join(tmp, "dist", "wg_panel.pyz")))
+            spec2 = importlib.util.spec_from_file_location(
+                "build_pyz_t", os.path.join(tmp, "tools", "build_pyz.py"))
+            bp = importlib.util.module_from_spec(spec2)
+            spec2.loader.exec_module(bp)
+            self.assertEqual(got, bp.build_id(bp.build_bytes(
+                os.path.join(tmp, "wgpanel"))))
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
 
     def test_an_undocumented_version_is_refused(self):
         with redirect_stderr(io.StringIO()):

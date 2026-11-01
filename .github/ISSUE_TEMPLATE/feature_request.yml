@@ -6,7 +6,7 @@ body:
     attributes:
       value: |
         You can write in English, Persian, Russian or Chinese. Please keep in mind
-        the project's two rules: **Python standard library only** and **one file**.
+        the project's two rules: **Python standard library only** and **one deployable file**.
   - type: textarea
     id: problem
     attributes:

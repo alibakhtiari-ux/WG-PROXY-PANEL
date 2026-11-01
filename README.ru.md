@@ -2,7 +2,7 @@
 
 # WG-PROXY-PANEL
 
-**Однофайловая веб-панель для мониторинга и управления WireGuard и прокси Squid.**<br>
+**Веб-панель для мониторинга и управления WireGuard и прокси Squid, которая разворачивается одним файлом.**<br>
 Только стандартная библиотека Python — без пакетов pip, без сборки, на четырёх языках.
 
 [![verify](https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/actions/workflows/verify.yml/badge.svg)](https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/actions/workflows/verify.yml)
@@ -17,7 +17,7 @@
 
 ---
 
-Всё приложение — это один файл, `wg_panel.py`, которому **не нужно ничего,
+Всё приложение разворачивается одним файлом, `wg_panel.pyz`, которому **не нужно ничего,
 кроме стандартной библиотеки Python**. Запустите его как службу systemd (или в
 прилагаемом контейнере Docker) — и получите веб-панель для интерфейсов
 WireGuard на этом сервере: трафик каждого клиента в реальном времени,
@@ -163,7 +163,7 @@ WireGuard на этом сервере: трафик каждого клиент
   подписи
 - Пользователи онлайн, поиск, отчёты по сроку действия и по расходу, состояние
   резервных копий, тест скорости и ежедневная или еженедельная сводка
-- **12 видов оповещений**: падение и восстановление исходящих туннелей,
+- **11 видов оповещений**: падение и восстановление исходящих туннелей,
   исчерпание квоты, скорое истечение учётных записей, высокая загрузка
   CPU/RAM/диска, использование swap, повторные неудачные входы, сбой загрузки
   резервной копии, падение скорости, перезапуск панели и другие
@@ -220,7 +220,7 @@ WireGuard на этом сервере: трафик каждого клиент
 
 Все графики панели рисует небольшой движок, написанный для этого проекта с
 нуля: чистый Canvas 2D, около двух тысяч строк JavaScript внутри
-`wg_panel.py`. Никаких библиотек графиков и никаких CDN, поэтому он работает и
+`wgpanel/app.py`. Никаких библиотек графиков и никаких CDN, поэтому он работает и
 на сервере без доступа в интернет. Движок понимает данные, которые рисует: он
 знает, что такое квота, когда клиента отключили и сколько байт туннель передал
 за последние десять секунд.
@@ -337,7 +337,7 @@ PNG с помощью `zlib`. Изображение размером 900 × 400
 
 Панель, журнал действий, ошибки API, Telegram-бот и оповещения в Telegram
 доступны на **английском, персидском, русском и китайском**. Переводы хранятся
-в самом `wg_panel.py` (около двух тысяч ключей), чтобы панель по-прежнему
+в самом `wgpanel/app.py` (около двух тысяч ключей), чтобы панель по-прежнему
 устанавливалась одним файлом.
 
 | Где | Как выбирается язык |
@@ -445,18 +445,21 @@ cd docker/airgap && bash build-offline-bundle.sh --arch amd64
 
 ```bash
 base=https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/releases/latest/download
-curl -fLO "$base/wg_panel.py" -O "$base/wg-panel.service" -O "$base/qr.js" \
-     -O "$base/three.module.min.js.gz" -O "$base/three.core.min.js.gz" \
+curl -fLO "$base/wg_panel.pyz" -O "$base/wg_panel.py" -O "$base/wg-panel.service" \
+     -O "$base/qr.js" -O "$base/three.module.min.js.gz" -O "$base/three.core.min.js.gz" \
      -O "$base/three.LICENSE.txt" -O "$base/SHA256SUMS"
 sha256sum -c SHA256SUMS
 ```
 
 Панель **не создаёт** конфигурацию сама: она читает `config.json` из того же
-каталога, где лежит `wg_panel.py`, и без него не запускается. Установите файл
-и юнит:
+каталога, где лежит `wg_panel.py`, и без него не запускается. Установите два
+файла панели рядом — `wg_panel.pyz` (вся панель) и `wg_panel.py` (лаунчер на 20
+строк по тому пути, который юнит systemd использовал всегда) — и затем юнит:
 
 ```bash
-sudo install -D -m600 -o root -g root wg_panel.py /opt/wg-panel/wg_panel.py
+sudo install -d -m700 /opt/wg-panel
+sudo install -m600 -o root -g root -t /opt/wg-panel wg_panel.pyz wg_panel.py
+sudo python3 /opt/wg-panel/wg_panel.py --check
 sudo install -m644 -t /opt/wg-panel qr.js three.module.min.js.gz three.core.min.js.gz \
      three.LICENSE.txt
 sudo install -m644 wg-panel.service /etc/systemd/system/
@@ -499,24 +502,39 @@ sudo systemctl enable --now wg-panel
 
 ## Обновление
 
-Панель — это один файл, поэтому обновление сводится к замене этого файла.
+Панель — это один файл (`wg_panel.pyz`) плюс её лаунчер на 20 строк, поэтому обновление сводится к замене этих двух файлов.
 Настройки в `config.json` и данные в `traffic.db` сохраняются; старые
 конфигурации автоматически приводятся к актуальному виду при запуске панели.
 
-**С systemd:** скачайте новый релиз, как описано выше, вместе с проверкой
-`sha256sum -c`, затем:
+**С systemd:** скачайте оба файла нового релиза вместе с проверкой
+`sha256sum -c`:
 
 ```bash
-sudo install -m600 -o root -g root wg_panel.py /opt/wg-panel/wg_panel.py
+base=https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/releases/latest/download
+curl -fLO "$base/wg_panel.pyz" -O "$base/wg_panel.py" -O "$base/wg-panel.service" \
+     -O "$base/qr.js" -O "$base/three.module.min.js.gz" -O "$base/three.core.min.js.gz" \
+     -O "$base/three.LICENSE.txt" -O "$base/SHA256SUMS"
+sha256sum -c SHA256SUMS
+```
+
+Затем установите сначала `wg_panel.pyz`, потом лаунчер (порядок аргументов в
+команде ниже это обеспечивает), выполните `--check` и перезапустите службу. При
+переходе с 1.2.x и старше это единственное изменение: юнит остаётся прежним, а
+данные (`config.json`, `traffic.db`, `clients/`) остаются на месте.
+
+```bash
+sudo install -m600 -o root -g root -t /opt/wg-panel wg_panel.pyz wg_panel.py
 sudo install -m644 -t /opt/wg-panel qr.js three.module.min.js.gz three.core.min.js.gz
 sudo install -m644 wg-panel.service /etc/systemd/system/
+sudo python3 /opt/wg-panel/wg_panel.py --check
 sudo systemctl daemon-reload
 sudo systemctl restart wg-panel
 ```
 
 Чтобы узнать, какая сборка работает на сервере, сравните вывод
-`sha256sum /opt/wg-panel/wg_panel.py | cut -c1-12` с build id в описании
-релиза. Изменения каждой версии перечислены в [CHANGELOG.md](CHANGELOG.md).
+`sha256sum /opt/wg-panel/wg_panel.pyz | cut -c1-12` с build id в описании
+релиза; это то же значение, что выдаёт `python3 tools/build_pyz.py --id` на
+исходниках и установка через Docker. Изменения каждой версии перечислены в [CHANGELOG.md](CHANGELOG.md).
 
 **С Docker:** доставьте новый код на сервер (`git pull`), затем в каталоге
 `docker/`:
@@ -563,7 +581,7 @@ docker compose up -d --build
 Пороги оповещений в `alerts` и их значения по умолчанию: `cpu_pct`, `ram_pct`
 и `disk_pct` — `90`, если держится `sustain_min` `5` минут, `quota_pct` `90`,
 `expiry_days` `3` и `login_fails` — `10` неудачных входов за 10 минут. Каждый
-из 12 видов оповещений можно отключить в `alerts.events`.
+из 11 видов оповещений можно отключить в `alerts.events`.
 
 ### Роли и разрешения
 
@@ -898,13 +916,20 @@ sudo rm -rf /opt/wg-panel      # config, traffic history and client keys — bac
 
 ## Разработка
 
-В `wg_panel.py` более 30 000 строк, включая весь веб-интерфейс (HTML, CSS и
+В `wgpanel/app.py` более 30 000 строк, включая весь веб-интерфейс (HTML, CSS и
 JavaScript) внутри строк Python. Запуск тестов:
 
 ```bash
 python3 -m unittest discover -s tests -v
-python3 -m py_compile wg_panel.py
-python3 tests/check_js.py      # синтаксис JavaScript, нужен Node.js
+python3 tools/build_pyz.py && python3 dist/wg_panel.pyz --check
+python3 tests/check_js.py      # JavaScript syntax, needs Node.js
+```
+
+Пользователи скачивают только готовый файл; разработчики собирают его из исходников (одни и те же исходники всегда дают одни и те же байты) или запускают панель прямо из клона репозитория:
+
+```bash
+python3 tools/build_pyz.py      # dist/wg_panel.pyz — same source, same bytes
+python3 -m wgpanel             # run the panel straight from a checkout
 ```
 
 Среди прочего тесты проверяют, что каждый ключ перевода есть на всех четырёх
@@ -935,7 +960,11 @@ python3 tests/check_js.py      # синтаксис JavaScript, нужен Node.
 
 | Путь | Содержимое |
 |---|---|
-| `wg_panel.py` | Всё приложение |
+| `wgpanel/app.py` | Панель (исходники; основная часть — `app.py`) |
+| `wgpanel/__main__.py` | Точка входа (`python3 -m wgpanel`) |
+| `wgpanel/_check.py` | Самопроверка архива (`wg_panel.pyz --check`) |
+| `tools/build_pyz.py` | Воспроизводимая сборка `dist/wg_panel.pyz` |
+| `wg_panel.py` | Лаунчер на 20 строк, который запускает юнит systemd |
 | `wg-panel.service` | Юнит systemd |
 | `docker/` | Установка через Docker Compose и сборщик офлайн-пакета |
 | `deploy/` | Необязательные юниты systemd, правило fail2ban, скрипты резервного копирования, SNI-разделитель |
@@ -943,7 +972,7 @@ python3 tests/check_js.py      # синтаксис JavaScript, нужен Node.
 | `docs/screenshots/` | Снимки экрана для README |
 | `demo/` | Демо-режим и генератор снимков экрана |
 | `CHANGELOG.md` | Изменения в каждой версии |
-| `fonts/` | Исходник подмножества шрифта Vazirmatn (оно встроено в `wg_panel.py`) |
+| `fonts/` | Исходник подмножества шрифта Vazirmatn (оно встроено в `wgpanel/app.py`) |
 | `qr.js` · `three.*.min.js.gz` | Встроенные библиотеки QR-кода и three.js |
 | `.github/` | CI, процесс выпуска релизов, шаблоны issue и pull request |
 | `SECURITY.md` · `CONTRIBUTING.md` | Как сообщить об уязвимости и руководство для участников |

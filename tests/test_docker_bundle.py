@@ -45,6 +45,10 @@ class DockerBundleTests(unittest.TestCase):
             self.assertGreaterEqual(len(parts), 2, "COPY ناقص: %s" % line)
             srcs.extend(parts[:-1])
         self.assertTrue(srcs, "هیچ COPYای در Dockerfile پیدا نشد")
+        # منبع می‌تواند فایل یا پوشه باشد (wgpanel/ و tools/build_pyz.py برای
+        # بیلدِ آرشیو داخلِ ایمیج)؛ os.path.exists هر دو را می‌پذیرد.
+        for needed in ("wgpanel/", "tools/build_pyz.py"):
+            self.assertIn(needed, srcs, "COPYِ %s از Dockerfile افتاده" % needed)
         missing = [s for s in srcs if not os.path.exists(os.path.join(REPO, s))]
         self.assertEqual(missing, [],
                          "منبعِ COPY در مخزن نیست (context باید ریشه باشد): %s"
@@ -114,7 +118,7 @@ class DockerBundleTests(unittest.TestCase):
 
     # ---------- ۵) قفلِ call-siteهای systemctl ----------
     def test_panel_systemctl_call_sites_locked_to_shim(self):
-        src = _read(REPO, "wg_panel.py")
+        src = _read(REPO, "wgpanel/app.py")
         n = len(re.findall(r'"systemctl"', src))
         self.assertEqual(
             n, 10,
@@ -143,7 +147,7 @@ class DockerBundleTests(unittest.TestCase):
         # ستون خالی می‌مانَد بدونِ هیچ خطایی.
         self.assertIn("%a %Y-%m-%d %H:%M:%S %z", shim,
                       "قالبِ زمانِ شیم با _sysd_ts در wg_panel.py نمی‌خواند")
-        self.assertIn("%a %Y-%m-%d %H:%M:%S %z", _read(REPO, "wg_panel.py"),
+        self.assertIn("%a %Y-%m-%d %H:%M:%S %z", _read(REPO, "wgpanel/app.py"),
                       "قالبِ _sysd_ts در پنل عوض شده — شیم را هم‌گام کن")
 
     def test_shim_state_dir_is_on_a_persisted_volume(self):

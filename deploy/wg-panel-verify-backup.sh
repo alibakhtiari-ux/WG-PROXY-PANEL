@@ -106,7 +106,7 @@ PY
         || add "$label: sha256 ریموت با sidecar نمی‌خواند ($obj)"
     grep -qF "$member" <<<"$listing" \
         || add "$label: فایلِ کلیدی در آرشیو نیست ($member)"
-    echo "$label: $obj سالم (sha256=$got، اعضای آرشیو=$(wc -l <<<"$listing"))"
+    echo "$label: $obj سالم (sha256=${got}، اعضای آرشیو=$(wc -l <<<"$listing"))"
 }
 
 [ -n "${REMOTE:-}" ] && {
@@ -147,11 +147,11 @@ if [ -n "$problems" ]; then
     msg="صحت‌سنجیِ بکاپ (MEGA) مشکل دارد:$problems"
     echo -e "$msg" >&2
     python3 - "$msg" 2>/dev/null <<'PY' || true
-import sys, importlib.util
-spec = importlib.util.spec_from_file_location("wgp", "/opt/wg-panel/wg_panel.py")
-m = importlib.util.module_from_spec(spec)
+import sys
+sys.path.insert(0, "/opt/wg-panel/wg_panel.pyz")
 try:
-    spec.loader.exec_module(m); m.load_config()
+    import wgpanel.app as m
+    m.load_config()
     c = m.alert_cfg()
     if c["enabled"] and c["events"].get("backup", True):
         m.ALERTS.send_now(sys.argv[1])

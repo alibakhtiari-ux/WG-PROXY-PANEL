@@ -2,7 +2,7 @@
 
 # WG-PROXY-PANEL
 
-**用于监控和管理 WireGuard 与 Squid 代理的单文件 Web 面板。**<br>
+**用于监控和管理 WireGuard 与 Squid 代理的 Web 面板，以单个文件部署。**<br>
 仅使用 Python 标准库——无需 pip 包，无需构建，支持四种语言。
 
 [![verify](https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/actions/workflows/verify.yml/badge.svg)](https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/actions/workflows/verify.yml)
@@ -17,7 +17,7 @@
 
 ---
 
-整个应用只有一个文件 `wg_panel.py`，**除 Python 标准库外不依赖任何东西**。
+整个应用以单个文件 `wg_panel.pyz` 部署，**除 Python 标准库外不依赖任何东西**。
 将它作为 systemd 服务运行（或使用随附的 Docker 容器），即可获得一个管理本机
 WireGuard 接口的 Web 面板：每个客户端的实时流量、添加和停用客户端、二维码和
 分享链接、限速和流量配额、专业图表、备份、操作审计日志、高级 Telegram
@@ -147,7 +147,7 @@ WireGuard 接口的 Web 面板：每个客户端的实时流量、添加和停�
   中附上总量、平均值和峰值
 - 在线用户、搜索、按到期时间和按用量排序的报告、备份状态、测速，以及每日或
   每周摘要
-- **12 类告警**：出口隧道断开/恢复、达到配额、账户即将到期、CPU/RAM/磁盘占用
+- **11 类告警**：出口隧道断开/恢复、达到配额、账户即将到期、CPU/RAM/磁盘占用
   过高、swap 使用、多次登录失败、备份上传失败、网速下降、面板重启等
 - 在 Telegram 中一键**批准面板登录**（可选）
 - 机器人用户的角色（`owner`、`admin`、`viewer`），每位用户可使用不同语言
@@ -190,7 +190,7 @@ WireGuard 接口的 Web 面板：每个客户端的实时流量、添加和停�
 ## 图表引擎
 
 面板里的所有图表都来自一个为本项目从零编写的小型绘图引擎：纯 Canvas 2D，
-约两千行 JavaScript，就写在 `wg_panel.py` 里。不用任何图表库，也不依赖 CDN，
+约两千行 JavaScript，就写在 `wgpanel/app.py` 里。不用任何图表库，也不依赖 CDN，
 所以在无法上网的服务器上同样可用。引擎理解自己绘制的数据：它知道什么是配额、
 客户端何时被停用，以及某条隧道在过去十秒里传输了多少字节。
 
@@ -288,7 +288,7 @@ Telegram 机器人无法运行浏览器，所以面板也会在服务器端用�
 ## 语言
 
 面板、审计日志、API 错误信息、Telegram 机器人和 Telegram 告警均提供**英语、
-波斯语、俄语和中文**。翻译直接保存在 `wg_panel.py` 中（约两千个键），因此面板
+波斯语、俄语和中文**。翻译直接保存在 `wgpanel/app.py` 中（约两千个键），因此面板
 仍然以单个文件部署。
 
 | 位置 | 语言的选择方式 |
@@ -388,17 +388,20 @@ cd docker/airgap && bash build-offline-bundle.sh --arch amd64
 
 ```bash
 base=https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/releases/latest/download
-curl -fLO "$base/wg_panel.py" -O "$base/wg-panel.service" -O "$base/qr.js" \
-     -O "$base/three.module.min.js.gz" -O "$base/three.core.min.js.gz" \
+curl -fLO "$base/wg_panel.pyz" -O "$base/wg_panel.py" -O "$base/wg-panel.service" \
+     -O "$base/qr.js" -O "$base/three.module.min.js.gz" -O "$base/three.core.min.js.gz" \
      -O "$base/three.LICENSE.txt" -O "$base/SHA256SUMS"
 sha256sum -c SHA256SUMS
 ```
 
 面板**不会**自行创建配置：它从 `wg_panel.py` 所在的目录读取 `config.json`，
-没有该文件就无法启动。安装文件和单元：
+没有该文件就无法启动。将面板的两个文件并排安装——`wg_panel.pyz`（整个面板）和
+`wg_panel.py`（20 行的启动器，位于 systemd 单元一直使用的路径）——然后安装单元：
 
 ```bash
-sudo install -D -m600 -o root -g root wg_panel.py /opt/wg-panel/wg_panel.py
+sudo install -d -m700 /opt/wg-panel
+sudo install -m600 -o root -g root -t /opt/wg-panel wg_panel.pyz wg_panel.py
+sudo python3 /opt/wg-panel/wg_panel.py --check
 sudo install -m644 -t /opt/wg-panel qr.js three.module.min.js.gz three.core.min.js.gz \
      three.LICENSE.txt
 sudo install -m644 wg-panel.service /etc/systemd/system/
@@ -438,22 +441,36 @@ peer `Endpoint` 的配置被视为客户端接口，其余所有 `wg*` 配置则
 
 ## 升级
 
-面板只有一个文件，升级就是替换这个文件。`config.json` 中的设置和
+面板是一个文件（`wg_panel.pyz`）加上它 20 行的启动器，升级就是替换这两个文件。`config.json` 中的设置和
 `traffic.db` 中的数据都会保留；旧版配置会在面板启动时自动更新。
 
-**使用 systemd：** 按上文下载新版本（包括 `sha256sum -c` 校验），然后：
+**使用 systemd：** 下载新版本的两个文件（包括 `sha256sum -c` 校验）：
 
 ```bash
-sudo install -m600 -o root -g root wg_panel.py /opt/wg-panel/wg_panel.py
+base=https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/releases/latest/download
+curl -fLO "$base/wg_panel.pyz" -O "$base/wg_panel.py" -O "$base/wg-panel.service" \
+     -O "$base/qr.js" -O "$base/three.module.min.js.gz" -O "$base/three.core.min.js.gz" \
+     -O "$base/three.LICENSE.txt" -O "$base/SHA256SUMS"
+sha256sum -c SHA256SUMS
+```
+
+然后先安装 `wg_panel.pyz`、再安装启动器（下面命令中的参数顺序保证了这一点），
+运行 `--check`，再重启。从 1.2.x 或更早版本升级时，这就是唯一的变化：单元文件
+保持不变，数据（`config.json`、`traffic.db`、`clients/`）也留在原处。
+
+```bash
+sudo install -m600 -o root -g root -t /opt/wg-panel wg_panel.pyz wg_panel.py
 sudo install -m644 -t /opt/wg-panel qr.js three.module.min.js.gz three.core.min.js.gz
 sudo install -m644 wg-panel.service /etc/systemd/system/
+sudo python3 /opt/wg-panel/wg_panel.py --check
 sudo systemctl daemon-reload
 sudo systemctl restart wg-panel
 ```
 
 要查看服务器上运行的是哪个构建，可将
-`sha256sum /opt/wg-panel/wg_panel.py | cut -c1-12` 的输出与发布说明中的
-build id 对比。各版本的变更见 [CHANGELOG.md](CHANGELOG.md)。
+`sha256sum /opt/wg-panel/wg_panel.pyz | cut -c1-12` 的输出与发布说明中的
+build id 对比；它与在源码上运行 `python3 tools/build_pyz.py --id` 的结果以及
+Docker 安装所显示的版本相同。各版本的变更见 [CHANGELOG.md](CHANGELOG.md)。
 
 **使用 Docker：** 将新代码拉到服务器上（`git pull`），然后在 `docker/`
 目录中执行：
@@ -498,7 +515,7 @@ docker compose up -d --build
 
 `alerts` 中的告警阈值及其默认值：`cpu_pct`、`ram_pct` 和 `disk_pct` 为 `90`，
 需持续 `sustain_min` `5` 分钟；`quota_pct` 为 `90`；`expiry_days` 为 `3`；
-`login_fails` 为 10 分钟内 `10` 次登录失败。12 类告警中的每一类都可以在
+`login_fails` 为 10 分钟内 `10` 次登录失败。11 类告警中的每一类都可以在
 `alerts.events` 下单独关闭。
 
 ### 角色与权限
@@ -798,13 +815,20 @@ sudo rm -rf /opt/wg-panel      # config, traffic history and client keys — bac
 
 ## 开发
 
-`wg_panel.py` 超过 30,000 行，整个 Web 界面（HTML、CSS 和 JavaScript）都以
+`wgpanel/app.py` 超过 30,000 行，整个 Web 界面（HTML、CSS 和 JavaScript）都以
 Python 字符串的形式包含在其中。运行测试：
 
 ```bash
 python3 -m unittest discover -s tests -v
-python3 -m py_compile wg_panel.py
-python3 tests/check_js.py      # JavaScript 语法检查，需要 Node.js
+python3 tools/build_pyz.py && python3 dist/wg_panel.pyz --check
+python3 tests/check_js.py      # JavaScript syntax, needs Node.js
+```
+
+用户只需下载构建好的文件；贡献者从源码构建它（相同源码总是得到相同字节），或直接在检出的仓库中运行面板：
+
+```bash
+python3 tools/build_pyz.py      # dist/wg_panel.pyz — same source, same bytes
+python3 -m wgpanel             # run the panel straight from a checkout
 ```
 
 测试会检查的内容包括：每个翻译键在四种语言中都存在且占位符一致；翻译后的文本
@@ -829,7 +853,11 @@ Docker 构建上下文；测试数据使用 RFC 5737 文档地址。本仓库中
 
 | 路径 | 内容 |
 |---|---|
-| `wg_panel.py` | 整个应用 |
+| `wgpanel/app.py` | 面板源码（主体在 `app.py` 中） |
+| `wgpanel/__main__.py` | 入口（`python3 -m wgpanel`） |
+| `wgpanel/_check.py` | 归档自检（`wg_panel.pyz --check`） |
+| `tools/build_pyz.py` | `dist/wg_panel.pyz` 的可复现构建 |
+| `wg_panel.py` | systemd 单元启动的 20 行启动器 |
 | `wg-panel.service` | systemd 单元 |
 | `docker/` | Docker Compose 安装及离线安装包构建工具 |
 | `deploy/` | 可选的 systemd 单元、fail2ban 规则、备份脚本、SNI 分流器 |
@@ -837,7 +865,7 @@ Docker 构建上下文；测试数据使用 RFC 5737 文档地址。本仓库中
 | `docs/screenshots/` | README 中使用的截图 |
 | `demo/` | 演示模式与截图生成器 |
 | `CHANGELOG.md` | 各版本的变更 |
-| `fonts/` | Vazirmatn 字体子集的源文件（已内嵌在 `wg_panel.py` 中） |
+| `fonts/` | Vazirmatn 字体子集的源文件（已内嵌在 `wgpanel/app.py` 中） |
 | `qr.js` · `three.*.min.js.gz` | 随附的二维码库和 three.js |
 | `.github/` | CI、发布工作流、issue 和 pull request 模板 |
 | `SECURITY.md` · `CONTRIBUTING.md` | 漏洞报告与贡献指南 |

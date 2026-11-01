@@ -4,12 +4,63 @@ All notable changes to WG-PROXY-PANEL are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
-Each release on GitHub attaches `wg_panel.py`, `wg-panel.service`, the bundled
-`qr.js` and three.js files, and a `SHA256SUMS` file. The release notes also give the **build id**: the first 12
-characters of the SHA-256 of `wg_panel.py`, the same value a Docker install
-prints as its version.
+Each release on GitHub attaches `wg_panel.pyz` (the panel), `wg_panel.py` (its launcher),
+`wg-panel.service`, the bundled `qr.js` and three.js files, and a `SHA256SUMS` file. The
+release notes also give the **build id**: the first 12 characters of the SHA-256 of
+`wg_panel.pyz`, the same value a Docker install prints as its version.
 
 ## [Unreleased]
+
+## [1.3.0] — 2026-11-01
+
+### Added
+
+- Hooks for WG-NQMO, a separate link-quality engine that is **not part of this repository**.
+  They are off unless `config.json` has `"nqmo": {"enabled": true}`. While off, the panel
+  reads and writes nothing for the engine, `/api/stats` and `/metrics` answer exactly as
+  before, and the `/api/nqmo/*` routes answer `disabled`. The page makes no WG-NQMO
+  request and shows no WG-NQMO section; its permission group and alert kind are hidden, and
+  saving a role or the alert settings keeps their stored values.
+
+### Changed
+
+- The panel source is now the `wgpanel/` package, released as `wg_panel.pyz` plus the
+  launcher `wg_panel.py`. Install both side by side; `wg_panel.py --check` replaces
+  `py_compile`. The systemd unit is unchanged, and `config.json`, `traffic.db` and
+  `clients/` stay where they are. When upgrading, install `wg_panel.pyz` first, then
+  `wg_panel.py`.
+- The build id is the first 12 characters of `sha256(wg_panel.pyz)`; builds are
+  reproducible (`python3 tools/build_pyz.py --id` on the source prints the same value).
+- The interface HTML/CSS/JavaScript, the two fonts and the translation catalog now live as
+  ordinary files in `wgpanel/web/` and `wgpanel/i18n/catalog.json` instead of inside
+  `wgpanel/app.py`. Nothing that is served changed. A duplicate catalog key now fails at
+  start-up and in `wg_panel.pyz --check`.
+
+### Fixed
+
+- Speed test on several interfaces: the Ookla server refused the second and later tests of a
+  back-to-back run with `Cannot read`, so only the first interface got a result. The panel
+  now waits 30 seconds between interfaces and retries a `Cannot read` once after 60 seconds;
+  both waits stop at once when the run is cancelled.
+
+### Removed
+
+- The “flagged clients going offline” alert toggle. It never sent anything; existing settings
+  keep loading.
+
+## [1.2.3] — 2026-10-03
+
+### Fixed
+
+- Adding a client while its interface is up: if the live `wg set` failed, the panel
+  still marked the configuration as applied, so the file watcher never retried and the
+  kernel stayed out of step with the file until the next change. The panel now applies
+  the peer in one `wg set` (address, preshared key and keepalive together) and leaves a
+  failed apply for the watcher to retry. Changing a client's AllowedIPs goes through the
+  same path.
+- Deleting a client while its interface is up: if removing the peer from the live
+  interface failed, the deleted client could stay connected until the next restart,
+  because the watcher was told everything was applied. A failed removal is now retried.
 
 ## [1.2.2] — 2026-09-26
 
@@ -321,7 +372,9 @@ prints as its version.
 
 First public release.
 
-[Unreleased]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/compare/v1.2.2...HEAD
+[Unreleased]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/compare/v1.2.3...v1.3.0
+[1.2.3]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/compare/v1.2.2...v1.2.3
 [1.2.2]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/compare/v1.1.0...v1.2.0

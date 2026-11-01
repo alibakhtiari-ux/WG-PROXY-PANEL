@@ -169,6 +169,16 @@ class ProbeStageTests(unittest.TestCase):
         self.icmp = {"wgpl": True, "wgpl5": True, "wgpl6": True}
         h.probe_http = lambda dev: self.http[dev]
         h.probe_icmp = lambda dev: self.icmp[dev]
+        # حاملِ endpoint: پیش‌فرض همه از awg3 ِ سالم — رفتارِ پیش از ۲۸ سپتامبر
+        self.carrier = {"wgpl": "awg3", "wgpl5": "awg3", "wgpl6": "awg3"}
+        self.carrier_up = {"awg1": True, "awg3": True}
+        self.carrier_pings = []
+        h.endpoint_carrier = lambda dev: self.carrier.get(dev)
+
+        def _ping(c):
+            self.carrier_pings.append(c)
+            return self.carrier_up[c]
+        h.carrier_ping = _ping
 
     def _burned(self):
         return h.read_burned()
@@ -279,6 +289,201 @@ class ProbeStageTests(unittest.TestCase):
         self.assertEqual(st["burned"], [])
 
 
+class TransportOutageIsNotBurnTests(unittest.TestCase):
+    """گاردِ خانوادگیِ ۲۸ سپتامبر ۲۰۲۶ (ردیفِ بازِ ۴۳): «قطعیِ حاملِ endpoint
+    به‌عنوانِ سوختگیِ خودِ تونل ثبت می‌شود». نودِ ارائه‌دهنده‌ی تونلِ مادر مرد، هر شش تونلِ Proton
+    000 + دروازه‌ی بی‌پاسخ دادند، چهار تونلِ سالم سوختند و AI سه ساعت و ۴۶
+    دقیقه روی WARP ماند. خانواده: هر حکمِ «بد» که علتش خارج از خودِ تونل است.
+    """
+
+    setUp = ProbeStageTests.setUp
+    _burned = ProbeStageTests._burned
+
+    def _blackhole_all(self):
+        for d in self.http:
+            self.http[d] = "000"
+            self.icmp[d] = False
+
+    def test_mother_outage_burns_nothing_however_long(self):
+        """همان صحنه‌ی ۲۸ سپتامبر: حامل مرده، هر تونل 000 + ICMP ِ ناموفق —
+        ده اجرا (۵۰ دقیقه) و هیچ سوختگی."""
+        self._blackhole_all()
+        self.carrier_up["awg3"] = False
+        for _ in range(10):
+            self.assertEqual(h.main(), 0)
+        self.assertEqual(self._burned(), [])
+
+    def test_hold_does_not_build_a_bad_streak(self):
+        """بی‌حکم یعنی streak دست‌نخورده: پس از برگشتِ حامل، سه پروبِ واقعیِ
+        بد لازم است، نه یکی (وگرنه شمارشِ دورانِ قطعی پنهانی جمع می‌شد)."""
+        self._blackhole_all()
+        self.carrier_up["awg3"] = False
+        for _ in range(5):
+            h.main()
+        self.carrier_up["awg3"] = True             # حامل برگشت، تونل هنوز مرده
+        h.main(); h.main()
+        self.assertEqual(self._burned(), [], "دو بدِ واقعی هنوز کمتر از سه است")
+        h.main()
+        self.assertEqual(set(self._burned()), {"wgpl", "wgpl5", "wgpl6"})
+
+    def test_hold_does_not_break_an_existing_bad_streak(self):
+        """همان قاعده‌ی کدِ خنثی: بد، بد، (قطعیِ حامل)، بد ⇒ سوخته."""
+        self.icmp["wgpl6"] = False
+        self.http["wgpl6"] = "000"
+        h.main(); h.main()
+        self.carrier_up["awg3"] = False
+        h.main()
+        self.carrier_up["awg3"] = True
+        h.main()
+        self.assertEqual(self._burned(), ["wgpl6"])
+
+    def test_only_tunnels_on_the_dead_carrier_are_held(self):
+        """سنجه به‌ازای تونل است، نه «همه با هم»: تونلی که حاملش سالم است و
+        بلک‌هول شده باید بسوزد (همان wgpl6 ِ ۱۱ سپتامبر)."""
+        self._blackhole_all()
+        self.carrier.update({"wgpl": "awg1", "wgpl5": "awg1", "wgpl6": "awg3"})
+        self.carrier_up["awg1"] = False
+        for _ in range(3):
+            h.main()
+        self.assertEqual(self._burned(), ["wgpl6"])
+
+    def test_explicit_403_is_judged_even_if_carrier_looks_dead(self):
+        """۴۰۳ پاسخِ صریحِ گوگل است — مسیر کار کرده؛ حامل ربطی ندارد."""
+        self.http["wgpl5"] = "403"
+        self.carrier_up["awg3"] = False
+        for _ in range(3):
+            h.main()
+        self.assertEqual(self._burned(), ["wgpl5"])
+
+    def test_unknown_or_direct_carrier_keeps_old_behavior(self):
+        """حاملِ نامعلوم یا eth0 ⇒ «نمی‌دانم» ⇒ همان حکمِ بلک‌هول."""
+        for carrier in (None, "eth0"):
+            self.setUp()
+            self._blackhole_all()
+            self.carrier = {d: carrier for d in self.http}
+            for _ in range(3):
+                h.main()
+            self.assertEqual(set(self._burned()), {"wgpl", "wgpl5", "wgpl6"},
+                             "حامل=%r" % carrier)
+
+    def test_carrier_is_pinged_once_per_run(self):
+        """سه تونل روی یک حامل ⇒ یک پینگ در هر اجرا، نه سه (هر پینگِ ناموفق
+        تا ۴ ثانیه طول می‌کشد و یونیت oneshot است)."""
+        self._blackhole_all()
+        self.carrier_up["awg3"] = False
+        h.main()
+        self.assertEqual(self.carrier_pings, ["awg3"])
+        h.main()
+        self.assertEqual(self.carrier_pings, ["awg3", "awg3"], "حافظه فقط برای یک اجرا")
+
+    def test_healthy_carrier_is_not_even_consulted_on_success(self):
+        """تونلِ سالم هیچ هزینه‌ی تازه‌ای ندارد."""
+        h.main()
+        self.assertEqual(self.carrier_pings, [])
+
+    def test_hold_is_logged_once_per_run_and_not_notified(self):
+        self._blackhole_all()
+        self.carrier_up["awg3"] = False
+        h.main()
+        with open(h.LOG, encoding="utf-8") as f:
+            lines = [l for l in f if "بی‌حکم ماند" in l]
+        self.assertEqual(len(lines), 1)
+        self.assertIn("awg3", lines[0])
+
+    def test_route_dev_parses_real_ip_route_get_output(self):
+        self.assertEqual(h.route_dev(
+            "198.51.100.7 dev awg3 src 10.24.0.172 uid 0 \n    cache \n"), "awg3")
+        self.assertEqual(h.route_dev(
+            "198.51.100.8 via 203.0.113.1 dev eth0 src 203.0.113.2 uid 0"), "eth0")
+        self.assertIsNone(h.route_dev(""))
+        self.assertIsNone(h.route_dev("RTNETLINK answers: Network is unreachable"))
+
+
+class PoolAlignmentTests(unittest.TestCase):
+    """گاردِ خانوادگیِ «اندازه‌ی استخر در هفت جا تکرار شده» (۲۸ سپتامبر ۲۰۲۶،
+    شش ⇐ ده). ناهم‌خوانی‌ها ساکت‌اند: مارکی در splitter بدونِ ip rule ⇒ نشت به
+    main؛ مارکِ یوتیوب‌موزیکِ جابه‌جا ⇒ هر تونل همسایه‌اش را می‌سنجد؛ شمارشِ
+    کیل‌سوییچِ کهنه در audit ⇒ قرمزِ کاذب یا سبزِ کاذب."""
+
+    ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+
+    def _read(self, *parts):
+        p = os.path.join(self.ROOT, *parts)
+        if not os.path.exists(p):
+            raise unittest.SkipTest("%s در این درخت نیست" % "/".join(parts))
+        with open(p, encoding="utf-8") as f:
+            return f.read()
+
+    def _bash_array(self, src, name):
+        import re
+        m = re.search(r"^%s=\(([^)]*)\)" % name, src, re.M)
+        self.assertIsNotNone(m, "آرایه‌ی %s پیدا نشد" % name)
+        return m.group(1).split()
+
+    def _failover(self):
+        s = self._read("deploy", "wgpl-failover.sh")
+        return {k: self._bash_array(s, k) for k in
+                ("TUNNELS", "POOL_MARKS", "POOL_TABLES", "POOL_RULE_PRI", "POOL_KS_PRI")}
+
+    def test_failover_arrays_are_index_aligned_and_disjoint(self):
+        f = self._failover()
+        n = len(f["TUNNELS"])
+        for k, v in f.items():
+            self.assertEqual(len(v), n, "%s طولش %d است نه %d" % (k, len(v), n))
+            self.assertEqual(len(set(v)), n, "%s تکراری دارد" % k)
+        ks = [int(x) for x in f["POOL_KS_PRI"]]
+        pairs = {p for k in ks for p in (k, k + 1)}
+        self.assertEqual(len(pairs), 2 * n, "جفت‌های suppress+prohibit روی هم افتاده‌اند")
+        self.assertTrue(all(32708 <= p for p in pairs), "با کیل‌سوییچِ اصلیِ ۳۲۷۰۰–۳۲۷۰۷ برخورد")
+        pri = [int(x) for x in f["POOL_RULE_PRI"]]
+        self.assertFalse({9, 11} & set(pri), "اولویتِ 0x77 (۹) یا 0x79 (۱۱) گرفته شده")
+
+    def test_splitter_pool_equals_failover_marks(self):
+        import re
+        conf = self._read("deploy", "warp-sni-splitter-pool.conf")
+        m = re.search(r"WSS_AI_MARK_POOL=([0-9a-fx,]+)", conf)
+        self.assertEqual(m.group(1).split(","), self._failover()["POOL_MARKS"],
+                         "مارکی در splitter بدونِ ip rule ⇒ نشت به main")
+
+    def test_panel_tables_equal_failover_tables(self):
+        import re
+        src = self._read("wgpanel/app.py")
+        m = re.search(r"^AI_POOL_TABLES = \(([^)]*)\)", src, re.M | re.S)
+        tables = re.findall(r'"(\d+)"', m.group(1))
+        self.assertEqual(tables, self._failover()["POOL_TABLES"])
+
+    def test_egress_health_defaults_equal_failover(self):
+        # از سورس، نه از h.TUNNELS: setUp ِ کلاس‌های دیگر آن را عوض می‌کند.
+        f = self._failover()
+        src = self._read("deploy", "wgpl-egress-health.py")
+        import re
+        tun = re.search(r'or "(wgpl[^"]*)"\)\.split\(\)', src).group(1).split()
+        ytm = re.search(r'or "(8[^"]*)"\)\.split\(\)', src).group(1).split()
+        self.assertEqual(tun, f["TUNNELS"])
+        self.assertEqual(["0x" + x for x in ytm], f["POOL_MARKS"],
+                         "مارکِ یوتیوب‌موزیکِ هم‌اندیس نیست ⇒ هر تونل همسایه‌اش را می‌سنجد")
+
+    def test_manual_exclude_dropin_is_index_aligned(self):
+        import re
+        f = self._failover()
+        conf = self._read("deploy", "wgpl-egress-health-manual-exclude.conf")
+        tun = re.search(r'WGPL_TUNNELS="([^"]*)"', conf).group(1).split()
+        ytm = re.search(r'WGPL_YTM_MARKS="([^"]*)"', conf).group(1).split()
+        self.assertEqual(len(tun), len(ytm))
+        for t, m in zip(tun, ytm):
+            self.assertIn(t, f["TUNNELS"])
+            self.assertEqual("0x" + m, f["POOL_MARKS"][f["TUNNELS"].index(t)],
+                             "%s در drop-in مارکِ %s گرفته، نه مارکِ خودش" % (t, m))
+
+    def test_boot_audit_counts_and_units_follow_pool(self):
+        f = self._failover()
+        a = self._read(".claude", "skills", "boot-path-audit", "audit.sh")
+        n = len(f["TUNNELS"])
+        self.assertIn('"$pool" -eq %d' % (2 * n), a, "شمارشِ کیل‌سوییچِ استخر کهنه است")
+        for t in f["TUNNELS"]:
+            self.assertRegex(a, r"wg-quick@%s(\s|\")" % t, "یونیتِ %s در audit نیست" % t)
+
+
 class FailoverHonorsBurnedListTests(unittest.TestCase):
     """مصرف‌کننده‌ی فهرست: healthy() ِ wgpl-failover.sh باید تونلِ فهرست‌شده را
     ناسالم بشمارد حتی با لینک و هندشیکِ کاملاً تازه — وگرنه فهرست بی‌اثر است."""
@@ -325,6 +530,179 @@ class FailoverHonorsBurnedListTests(unittest.TestCase):
         r = subprocess.run(["bash", "-c", 'source "$0"; echo lib-ok', self._SH],
                            env=self.env, capture_output=True, text=True, timeout=20)
         self.assertEqual(r.stdout.strip(), "lib-ok", r.stderr)
+
+
+class TableOwnershipTests(unittest.TestCase):
+    """گاردِ خانوادگیِ «دو نویسنده برای یک جدولِ مسیریابی» (۲۸ سپتامبر ۲۰۲۶، §۲۹٫۱۲۵).
+
+    warp-gemini-sync.sh هر ۱۵ دقیقه مسیرِ پیش‌فرضِ جدولِ ۲۳۰ را به
+    WARP_EGRESS_IFACE می‌برد و wgpl-failover.sh ≤۱۵ث بعد به نخستین تونلِ
+    سالم برمی‌گرداند. دو بار رخ داد: ۱۵ اوت با wgwarp (§۲۹٫۱۰۱) و ۲۸ سپتامبر
+    با wgpl ِ سوخته (۴۴۳ جابه‌جایی — ترافیکِ AI روی خروجیِ ۴۰۳). رفعِ اول نامِ
+    اینترفیس را عوض کرد و خانواده زنده ماند؛ این‌جا خودِ «نویسنده‌ی دوم» قفل
+    می‌شود: هر جدولی که مالِ wgpl-failover است، هر نویسنده‌ی دیگری فقط از
+    داخلِ تابعی می‌نویسد که پیش از نوشتن مالکیت را می‌پرسد."""
+
+    ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+    _SYNC = os.path.join(ROOT, "deploy", "warp-gemini-sync.sh")
+    _FAILOVER = os.path.join(ROOT, "deploy", "wgpl-failover.sh")
+    # مسیرِ پیش‌فرضِ اصلی — نه پشتیبانِ metric، نه blackhole/local
+    _WRITE = __import__("re").compile(
+        r"\bip\s+route\s+(?:replace|add|change)\s+default\s+dev\s+\S+"
+        r"(?![^\n]*\bmetric\b)[^\n]*\btable\s+(\S+)")
+
+    def setUp(self):
+        for p in (self._SYNC, self._FAILOVER):
+            if not os.path.exists(p):
+                raise unittest.SkipTest("%s در این درخت نیست" % os.path.basename(p))
+
+    @staticmethod
+    def _code(path):
+        with open(path, encoding="utf-8") as f:
+            return [l for l in f.read().splitlines()]
+
+    def _failover_tables(self):
+        import re
+        src = "\n".join(self._code(self._FAILOVER))
+        main = re.search(r"^MAIN_TABLE=(\d+)", src, re.M).group(1)
+        pool = re.search(r"^POOL_TABLES=\(([^)]*)\)", src, re.M).group(1).split()
+        return {main, *pool}
+
+    def _resolve(self, lines, tok):
+        import re
+        tok = tok.strip('"').strip("'")
+        if tok.isdigit():
+            return tok
+        m = re.fullmatch(r"\$\{?(\w+)\}?", tok)
+        self.assertIsNotNone(m, "جدولِ «%s» قابلِ حل نیست" % tok)
+        for l in lines:
+            a = re.match(r"^%s=(\d+)\b" % m.group(1), l)
+            if a:
+                return a.group(1)
+        self.fail("متغیرِ جدولِ $%s مقدارِ عددیِ ثابت ندارد — نویسنده‌ی پنهان؟" % m.group(1))
+
+    def _enclosing_function(self, lines, idx):
+        import re
+        for j in range(idx, -1, -1):
+            m = re.match(r"^(\w+)\(\)\s*\{", lines[j])
+            if m:
+                end = next(k for k in range(j + 1, len(lines)) if lines[k] == "}")
+                return (m.group(1), j) if end > idx else (None, None)
+        return None, None
+
+    def test_failover_owned_tables_have_no_unguarded_second_writer(self):
+        import glob
+        owned = self._failover_tables()
+        scripts = sorted(set(glob.glob(os.path.join(self.ROOT, "deploy", "**", "*.sh"),
+                                       recursive=True)) - {self._FAILOVER})
+        self.assertIn(self._SYNC, scripts)
+        seen = 0
+        for path in scripts:
+            lines = self._code(path)
+            for i, l in enumerate(lines):
+                if l.lstrip().startswith("#"):
+                    continue
+                m = self._WRITE.search(l)
+                if not m or self._resolve(lines, m.group(1)) not in owned:
+                    continue
+                seen += 1
+                where = "%s:%d" % (os.path.relpath(path, self.ROOT), i + 1)
+                fn, start = self._enclosing_function(lines, i)
+                self.assertIsNotNone(fn, "%s جدولِ نگهبان را بیرون از هر تابعی می‌نویسد" % where)
+                body = "\n".join(lines[start:i])
+                self.assertIn("table_owned_elsewhere", body,
+                              "%s (در %s) پیش از نوشتن مالکیت را نمی‌پرسد" % (where, fn))
+        self.assertGreaterEqual(seen, 1, "نوشتنِ جدولِ ۲۳۰ در sync.sh پیدا نشد — regex کهنه است")
+
+    def test_sync_table_is_the_failover_main_table(self):
+        import re
+        sync = "\n".join(self._code(self._SYNC))
+        fo = "\n".join(self._code(self._FAILOVER))
+        self.assertEqual(re.search(r"^TABLE=(\d+)", sync, re.M).group(1),
+                         re.search(r"^MAIN_TABLE=(\d+)", fo, re.M).group(1))
+
+    def test_owner_unit_exists_in_repo(self):
+        import re
+        sync = "\n".join(self._code(self._SYNC))
+        unit = re.search(r"TABLE_OWNER=\$\{WARP_TABLE_OWNER:-([^}]+)\}", sync).group(1)
+        self.assertTrue(os.path.exists(os.path.join(self.ROOT, "deploy", unit)),
+                        "مالکِ %s در deploy/ نیست ⇒ is-active همیشه false و واگذاری مرده" % unit)
+        svc = os.path.join(self.ROOT, "deploy", unit.replace(".timer", ".service"))
+        with open(svc, encoding="utf-8") as f:
+            self.assertIn("wgpl-failover.sh", f.read())
+
+    def test_panel_never_writes_ai_tables(self):
+        """پنل فقط می‌خوانَد (_default_dev_of_table)؛ نویسنده‌ی سوم نسازد."""
+        import re
+        src = self._code(os.path.join(self.ROOT, "wgpanel", "app.py"))
+        for i, l in enumerate(src, 1):
+            if re.search(r'"route",\s*"(replace|add|change)",\s*"default"', l):
+                self.assertNotRegex(l, r"WARP_TABLE|AI_POOL_TABLES|\"2(3\d|4\d|50)\"",
+                                    "wg_panel.py:%d جدولِ نگهبان را می‌نویسد" % i)
+
+    # ---- رفتاری: set_warp_table با ip/systemctl ِ ساختگی --------------
+    def _run(self, owner_active, table):
+        import subprocess
+        d = tempfile.mkdtemp()
+        bin_ = os.path.join(d, "bin")
+        os.mkdir(bin_)
+        for name, body in (
+                ("ip", '#!/bin/sh\nif [ "$1 $2 $3" = "route show table" ]; then\n'
+                       '  cat "$FAKE_TABLE" 2>/dev/null; exit 0; fi\n'
+                       'echo "$*" >>"$FAKE_LOG"\n'),
+                ("systemctl", '#!/bin/sh\nexit "$FAKE_OWNER_RC"\n')):
+            fp = os.path.join(bin_, name)
+            with open(fp, "w") as f:
+                f.write(body)
+            os.chmod(fp, 0o755)
+        tbl, log = os.path.join(d, "table"), os.path.join(d, "log")
+        with open(tbl, "w") as f:
+            f.write(table)
+        env = dict(os.environ, PATH=bin_ + os.pathsep + os.environ.get("PATH", ""),
+                   WARP_SYNC_LIB="1", WARP_EGRESS_IFACE="wgpl",
+                   FAKE_TABLE=tbl, FAKE_LOG=log,
+                   FAKE_OWNER_RC="0" if owner_active else "3")
+        r = subprocess.run(["bash", "-c", 'source "$0" && set_warp_table', self._SYNC],
+                           env=env, capture_output=True, text=True, timeout=20)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        writes = open(log).read().splitlines() if os.path.exists(log) else []
+        return writes
+
+    LIVE = "default dev wgpl2 scope link \ndefault dev wgwarp scope link metric 100 \n"
+
+    def test_owner_active_and_table_set_is_left_alone(self):
+        """دقیقاً وضعِ ۲۸ سپتامبر: نگهبان wgpl2 گذاشته، sync نباید wgpl ِ سوخته بنویسد."""
+        self.assertEqual(self._run(True, self.LIVE), [])
+
+    def test_owner_active_but_table_empty_is_bootstrapped(self):
+        """بوت یا پس از teardown: جدولِ خالی بلک‌هول است، پس مقدارِ اولیه لازم است."""
+        self.assertEqual(self._run(True, ""), ["route replace default dev wgpl table 230"])
+
+    def test_backup_route_alone_does_not_count_as_owned(self):
+        """پشتیبانِ metric 100 مسیرِ اصلی نیست — همان قاعده‌ی awk ِ point_table."""
+        self.assertEqual(self._run(True, "default dev wgwarp scope link metric 100 \n"),
+                         ["route replace default dev wgpl table 230"])
+
+    def test_without_owner_sync_keeps_old_behavior(self):
+        """نصب‌های بدونِ استخر (ansible/airgap): sync تنها مالک است، مثلِ قبل."""
+        self.assertEqual(self._run(False, self.LIVE),
+                         ["route replace default dev wgpl table 230"])
+
+    def test_lib_mode_executes_nothing(self):
+        import subprocess
+        d = tempfile.mkdtemp()
+        r = subprocess.run(["bash", "-c", 'source "$0"; echo lib-ok', self._SYNC],
+                           env=dict(os.environ, WARP_SYNC_LIB="1",
+                                    PATH=d + os.pathsep + os.environ.get("PATH", "")),
+                           capture_output=True, text=True, timeout=20)
+        self.assertEqual(r.stdout.strip(), "lib-ok", r.stderr)
+
+    def test_standby_check_reads_warp_not_egress(self):
+        """IFACE=wgpl نباید کلیدِ wgpl را با کلیدِ استندبایِ WARP مقایسه کند."""
+        code = [l for l in self._code(self._SYNC) if not l.lstrip().startswith("#")]
+        line = next(l for l in code if "public-key" in l and "wg show" in l)
+        self.assertIn("$WARP_IF", line)
+        self.assertNotIn("$IFACE", line)
 
 
 class YouTubeMusicStageTests(unittest.TestCase):

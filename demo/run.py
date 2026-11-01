@@ -38,7 +38,7 @@ sys.path.insert(0, HERE)
 import fake_tools  # noqa: E402
 
 PASSWORD = "demo"
-ASSETS = ("wg_panel.py", "qr.js", "three.core.min.js.gz",
+ASSETS = ("qr.js", "three.core.min.js.gz",
           "three.module.min.js.gz", "three.LICENSE.txt")
 # هر برنامه‌ای که پنل اجرا می‌کند؛ نبودنِ یکی یعنی دمو ابزارِ واقعیِ سیستم را
 # صدا می‌زد. tests/test_demo.py این فهرست را با خودِ سورس می‌سنجد.
@@ -76,6 +76,8 @@ def build(state_dir):
     os.makedirs(panel)
     for name in ASSETS:
         shutil.copy2(os.path.join(ROOT, name), panel)
+    shutil.copytree(os.path.join(ROOT, "wgpanel"), os.path.join(panel, "wgpanel"),
+                    ignore=shutil.ignore_patterns("__pycache__"))
     wg_dir = os.path.join(state_dir, "root", "etc", "wireguard")
     os.makedirs(wg_dir)
     with open(os.path.join(wg_dir, "wg0.conf"), "w", encoding="utf-8") as f:
@@ -132,7 +134,7 @@ def environ(state_dir):
 def load(state_dir):
     """کپیِ پنل را بارگذاری و قرنطینه می‌کند؛ ماژول را برمی‌گرداند."""
     environ(state_dir)
-    path = os.path.join(state_dir, "panel", "wg_panel.py")
+    path = os.path.join(state_dir, "panel", "wgpanel", "app.py")
     spec = importlib.util.spec_from_file_location("wg_panel", path)
     m = importlib.util.module_from_spec(spec)
     sys.modules["wg_panel"] = m

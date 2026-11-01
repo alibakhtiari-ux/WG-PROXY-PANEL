@@ -81,9 +81,9 @@ Bring the new code onto the server (`git pull`, or `rsync`), then:
 docker compose up -d --build
 ```
 
-On every boot the entrypoint replaces `wg_panel.py` inside the volume with the
-image's copy, leaving your data untouched. The version identifier is the
-project's usual one — the first 12 characters of `sha256(wg_panel.py)` — and
+On every boot the entrypoint replaces `wg_panel.pyz` and its launcher `wg_panel.py` inside the volume with the
+image's copies, leaving your data untouched. The version identifier is the
+project's usual one — the first 12 characters of `sha256(wg_panel.pyz)`, the archive built from `wgpanel/` — and
 you can read it with `cat data/panel/VERSION`.
 
 ## Security notes you should not skip

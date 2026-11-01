@@ -98,6 +98,7 @@ class AirgapBundleTests(unittest.TestCase):
         for src, _ in entries:
             self.assertIsNone(
                 re.search(r"\.html$|^\.claude/|CLAUDE\.md|^wg_panel\.py$|"
+                          r"^wg_panel\.pyz$|^wgpanel/|"
                           r"^myserver-|^scripts/|^online/|^airgap/", src),
                 "منبعِ ممنوع در فهرستِ سفید: %s" % src)
 
@@ -221,10 +222,23 @@ class BuildContextTests(unittest.TestCase):
                     if ln.strip() and not ln.strip().startswith("#")]
         self.assertTrue(pats, "فهرستِ شناسه‌ها خالی است")
         HOST = re.compile("|".join(pats))
+        # منبعِ COPY ممکن است پوشه باشد (wgpanel/) ⇒ فایل‌به‌فایل پیمایش می‌شود.
+        # فایل‌های دودویی (gz/woff2/pyz) و __pycache__ کنار گذاشته می‌شوند.
+        SKIP_EXT = (".gz", ".woff2", ".pyz", ".pyc")
+        files = []
         for src in self._copy_sources():
             path = os.path.join(REPO, src)
-            if not os.path.isfile(path) or src.endswith(".gz"):
+            if os.path.isdir(path):
+                for dp, dns, fns in os.walk(path):
+                    dns[:] = [d for d in dns if d != "__pycache__"]
+                    files.extend(os.path.join(dp, f) for f in fns)
+            elif os.path.isfile(path):
+                files.append(path)
+        self.assertTrue(files, "هیچ فایلی برای سنجش پیدا نشد")
+        for path in files:
+            if path.endswith(SKIP_EXT):
                 continue
+            src = os.path.relpath(path, REPO)
             with open(path, encoding="utf-8", errors="ignore") as fh:
                 body = fh.read()
             hit = HOST.search(body)

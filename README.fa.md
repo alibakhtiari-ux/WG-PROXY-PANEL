@@ -2,7 +2,7 @@
 
 # WG-PROXY-PANEL
 
-**پنلِ تحتِ وبِ تک‌فایلی برای پایش و مدیریتِ WireGuard و پروکسیِ Squid.**<br>
+**پنلِ تحتِ وب برای پایش و مدیریتِ WireGuard و پروکسیِ Squid، با استقرارِ تک‌فایلی.**<br>
 فقط کتابخانه‌ی استانداردِ پایتون — بدونِ بسته‌ی pip، بدونِ مرحله‌ی build، با چهار زبان.
 
 [![verify](https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/actions/workflows/verify.yml/badge.svg)](https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/actions/workflows/verify.yml)
@@ -17,7 +17,7 @@
 
 ---
 
-کلِ برنامه یک فایل است، `wg_panel.py`، و **جز کتابخانه‌ی استانداردِ پایتون**
+کلِ برنامه به‌صورتِ یک فایل مستقر می‌شود، `wg_panel.pyz`، و **جز کتابخانه‌ی استانداردِ پایتون**
 به هیچ چیزی نیاز ندارد. آن را به‌صورتِ سرویسِ systemd (یا در کانتینرِ Docker ِ
 همراهِ پروژه) اجرا کنید تا یک پنلِ وب برای اینترفیس‌های WireGuard ِ همان سرور
 داشته باشید: ترافیکِ زنده‌ی هر کاربر، افزودن و غیرفعال‌کردنِ کاربر، کدِ QR و
@@ -156,7 +156,7 @@
   ترافیکِ پروکسی و تستِ سرعت، همراه با مجموع، میانگین و بیشینه در توضیحِ تصویر
 - کاربرانِ آنلاین، جست‌وجو، گزارش بر اساسِ انقضا و بر اساسِ مصرف، وضعیتِ بکاپ،
   تستِ سرعت، و خلاصه‌ی روزانه یا هفتگی
-- **۱۲ نوع هشدار**: قطع و وصلِ تونل‌های خروجی، رسیدن به سهمیه، نزدیک‌شدنِ
+- **۱۱ نوع هشدار**: قطع و وصلِ تونل‌های خروجی، رسیدن به سهمیه، نزدیک‌شدنِ
   انقضا، بالا بودنِ CPU/RAM/دیسک، مصرفِ swap، تلاش‌های ناموفقِ مکررِ ورود،
   شکستِ آپلودِ بکاپ، افتِ سرعت، ری‌استارتِ پنل و موارد دیگر
 - **تأییدِ ورود به پنل** با یک لمس در تلگرام (اختیاری)
@@ -208,7 +208,7 @@
 
 همه‌ی نمودارهای پنل را یک موتورِ رسمِ کوچک می‌کشد که برای همین پروژه از صفر
 نوشته شده است: Canvas 2D ِ خالص، در حدودِ دو هزار خط JavaScript داخلِ
-`wg_panel.py`. هیچ کتابخانه‌ی نمودار و هیچ CDN‌ای در کار نیست، پس روی سرورِ
+`wgpanel/app.py`. هیچ کتابخانه‌ی نمودار و هیچ CDN‌ای در کار نیست، پس روی سرورِ
 بدونِ اینترنت هم کار می‌کند. موتور داده‌ای را که می‌کشد می‌شناسد: می‌داند
 سهمیه چیست، کاربر کِی غیرفعال شده و یک تونل در ده ثانیه‌ی گذشته چند بایت
 جابه‌جا کرده است.
@@ -320,7 +320,7 @@ PNG بسته‌بندی می‌کند. تصویر ۹۰۰ × ۴۰۰ است، می
 
 پنل، تاریخچه‌ی تغییرات، پیام‌های خطای API، رباتِ تلگرام و هشدارهای تلگرام
 همگی به **انگلیسی، فارسی، روسی و چینی** در دسترس‌اند. ترجمه‌ها داخلِ خودِ
-`wg_panel.py` هستند (حدودِ دو هزار کلید)، تا پنل همچنان یک فایل بماند.
+`wgpanel/app.py` هستند (حدودِ دو هزار کلید)، تا پنل همچنان یک فایل بماند.
 
 | کجا | زبان چگونه انتخاب می‌شود |
 |---|---|
@@ -425,18 +425,21 @@ cd docker/airgap && bash build-offline-bundle.sh --arch amd64
 
 ```bash
 base=https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/releases/latest/download
-curl -fLO "$base/wg_panel.py" -O "$base/wg-panel.service" -O "$base/qr.js" \
-     -O "$base/three.module.min.js.gz" -O "$base/three.core.min.js.gz" \
+curl -fLO "$base/wg_panel.pyz" -O "$base/wg_panel.py" -O "$base/wg-panel.service" \
+     -O "$base/qr.js" -O "$base/three.module.min.js.gz" -O "$base/three.core.min.js.gz" \
      -O "$base/three.LICENSE.txt" -O "$base/SHA256SUMS"
 sha256sum -c SHA256SUMS
 ```
 
 پنل پیکربندیِ خودش را **نمی‌سازد**: فایلِ `config.json` را از همان پوشه‌ای که
-`wg_panel.py` در آن است می‌خوانَد و بدونِ آن اجرا نمی‌شود. فایل و یونیت را نصب
-کنید:
+`wg_panel.py` در آن است می‌خوانَد و بدونِ آن اجرا نمی‌شود. دو فایلِ پنل را
+کنارِ هم نصب کنید — `wg_panel.pyz` کلِ پنل است و `wg_panel.py` لانچرِ ۲۰ خطی‌ای
+است که یونیتِ systemd همیشه از همین مسیر اجرا کرده — و بعد یونیت را:
 
 ```bash
-sudo install -D -m600 -o root -g root wg_panel.py /opt/wg-panel/wg_panel.py
+sudo install -d -m700 /opt/wg-panel
+sudo install -m600 -o root -g root -t /opt/wg-panel wg_panel.pyz wg_panel.py
+sudo python3 /opt/wg-panel/wg_panel.py --check
 sudo install -m644 -t /opt/wg-panel qr.js three.module.min.js.gz three.core.min.js.gz \
      three.LICENSE.txt
 sudo install -m644 wg-panel.service /etc/systemd/system/
@@ -478,24 +481,39 @@ sudo systemctl enable --now wg-panel
 
 ## به‌روزرسانی
 
-پنل یک فایل است، پس به‌روزرسانی یعنی جایگزین‌کردنِ همان فایل. تنظیماتِ
+پنل یک فایل (`wg_panel.pyz`) به‌علاوه‌ی لانچرِ ۲۰ خطیِ آن است، پس به‌روزرسانی یعنی جایگزین‌کردنِ همین دو فایل. تنظیماتِ
 `config.json` و داده‌های `traffic.db` حفظ می‌شوند؛ پیکربندی‌های قدیمی‌تر هنگامِ
 شروعِ پنل خودکار به‌روز می‌شوند.
 
-**با systemd:** release ِ جدید را مثلِ بالا دانلود کنید، همراه با بررسیِ
-`sha256sum -c`، سپس:
+**با systemd:** هر دو فایلِ release ِ جدید را دانلود کنید، همراه با بررسیِ
+`sha256sum -c`:
 
 ```bash
-sudo install -m600 -o root -g root wg_panel.py /opt/wg-panel/wg_panel.py
+base=https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/releases/latest/download
+curl -fLO "$base/wg_panel.pyz" -O "$base/wg_panel.py" -O "$base/wg-panel.service" \
+     -O "$base/qr.js" -O "$base/three.module.min.js.gz" -O "$base/three.core.min.js.gz" \
+     -O "$base/three.LICENSE.txt" -O "$base/SHA256SUMS"
+sha256sum -c SHA256SUMS
+```
+
+سپس اول `wg_panel.pyz` و بعد لانچر را نصب کنید (ترتیبِ آرگومان‌ها در دستورِ زیر
+همین را تضمین می‌کند)، `--check` را اجرا کنید و دوباره راه بیندازید. اگر از 1.2.x
+یا قدیمی‌تر می‌آیید همین تنها تغییر است: یونیت همان می‌ماند و داده‌ها
+(`config.json`، `traffic.db`، `clients/`) سرِ جایشان می‌مانند.
+
+```bash
+sudo install -m600 -o root -g root -t /opt/wg-panel wg_panel.pyz wg_panel.py
 sudo install -m644 -t /opt/wg-panel qr.js three.module.min.js.gz three.core.min.js.gz
 sudo install -m644 wg-panel.service /etc/systemd/system/
+sudo python3 /opt/wg-panel/wg_panel.py --check
 sudo systemctl daemon-reload
 sudo systemctl restart wg-panel
 ```
 
 برای دیدنِ build ای که روی سرور اجرا می‌شود، خروجیِ
-`sha256sum /opt/wg-panel/wg_panel.py | cut -c1-12` را با build id ِ یادداشتِ
-release مقایسه کنید. تغییراتِ هر نسخه در [CHANGELOG.md](CHANGELOG.md) آمده است.
+`sha256sum /opt/wg-panel/wg_panel.pyz | cut -c1-12` را با build id ِ یادداشتِ
+release مقایسه کنید؛ همان مقدارِ `python3 tools/build_pyz.py --id` روی سورس و
+نسخه‌ای است که نصبِ Docker چاپ می‌کند. تغییراتِ هر نسخه در [CHANGELOG.md](CHANGELOG.md) آمده است.
 
 **با Docker:** کدِ جدید را روی سرور بیاورید (`git pull`)، سپس در پوشه‌ی
 `docker/`:
@@ -541,7 +559,7 @@ docker compose up -d --build
 آستانه‌های هشدار در `alerts` و پیش‌فرض‌هایشان: `cpu_pct`، `ram_pct` و `disk_pct`
 برابرِ `90` که `sustain_min` یعنی `5` دقیقه ادامه پیدا کند، `quota_pct` برابرِ `90`،
 `expiry_days` برابرِ `3`، و `login_fails` یعنی `10` ورودِ ناموفق در ۱۰ دقیقه. هر
-کدام از ۱۲ نوعِ هشدار را می‌توان زیرِ `alerts.events` خاموش کرد.
+کدام از ۱۱ نوعِ هشدار را می‌توان زیرِ `alerts.events` خاموش کرد.
 
 ### نقش‌ها و مجوزها
 
@@ -863,13 +881,20 @@ Squid را متوقف کنید و `/etc/squid/squid.conf` را که پنل نو�
 
 ## توسعه
 
-فایلِ `wg_panel.py` بیش از ۳۰٬۰۰۰ خط دارد، و کلِ رابطِ وب (HTML، CSS و
+فایلِ `wgpanel/app.py` بیش از ۳۰٬۰۰۰ خط دارد، و کلِ رابطِ وب (HTML، CSS و
 JavaScript) داخلِ رشته‌های پایتون است. اجرای تست‌ها:
 
 ```bash
 python3 -m unittest discover -s tests -v
-python3 -m py_compile wg_panel.py
-python3 tests/check_js.py      # نحوِ JavaScript، نیازمندِ Node.js
+python3 tools/build_pyz.py && python3 dist/wg_panel.pyz --check
+python3 tests/check_js.py      # JavaScript syntax, needs Node.js
+```
+
+کاربران فقط فایلِ ساخته‌شده را دانلود می‌کنند؛ مشارکت‌کنندگان آن را از سورس می‌سازند (سورسِ یکسان همیشه بایت‌های یکسان می‌دهد) یا پنل را مستقیم از یک checkout اجرا می‌کنند:
+
+```bash
+python3 tools/build_pyz.py      # dist/wg_panel.pyz — same source, same bytes
+python3 -m wgpanel             # run the panel straight from a checkout
 ```
 
 تست‌ها از جمله این‌ها را می‌سنجند: هر کلیدِ ترجمه در هر چهار زبان با
@@ -898,7 +923,11 @@ Pillow نصب باشد تصاویر را فشرده می‌کند.
 
 | مسیر | محتوا |
 |---|---|
-| `wg_panel.py` | کلِ برنامه |
+| `wgpanel/app.py` | پنل (سورس؛ بخشِ عمده‌ی آن در `app.py` است) |
+| `wgpanel/__main__.py` | نقطه‌ی ورود (`python3 -m wgpanel`) |
+| `wgpanel/_check.py` | خودآزماییِ آرشیو (`wg_panel.pyz --check`) |
+| `tools/build_pyz.py` | ساختِ بازتولیدپذیرِ `dist/wg_panel.pyz` |
+| `wg_panel.py` | لانچرِ ۲۰ خطیِ که یونیتِ systemd اجرا می‌کند |
 | `wg-panel.service` | یونیتِ systemd |
 | `docker/` | نصب با Docker Compose و سازنده‌ی بسته‌ی آفلاین |
 | `deploy/` | یونیت‌های اختیاریِ systemd، قاعده‌ی fail2ban، اسکریپت‌های بکاپ، تفکیک‌کننده‌ی SNI |
@@ -906,7 +935,7 @@ Pillow نصب باشد تصاویر را فشرده می‌کند.
 | `docs/screenshots/` | تصاویرِ استفاده‌شده در READMEها |
 | `demo/` | حالتِ دمو و سازنده‌ی اسکرین‌شات‌ها |
 | `CHANGELOG.md` | تغییراتِ هر نسخه |
-| `fonts/` | منبعِ زیرمجموعه‌ی فونتِ وزیرمتن (خودِ فونت داخلِ `wg_panel.py` جاسازی شده) |
+| `fonts/` | منبعِ زیرمجموعه‌ی فونتِ وزیرمتن (خودِ فونت داخلِ `wgpanel/app.py` جاسازی شده) |
 | `qr.js` · `three.*.min.js.gz` | کتابخانه‌های همراهِ کدِ QR و three.js |
 | `.github/` | CI، گردش‌کارِ release، و قالب‌های issue و pull request |
 | `SECURITY.md` · `CONTRIBUTING.md` | گزارشِ آسیب‌پذیری و راهنمای مشارکت |

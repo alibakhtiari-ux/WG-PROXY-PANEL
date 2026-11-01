@@ -24,6 +24,13 @@ docker/airgap/dist/
 docker*.zip
 # خروجی‌های بیلدِ بسته‌های آفلاینِ systemd (payload و tarball در گیت نمی‌آیند؛ اسکلت tracked می‌ماند)
 wg-panel-airgap-*.tar*
+# خروجیِ tools/build_pyz.py — هرگز در گیت نمی‌آید (نقشِ ansible کپیِ خودش را دارد؛ پلنِ ۰۶۹)
+/dist/
+*.pyz
+!ansible/roles/wg-panel/files/wg_panel.pyz
+!online/ansible/roles/wg-panel/files/wg_panel.pyz
+!airgap/generic/ansible/roles/wg-panel/files/wg_panel.pyz
+!airgap/single-server/ansible/roles/wg-panel/files/wg_panel.pyz
 airgap/*/offline-repository/apt/
 airgap/*/offline-repository/binaries/
 airgap/*/offline-repository/manifests/

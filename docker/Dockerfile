@@ -52,6 +52,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY wg_panel.py qr.js \
      three.module.min.js.gz three.core.min.js.gz three.LICENSE.txt \
      /usr/local/share/wg-panel/
+# کدِ پنل: پکیج + ابزارِ بیلدِ قطعی؛ آرشیو همین‌جا ساخته می‌شود؛ سورس از
+# فایل‌سیستمِ نهایی پاک می‌شود ولی لایه‌ی COPY آن را نگه می‌دارد — سورس عمومی است.
+COPY wgpanel/ /usr/local/src/wg-panel/wgpanel/
+COPY tools/build_pyz.py /usr/local/src/wg-panel/tools/build_pyz.py
 
 # فایل‌های fail2ban از خودِ نقشِ ansible — یک منبع، بدونِ کپیِ دوم.
 COPY deploy/fail2ban-wg-panel.filter.conf \
@@ -75,7 +79,8 @@ COPY docker/entrypoint.sh      /usr/local/bin/wg-panel-entrypoint
 COPY docker/wg-panel-cron.py   /usr/local/bin/wg-panel-cron
 
 # همان گیتِ استقرارِ runbook، پخته‌شده در بیلد: py_compile باید سبز باشد و
-# نحوِ bash همه‌ی اسکریپت‌ها سالم؛ VERSION = ۱۲ رقمِ اولِ SHA-256 خودِ پنل
+# نحوِ bash همه‌ی اسکریپت‌ها سالم؛ آرشیو wg_panel.pyz ساخته و با --check آزموده
+# می‌شود؛ VERSION = ۱۲ رقمِ اولِ SHA-256 ِ همین آرشیو
 # (همان قراردادِ نقشِ ansible و پنلِ مستقر).
 RUN chmod 755 /usr/local/bin/systemctl /usr/local/bin/journalctl \
               /usr/local/bin/wg-panel-health /usr/local/bin/wg-panel-entrypoint \
@@ -88,10 +93,14 @@ RUN chmod 755 /usr/local/bin/systemctl /usr/local/bin/journalctl \
     # جا می‌گذارد؛ doraise هم خطای نحو را به شکستِ بیلد تبدیل می‌کند.
     && python3 -c "import py_compile; py_compile.compile('/usr/local/bin/wg-panel-cron', cfile='/tmp/cron.pyc', doraise=True)" \
     && rm -f /tmp/cron.pyc \
+    && python3 /usr/local/src/wg-panel/tools/build_pyz.py \
+         --src /usr/local/src/wg-panel/wgpanel \
+         --out /usr/local/share/wg-panel/wg_panel.pyz \
+    && python3 /usr/local/share/wg-panel/wg_panel.pyz --check \
     && python3 -m py_compile /usr/local/share/wg-panel/wg_panel.py \
-    && sha256sum /usr/local/share/wg-panel/wg_panel.py | cut -c1-12 \
+    && sha256sum /usr/local/share/wg-panel/wg_panel.pyz | cut -c1-12 \
          > /usr/local/share/wg-panel/VERSION \
-    && rm -rf /usr/local/share/wg-panel/__pycache__
+    && rm -rf /usr/local/src/wg-panel /usr/local/share/wg-panel/__pycache__
 
 EXPOSE 8787/tcp 51820/udp 18080/tcp
 

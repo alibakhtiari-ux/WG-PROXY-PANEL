@@ -4,9 +4,9 @@
 
 ## Checklist
 
-- [ ] Only the Python standard library is used, and everything stays in `wg_panel.py`
+- [ ] Only the Python standard library is used, and everything the panel needs at runtime stays inside `wgpanel/`
 - [ ] `python3 -m unittest discover -s tests` passes
-- [ ] `python3 -m py_compile wg_panel.py` passes
+- [ ] `python3 tools/build_pyz.py && python3 dist/wg_panel.pyz --check` passes
 - [ ] If the web interface changed: the JavaScript check from CONTRIBUTING.md passes and the browser console shows no errors
 - [ ] New user-facing text is in the `I18N` catalog in all four languages
 - [ ] A bug fix comes with a test that fails without the fix

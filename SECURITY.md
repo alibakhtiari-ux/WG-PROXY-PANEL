@@ -4,7 +4,7 @@
 
 Please report security issues privately to **abghub@pm.me** rather than opening
 a public issue. Include enough detail to reproduce: the version identifier
-(first 12 characters of `sha256(wg_panel.py)`), the install path you used, and
+(first 12 characters of `sha256(wg_panel.pyz)`), the install path you used, and
 the request or sequence that triggers the problem.
 
 You will get an acknowledgement. There is no bug bounty — this is a
@@ -33,7 +33,7 @@ These are deployment choices or documented design decisions, not defects:
 - **The self-signed certificate on first run.** Intentional, so the panel is
   reachable before any certificate exists. Replace it.
 - **`script-src 'unsafe-inline'` in the CSP.** Forced by the single-file design:
-  the HTML, CSS and JavaScript live inside `wg_panel.py` as strings, and there is
+  the HTML, CSS and JavaScript live inside `wgpanel/app.py` as strings, and there is
   no build step to hash or nonce them.
 - **The service running as root.** It edits `/etc/wireguard`, brings interfaces
   up and down, and writes firewall rules.

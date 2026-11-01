@@ -94,12 +94,15 @@ class PublishToolingTests(unittest.TestCase):
                 path == k.rstrip("/")
                 or path.startswith(k.rstrip("/") + "/")
                 or k.rstrip("/").startswith(path + "/")
-                for k in keep + list(self.READMES))
+                for k in keep + list(self.READMES) + ["CHANGELOG.md"])
             self.assertTrue(published,
                             "README ِ عمومی به مسیرِ منتشرنشده لینک داده: %s"
                             % href)
             # README های ترجمه را ژنراتور از publish/ می‌سازد؛ منبعشان را بسنج
+            # CHANGELOG.md هم همین‌طور: منبعش publish/CHANGELOG.public.md است
             real = (os.path.join(PUB, self.READMES[path]) if path in self.READMES
+                    else os.path.join(PUB, "CHANGELOG.public.md")
+                    if path == "CHANGELOG.md"
                     else os.path.join(REPO, path))
             self.assertTrue(os.path.exists(real),
                             "مقصدِ لینک وجود ندارد: %s" % href)
@@ -171,21 +174,31 @@ class PublishToolingTests(unittest.TestCase):
     def test_readme_command_facts_match_the_code(self):
         """ادعاهای عددی/دستوریِ README باید با کد بخوانند، نه با حافظه."""
         body = _read(PUB, "README.public.md")
-        src = _read(REPO, "wg_panel.py")
+        src = _read(REPO, "wgpanel/app.py")
         self.assertIn("SAMPLE_INTERVAL = 2.0", src)          # «every 2 seconds»
-        self.assertIn("return len(attempts) < 5", src)        # «5 attempts per minute»
+        self.assertIn("if len(attempts) >= 5:", src)          # «5 attempts per minute»
         self.assertIn('BUILTIN_ROLES = ("admin", "viewer")', src)
         self.assertIn('LANGS = ("fa", "en", "ru", "zh")', src)
         self.assertIn("1 minute\n  to 24 hours", body)
-        self.assertRegex(src, r"\(1 to 1440\)")               # ۱ تا ۱۴۴۰ دقیقه
+        self.assertRegex(_read(REPO, "wgpanel/i18n/catalog.json"),
+                         r"\(1 to 1440\)")        # ۱ تا ۱۴۴۰ دقیقه (در کاتالوگ)
         n_cmds = len(re.findall(r'\("[a-z]+", "[^"]+"\)', src[
             src.index("def bot_setcommands"):src.index("BOT = TelegramBot()")]))
         self.assertEqual(n_cmds, 18, "تعدادِ دستورهای ربات عوض شد — README را هم")
         self.assertIn("**18 commands**", body)
-        n_ev = src[src.index("ALERT_EVENTS = ("):src.index("ALERT_EVENT_KEYS")
-                   ].count('("')
-        self.assertEqual(n_ev, 12, "تعدادِ انواعِ هشدار عوض شد — README را هم")
-        self.assertIn("**12 kinds of alerts**", body)
+        evs = re.findall(r'\("([a-z0-9_]+)", "', src[
+            src.index("ALERT_EVENTS = ("):src.index("ALERT_EVENT_KEYS")])
+        # «nqmo» شمرده نمی‌شود: موتورش (nqmo/) منتشر نمی‌شود، و با پرچمِ خاموش
+        # (پیش‌فرض) رابط تیکش را هم نشان نمی‌دهد. README فقط هشدارهایی را می‌شمارد
+        # که یک نصبِ عمومی واقعاً دارد. اگر موتور روزی منتشر شد، این استثنا برود.
+        self.assertIn("nqmo", evs)
+        n_ev = len([k for k in evs if k != "nqmo"])
+        self.assertEqual(n_ev, 11, "تعدادِ انواعِ هشدار عوض شد — README را هم")
+        self.assertIn("**11 kinds of alerts**", body)
+        self.assertIn("the 11 alert kinds can be switched off", body)
+        fa = _read(PUB, "README.public.fa.md")
+        self.assertIn("**۱۱ نوع هشدار**", fa)
+        self.assertIn("کدام از ۱۱ نوعِ هشدار", fa)
         for key in re.findall(r"^\| `(\w+)`", body, re.M):
             if key in ("wg_panel", "docker", "deploy", "tests", "fonts", "qr"):
                 continue
@@ -245,6 +258,17 @@ class PublishToolingTests(unittest.TestCase):
     def test_github_sync_stacks_a_normal_commit(self):
         import subprocess
         import tempfile
+        # sync-github-folder.sh عمداً با public ِ کهنه رد می‌کند. ولی public را
+        # هوکِ post-commit فقط وقتی بازسازی می‌کند که **همه‌ی** تست‌ها سبز
+        # باشند — پس اگر این تست به تازگیِ public وابسته بماند، اولین کامیتی
+        # که فایلِ منتشرشونده‌ای را عوض کند بن‌بست می‌سازد: تست قرمز چون public
+        # کهنه است، public کهنه چون تست قرمز است (۲۶ سپتامبر ۲۰۲۶، کامیتِ
+        # §۲۹٫۱۱۶ دقیقاً در همین گیر کرد). موضوعِ این تست سازوکارِ همگام‌سازی
+        # است؛ تازگیِ public را گامِ ۵٫۵ ِ باتری جداگانه و قرمز گزارش می‌کند.
+        fresh = subprocess.run(["bash", os.path.join(PUB, "make-public.sh"),
+                                "--check"], capture_output=True, text=True)
+        if fresh.returncode != 0:
+            self.skipTest("public هنوز بازسازی نشده (هوکِ post-commit می‌سازدش)")
         tmp = tempfile.mkdtemp(prefix="wgsync-")
         dest = os.path.join(tmp, "dest")
         env = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@example.invalid",
@@ -281,32 +305,20 @@ class PublishToolingTests(unittest.TestCase):
             shutil.rmtree(tmp, ignore_errors=True)
 
     def test_contributing_js_check_passes_on_healthy_code(self):
-        """خانواده‌ی «دستورِ مستندی که روی کدِ سالم هم خطا می‌دهد»: نسخه‌ی قبلیِ
-        CONTRIBUTING هر <script> ِ کلِ فایل را برمی‌داشت — از جمله کامنت‌های
-        پایتون — و node همیشه SyntaxError می‌داد. اینجا خودِ بلوکِ مستند
-        عیناً روی کپیِ wg_panel.py اجرا می‌شود."""
+        """خانواده‌ی «دستورِ مستندی که روی کدِ سالم هم خطا می‌دهد»: CONTRIBUTING
+        اکنون فقط `python3 tests/check_js.py` را وعده می‌دهد؛ همین دستور عیناً
+        از ریشه‌ی مخزن اجرا می‌شود."""
         import shutil
         import subprocess
-        import tempfile
+        import sys
         if not shutil.which("node"):
             self.skipTest("node نیست")
         body = _read(REPO, "CONTRIBUTING.md")
-        blocks = [b for b in re.findall(r"```bash\n(.*?)```", body, re.S)
-                  if "node --check" in b]
-        self.assertEqual(len(blocks), 1, "بلوکِ بررسیِ JS در CONTRIBUTING پیدا نشد")
-        tmp = tempfile.mkdtemp(prefix="wgcontrib-")
-        try:
-            shutil.copy(os.path.join(REPO, "wg_panel.py"), tmp)
-            r = subprocess.run(["bash", "-c", blocks[0]], cwd=tmp,
-                               capture_output=True, text=True, timeout=120)
-            self.assertEqual(r.returncode, 0, r.stderr)
-            self.assertNotIn("FAILED", r.stdout + r.stderr)
-            made = sorted(os.listdir(os.path.join(tmp, "wgjs-check")))
-            self.assertIn("tv3d.mjs", made)
-            self.assertTrue(any(m.startswith("PAGE_HTML_") for m in made))
-            self.assertTrue(any(m.startswith("SHARE_HTML_") for m in made))
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+        self.assertIn("python3 tests/check_js.py", body)
+        r = subprocess.run([sys.executable, "tests/check_js.py"], cwd=REPO,
+                           capture_output=True, text=True, timeout=300)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("0 failed", r.stdout)
 
     def test_every_repository_link_names_the_same_owner(self):
         """۲۶ سپتامبر نامِ حسابِ گیت‌هاب عوض شد (vahidbakhtiari-ux ⇐
@@ -626,7 +638,7 @@ class PublishExecutionTests(unittest.TestCase):
         # origin/public. اتکا به وضعیتِ شاخه‌ی مخزنِ واقعی یعنی تست هر بار
         # که public عقب باشد — مثلاً درست بعد از یک کامیت — به دلیلِ اشتباه
         # قرمز می‌شود. --check موضوعِ کامیتِ آخرِ public را با
-        # «VERSION+sha12(wg_panel.py)» می‌سنجد، پس همان را می‌سازیم.
+        # «VERSION+id(wg_panel.pyz)» می‌سنجد، پس همان را می‌سازیم.
         subprocess.run(["git", "-C", self.clone, "branch", "-qD", "public"],
                        capture_output=True)
         subprocess.run(["git", "-C", self.clone, "branch", "-f", "public",
@@ -651,11 +663,13 @@ class PublishExecutionTests(unittest.TestCase):
         `commit-tree` بدونِ لمسِ HEAD یا working tree کار می‌کند، پس
         فیکسچر هیچ اثری روی وضعیتِ کلون نمی‌گذارد.
         """
-        import hashlib
         import subprocess
         ver = _read(self.clone, "publish", "VERSION").strip()
-        with open(os.path.join(self.clone, "wg_panel.py"), "rb") as fh:
-            sha12 = hashlib.sha256(fh.read()).hexdigest()[:12]
+        # شناسه = هشِ آرشیوِ ساخته‌شده از wgpanel/ (نه لانچر)
+        sha12 = subprocess.run(
+            ["python3", os.path.join(self.clone, "tools", "build_pyz.py"),
+             "--src", os.path.join(self.clone, "wgpanel"), "--id"],
+            capture_output=True, text=True, check=True).stdout.strip()
         tree = self._git("rev-parse", "HEAD^{tree}")
         r = subprocess.run(
             ["git", "-C", self.clone, "commit-tree", tree,
@@ -732,7 +746,7 @@ class PublishExecutionTests(unittest.TestCase):
         """
         self.assertEqual(self._run("--check").returncode, 0,
                          "کلونِ تازه باید هم‌گام باشد")
-        with open(os.path.join(self.clone, "wg_panel.py"), "a",
+        with open(os.path.join(self.clone, "wgpanel", "app.py"), "a",
                   encoding="utf-8") as fh:
             fh.write("\n# تغییرِ ساختگیِ تست\n")
         self._commit("source drift for test")
@@ -740,6 +754,23 @@ class PublishExecutionTests(unittest.TestCase):
         self.assertNotEqual(r.returncode, 0, "--check کهنگی را ندید")
         self.assertIn("عقب است", r.stdout + r.stderr,
                       "پیامِ کهنگی چاپ نشد")
+
+    def test_check_mode_follows_the_package_not_the_launcher(self):
+        """شناسه‌ی بیلد هشِ wgpanel/ است؛ لانچر در آن نیست.
+
+        تغییرِ لانچر نباید --check را کهنه کند (drift-check ِ پلنِ ۰۶۹ آن را
+        جدا می‌پاید).
+        """
+        self.assertEqual(self._run("--check").returncode, 0,
+                         "کلونِ تازه باید هم‌گام باشد")
+        with open(os.path.join(self.clone, "wg_panel.py"), "a",
+                  encoding="utf-8") as fh:
+            fh.write("\n# comment on the launcher\n")
+        self._commit("launcher touch for test")
+        r = self._run("--check")
+        self.assertEqual(r.returncode, 0,
+                         "تغییرِ لانچر نباید --check را کهنه کند: %s"
+                         % (r.stdout + r.stderr))
 
     def test_the_real_repository_is_never_touched(self):
         """قیدِ پیش‌نیازِ همه‌چیزِ این کلاس: مخزنِ واقعی دست‌نخورده بماند.

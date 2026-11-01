@@ -18,12 +18,12 @@ bash build-offline-bundle.sh
 گزینه‌ها: `--arch arm64` · `--no-debs` (میزبانِ هدف docker دارد) · `--no-tar`.
 
 خروجی: `dist/wg-panel-docker-airgap-<12hex>-<arch>.tar.gz` — نسخه همان
-۱۲ رقمِ اولِ SHA-256 ِ `wg_panel.py` است و تگِ ایمیجِ داخلِ بسته هم همان است.
+۱۲ رقمِ اولِ SHA-256 ِ `wg_panel.pyz` است (آرشیوِ ساخته‌شده از `wgpanel/`) و تگِ ایمیجِ داخلِ بسته هم همان است.
 
 ## چرا اینجا «بسته‌ی کهنه» کم‌خطرتر از online/airgap ِ قدیمی است
 
 - اسکریپت **اول گیتِ تست** را می‌زند (`test_docker_bundle` +
-  `test_docker_airgap`) و ایمیج را همان لحظه از `wg_panel.py` کانونی می‌سازد؛
+  `test_docker_airgap`) و ایمیج را همان لحظه از سورسِ کانونی (`wgpanel/`) می‌سازد؛
   هیچ کپیِ دومی در مخزن نگه‌داری نمی‌شود که بی‌نگهبان بپوسد.
 - کهنگیِ بسته‌ی «جداشده» ذاتیِ هر بسته‌ی آفلاین است (rebuild-drill)؛ اینجا
   `VERSION` داخلِ tarball و تگِ ایمیج و `/opt/wg-panel/VERSION` داخلِ کانتینر

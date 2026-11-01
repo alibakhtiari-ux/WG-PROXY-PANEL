@@ -34,7 +34,7 @@ body:
       options:
         - Docker Compose
         - Docker offline bundle
-        - systemd (wg_panel.py copied by hand)
+        - systemd (wg_panel.pyz + launcher installed by hand)
     validations:
       required: true
   - type: input
@@ -42,7 +42,7 @@ body:
     attributes:
       label: Panel version
       description: >-
-        The first 12 characters of `sha256sum wg_panel.py`
+        The first 12 characters of `sha256sum /opt/wg-panel/wg_panel.pyz`
         (with Docker: `cat data/panel/VERSION`).
     validations:
       required: true
