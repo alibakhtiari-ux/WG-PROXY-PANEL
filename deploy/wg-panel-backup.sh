@@ -25,6 +25,7 @@ dst.close(); src.close()
 PY
 
 cp -a /opt/wg-panel/config.json /opt/wg-panel/wg_panel.py "$TMP/wg-panel/"
+[ -f /opt/wg-panel/wg_panel.pyz ] && cp -a /opt/wg-panel/wg_panel.pyz "$TMP/wg-panel/"
 [ -f /opt/wg-panel/qr.js ] && cp -a /opt/wg-panel/qr.js "$TMP/wg-panel/"
 # فایل‌های استاتیک نمای سه‌بعدی TV (vendorشده؛ اختیاری مثل qr.js)
 for _f in three.module.min.js.gz three.core.min.js.gz three.LICENSE.txt; do

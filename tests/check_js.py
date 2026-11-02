@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-"""بررسیِ نحوِ JavaScript ِ درونِ wg_panel.py با `node --check`.
+"""بررسیِ نحوِ JavaScript ِ درونِ wgpanel/web/ با `node --check`.
 
 پایتون داخلِ رشته‌ها را نمی‌بیند: py_compile روی JS ِ خراب هم موفق می‌شود و
 نتیجه صفحهٔ سفید در مرورگر است. این اسکریپت هر <script> ِ درون‌خطیِ
-PAGE_HTML و SHARE_HTML و ماژولِ TV3D_JS را جدا می‌کند و به node می‌دهد.
+PAGE_HTML و SHARE_HTML و ماژولِ TV3D_JS را جدا می‌کند و به node می‌دهد. منبع: wgpanel/web/.
 
     python3 tests/check_js.py
 
@@ -23,14 +23,18 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 BLOCKS = ("PAGE_HTML", "SHARE_HTML", "TV3D_JS")
 
 
-def extract(src):
+WEB = {"PAGE_HTML": "page.html", "SHARE_HTML": "share.html",
+       "TV3D_JS": "tv3d.mjs"}
+
+
+def extract(pkg):
     """[(نامِ فایل، متنِ JS)] — همان جایگذاری‌هایی که سرور در زمانِ اجرا دارد."""
     out = []
     for name in BLOCKS:
-        m = re.search(r'^%s = r"""(.*?)^"""' % name, src, re.S | re.M)
-        if m is None:
-            raise SystemExit("check_js: %s در wg_panel.py پیدا نشد" % name)
-        body = m.group(1)
+        path = pkg / "web" / WEB[name]
+        if not path.is_file():
+            raise SystemExit("check_js: %s پیدا نشد" % path)
+        body = path.read_text(encoding="utf-8")
         if name == "TV3D_JS":
             out.append(("tv3d.mjs", body))
             continue
@@ -50,10 +54,10 @@ def main():
     if node is None:
         print("check_js: node is not installed", file=sys.stderr)
         return 2
-    src = (ROOT / "wg_panel.py").read_text(encoding="utf-8")
+    pkg = ROOT / "wgpanel"
     failed = []
     with tempfile.TemporaryDirectory(prefix="wgjs-check-") as tmp:
-        files = extract(src)
+        files = extract(pkg)
         for fname, js in files:
             path = pathlib.Path(tmp) / fname
             path.write_text(js, encoding="utf-8")

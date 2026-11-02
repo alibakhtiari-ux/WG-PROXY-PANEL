@@ -5,10 +5,11 @@
 
 Fails when CHANGELOG.md has no "## [1.1.0]" section, so a version cannot be
 released without being described. The notes end with the build id — the first
-12 characters of the SHA-256 of wg_panel.py, the value a Docker install prints
+12 characters of the SHA-256 of wg_panel.pyz, the value a Docker install prints
 as its version.
 """
 import hashlib
+import importlib.util
 import os
 import re
 import sys
@@ -33,13 +34,33 @@ def build_id(path):
         return hashlib.sha256(f.read()).hexdigest()[:12]
 
 
-def main(argv):
+def panel_build_id():
+    """Build id of wg_panel.pyz, built in memory from wgpanel/.
+
+    Always from the source, never from an existing dist/wg_panel.pyz: a stale
+    local dist/ would print an old id. The build is deterministic, so CI's
+    freshly built release asset has exactly this id."""
+    spec = importlib.util.spec_from_file_location(
+        "build_pyz", os.path.join(ROOT, "tools", "build_pyz.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.build_id(mod.build_bytes(os.path.join(ROOT, "wgpanel")))
+
+
+def main(argv, changelog=None):
     if len(argv) != 2 or not re.fullmatch(r"v\d+\.\d+\.\d+", argv[1]):
         print("usage: release_notes.py vX.Y.Z", file=sys.stderr)
         return 2
     version = argv[1][1:]
-    with open(os.path.join(ROOT, "CHANGELOG.md"), encoding="utf-8") as f:
+    path = changelog or os.path.join(ROOT, "CHANGELOG.md")
+    with open(path, encoding="utf-8") as f:
         body = section(f.read(), version)
+    # Private tree only: there CHANGELOG.md is the ops archive and the public
+    # changelog lives in publish/. The public tree has no publish/ directory.
+    alt = os.path.join(ROOT, "publish", "CHANGELOG.public.md")
+    if not body and not changelog and os.path.exists(alt):
+        with open(alt, encoding="utf-8") as f:
+            body = section(f.read(), version)
     if not body:
         print("CHANGELOG.md has no section for [%s]" % version,
               file=sys.stderr)
@@ -49,9 +70,9 @@ def main(argv):
     print("---")
     print()
     print("Build id: `%s` (first 12 characters of the SHA-256 of "
-          "`wg_panel.py`; a Docker install prints the same value as its "
+          "`wg_panel.pyz`; a Docker install prints the same value as its "
           "version). Verify the download with `sha256sum -c SHA256SUMS`."
-          % build_id(os.path.join(ROOT, "wg_panel.py")))
+          % panel_build_id())
     return 0
 
 

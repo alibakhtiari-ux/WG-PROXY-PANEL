@@ -35,6 +35,16 @@ SERVED_FILES = ("qr.js", "three.module.min.js.gz", "three.core.min.js.gz")
 READMES = ("README.md", "README.fa.md", "README.ru.md", "README.zh-CN.md")
 
 
+def _readme(name):
+    """In the private tree the root READMEs are private docs: the public ones
+    live in publish/README.public{,.fa,.ru,.zh-CN}.md. In the public tree the
+    root names are used."""
+    if os.path.exists(os.path.join(ROOT, "publish", "README.public.md")):
+        name = "README.public" + name[len("README"):]
+        return _read("publish", name)
+    return _read(name)
+
+
 class SystemdUnitTests(unittest.TestCase):
 
     def _rw_paths(self):
@@ -45,7 +55,7 @@ class SystemdUnitTests(unittest.TestCase):
         return [p.lstrip("-") for p in m.group(1).split()]
 
     def _panel_write_dirs(self):
-        src = _read("wg_panel.py")
+        src = _read("wgpanel/app.py")
         dirs = set()
         for const in ("WG_DIR", "SQUID_CONF", "SQUID_PASSWD"):
             m = re.search(r'(?m)^%s = "([^"]+)"' % const, src)
@@ -131,6 +141,16 @@ elif cmd == "cat":
         with open(rc, "w") as f:
             f.write(self.FAKE_RCLONE)
         os.chmod(rc, 0o755)
+        # bsdtar (macOS) rejects GNU's --wildcards and globs by default; the
+        # servers run GNU tar, so only the test machine gets this shim.
+        if "bsdtar" in subprocess.run(["tar", "--version"],
+                                      capture_output=True, text=True).stdout:
+            tar = os.path.join(bindir, "tar")
+            with open(tar, "w") as f:
+                f.write('#!/bin/bash\nargs=()\nfor a in "$@"; do\n'
+                        '  [ "$a" = --wildcards ] || args+=("$a")\ndone\n'
+                        'exec /usr/bin/tar "${args[@]}"\n')
+            os.chmod(tar, 0o755)
         self.path = bindir + os.pathsep + os.environ.get("PATH", "")
         src = _read("deploy", "wg-panel-verify-backup.sh")
         for old, new in (("/etc/wg-panel-s4.env", self.env),
@@ -202,7 +222,11 @@ elif cmd == "cat":
 
     def test_full_chain_present_and_healthy_passes(self):
         self._panel_backup()
-        self._put("host-full", "host-backup-20260926.tar.gz",
+        script = _read("deploy", "wg-panel-verify-backup.sh")
+        m = re.search(r'FULL_PREFIX="\$\{FULL_PREFIX:-([^}]+)\}"', script)
+        self.assertIsNotNone(m, "FULL_PREFIX default not found")
+        full_prefix = m.group(1)
+        self._put(full_prefix, full_prefix.replace("-full", "") + "-backup-20260926.tar.gz",
                   {"etc/letsencrypt/README": b"x"})
         self._state(panel=1, full=1)
         r = self._run()
@@ -215,7 +239,7 @@ class ReleaseAssetTests(unittest.TestCase):
     def test_panel_serves_exactly_the_files_this_test_knows(self):
         """اگر فایلِ تازه‌ای از BASE_DIR سرو شود، این تست باید عوض شود — و با
         آن ریلیز و README."""
-        src = _read("wg_panel.py")
+        src = _read("wgpanel/app.py")
         served = set(re.findall(
             r'os\.path\.join\(BASE_DIR,\s*"([^"]+\.(?:js|gz))"\)', src))
         # three.* از یک نگاشتِ نام می‌آید، نه join ِ مستقیم
@@ -229,15 +253,22 @@ class ReleaseAssetTests(unittest.TestCase):
         m = re.search(r'ASSETS="([^"]+)"', wf)
         self.assertIsNotNone(m, "ASSETS در release.yml نیست")
         assets = m.group(1).split()
-        for fn in ("wg_panel.py", "wg-panel.service") + SERVED_FILES:
+        for fn in ("wg_panel.pyz", "wg_panel.py", "wg-panel.service") \
+                + SERVED_FILES:
             with self.subTest(file=fn):
                 self.assertIn(fn, assets)
-        self.assertIn("cp $ASSETS dist/", wf)
+        # wg_panel.pyz is built straight into dist/ by the tests step; every
+        # other asset is copied there by name.
+        self.assertIn("tools/build_pyz.py --out dist/wg_panel.pyz", wf)
+        for fn in assets:
+            if fn != "wg_panel.pyz":
+                self.assertRegex(wf, r"(?m)^\s*cp [^\n]*\b%s\b[^\n]* dist/$"
+                                 % re.escape(fn))
         self.assertIn("sha256sum $ASSETS > SHA256SUMS", wf)
 
     def test_readme_install_steps_download_and_install_every_served_file(self):
         for name in READMES:
-            text = _read(name)
+            text = _readme(name)
             with self.subTest(readme=name):
                 for fn in SERVED_FILES:
                     self.assertIn('-O "$base/%s"' % fn, text)
@@ -255,11 +286,42 @@ class ReleaseAssetTests(unittest.TestCase):
         wf = _read(".github", "workflows", "release.yml")
         assets = re.search(r'ASSETS="([^"]+)"', wf).group(1).split()
         for name in READMES:
-            text = _read(name)
+            text = _readme(name)
             for fn in assets:
                 with self.subTest(readme=name, file=fn):
                     self.assertRegex(
                         text, r'(?:-fLO|-O) "\$base/%s"' % re.escape(fn))
+
+
+class ShellVarBeforeNonAsciiTests(unittest.TestCase):
+    """گاردِ خانوادگی: «$name» که بلافاصله پیش از یک بایتِ غیرِاسکی (حرفِ
+    فارسی، «، »، ⇒ …) آمده.
+
+    bash ِ ۳٫۲ ِ macOS در locale ِ C اولین بایتِ حرفِ چندبایتی را جزوِ نامِ
+    متغیر می‌خواند: «$got،» ⇒ متغیرِ «got\\xd8» که تعریف نشده، و با `set -u`
+    اسکریپت می‌میرد. bash ِ لینوکسِ سرورها گرفتار نیست، ولی «${name}» همه‌جا
+    درست است و هزینه ندارد. (۳ اکتبر ۲۰۲۶: VerifyBackupTests روی مک همین را دید.)
+    """
+
+    SKIP_DIRS = {".git", "dist", "scripts", "worktrees", "node_modules"}
+    PAT = re.compile(rb'(?<![\\$])\$[A-Za-z_][A-Za-z0-9_]*(?=[\x80-\xff])')
+
+    def test_no_unbraced_var_directly_before_a_non_ascii_byte(self):
+        bad, seen = [], 0
+        for dirpath, dirnames, filenames in os.walk(ROOT):
+            dirnames[:] = [d for d in dirnames if d not in self.SKIP_DIRS]
+            for fn in filenames:
+                if not fn.endswith(".sh"):
+                    continue
+                path = os.path.join(dirpath, fn)
+                seen += 1
+                with open(path, "rb") as f:
+                    for i, line in enumerate(f.read().split(b"\n"), 1):
+                        if self.PAT.search(line):
+                            bad.append("%s:%d" % (os.path.relpath(path, ROOT), i))
+        self.assertGreater(seen, 5, "هیچ اسکریپتی پیدا نشد — مسیرِ جست‌وجو خراب است")
+        self.assertEqual(bad, [], "«$name» بلافاصله پیش از حرفِ غیرِاسکی — "
+                                  "«${name}» بنویسید: %s" % ", ".join(bad))
 
 
 if __name__ == "__main__":

@@ -94,12 +94,15 @@ class PublishToolingTests(unittest.TestCase):
                 path == k.rstrip("/")
                 or path.startswith(k.rstrip("/") + "/")
                 or k.rstrip("/").startswith(path + "/")
-                for k in keep + list(self.READMES))
+                for k in keep + list(self.READMES) + ["CHANGELOG.md"])
             self.assertTrue(published,
                             "README ِ عمومی به مسیرِ منتشرنشده لینک داده: %s"
                             % href)
             # README های ترجمه را ژنراتور از publish/ می‌سازد؛ منبعشان را بسنج
+            # CHANGELOG.md هم همین‌طور: منبعش publish/CHANGELOG.public.md است
             real = (os.path.join(PUB, self.READMES[path]) if path in self.READMES
+                    else os.path.join(PUB, "CHANGELOG.public.md")
+                    if path == "CHANGELOG.md"
                     else os.path.join(REPO, path))
             self.assertTrue(os.path.exists(real),
                             "مقصدِ لینک وجود ندارد: %s" % href)
@@ -171,26 +174,117 @@ class PublishToolingTests(unittest.TestCase):
     def test_readme_command_facts_match_the_code(self):
         """ادعاهای عددی/دستوریِ README باید با کد بخوانند، نه با حافظه."""
         body = _read(PUB, "README.public.md")
-        src = _read(REPO, "wg_panel.py")
+        src = _read(REPO, "wgpanel/app.py")
         self.assertIn("SAMPLE_INTERVAL = 2.0", src)          # «every 2 seconds»
-        self.assertIn("return len(attempts) < 5", src)        # «5 attempts per minute»
+        self.assertIn("if len(attempts) >= 5:", src)          # «5 attempts per minute»
         self.assertIn('BUILTIN_ROLES = ("admin", "viewer")', src)
         self.assertIn('LANGS = ("fa", "en", "ru", "zh")', src)
         self.assertIn("1 minute\n  to 24 hours", body)
-        self.assertRegex(src, r"\(1 to 1440\)")               # ۱ تا ۱۴۴۰ دقیقه
+        self.assertRegex(_read(REPO, "wgpanel/i18n/catalog.json"),
+                         r"\(1 to 1440\)")        # ۱ تا ۱۴۴۰ دقیقه (در کاتالوگ)
         n_cmds = len(re.findall(r'\("[a-z]+", "[^"]+"\)', src[
             src.index("def bot_setcommands"):src.index("BOT = TelegramBot()")]))
         self.assertEqual(n_cmds, 18, "تعدادِ دستورهای ربات عوض شد — README را هم")
         self.assertIn("**18 commands**", body)
-        n_ev = src[src.index("ALERT_EVENTS = ("):src.index("ALERT_EVENT_KEYS")
-                   ].count('("')
-        self.assertEqual(n_ev, 12, "تعدادِ انواعِ هشدار عوض شد — README را هم")
-        self.assertIn("**12 kinds of alerts**", body)
+        evs = re.findall(r'\("([a-z0-9_]+)", "', src[
+            src.index("ALERT_EVENTS = ("):src.index("ALERT_EVENT_KEYS")])
+        # «nqmo» شمرده نمی‌شود: موتورش (nqmo/) منتشر نمی‌شود، و با پرچمِ خاموش
+        # (پیش‌فرض) رابط تیکش را هم نشان نمی‌دهد. README فقط هشدارهایی را می‌شمارد
+        # که یک نصبِ عمومی واقعاً دارد. اگر موتور روزی منتشر شد، این استثنا برود.
+        self.assertIn("nqmo", evs)
+        n_ev = len([k for k in evs if k != "nqmo"])
+        self.assertEqual(n_ev, 11, "تعدادِ انواعِ هشدار عوض شد — README را هم")
+        self.assertIn("**11 kinds of alerts**", body)
+        self.assertIn("the 11 alert kinds can be switched off", body)
+        fa = _read(PUB, "README.public.fa.md")
+        self.assertIn("**۱۱ نوع هشدار**", fa)
+        self.assertIn("کدام از ۱۱ نوعِ هشدار", fa)
         for key in re.findall(r"^\| `(\w+)`", body, re.M):
             if key in ("wg_panel", "docker", "deploy", "tests", "fonts", "qr"):
                 continue
             self.assertIn('"%s"' % key, src,
                           "کلیدِ پیکربندیِ README در کد نیست: %s" % key)
+
+    @staticmethod
+    def _nqmo_section(body):
+        i = body.index('<a id="wg-nqmo"></a>')
+        j = body.find('<a id="security"></a>', i)
+        return body[i:j if j > 0 else body.index("## Security", i)]
+
+    def test_wg_nqmo_section_matches_the_code_in_every_language(self):
+        """خانواده‌ی «سندی که از کد جلو یا عقب افتاد» برای بخشِ WG-NQMO: هر
+        ادعای این بخش (مسیر، مجوز، route، سری، دوره، سقف، برچسبِ رابط) باید با
+        کد و کاتالوگ بخواند، و هر چهار زبان دقیقاً همان شناسه‌ها را بگویند —
+        ترجمه‌ای که یک واقعیت را جا بیندازد یا عوض کند قرمز می‌شود."""
+        import collections
+        import json
+        src = _read(REPO, "wgpanel/app.py")
+        cat = json.loads(_read(REPO, "wgpanel/i18n/catalog.json"))
+        flat = lambda s: re.sub(r"\s+", " ", s)
+        secs = {pub: self._nqmo_section(_read(PUB, src_))
+                for pub, src_ in self.READMES.items()}
+        spans = lambda s: collections.Counter(re.findall(r"`([^`\n]+)`", s))
+        en = secs["README.md"]
+        for pub, s in secs.items():
+            self.assertEqual(spans(s), spans(en),
+                             "%s: شناسه‌های بخشِ WG-NQMO با انگلیسی نمی‌خوانند" % pub)
+            for frag in re.findall(r"\]\(#([^)]+)\)", s):
+                self.assertIn('<a id="%s"></a>' % frag, _read(PUB, self.READMES[pub]))
+        # پرچم فقط با true ِ واقعی، و پیش‌فرضِ user_iface
+        self.assertIn('c.get("enabled") is True', src)
+        self.assertIn('ncfg.get("user_iface") or "wg1udp"', src)
+        self.assertIn("The default is `wg1udp`", flat(en))
+        # مسیرهای چهار فایل
+        for const in ("NQMO_META_PATH", "NQMO_STATE_PATH", "NQMO_CTL_PATH",
+                      "NQMO_NOTIFIED_STATE"):
+            m = re.search(r'^%s = "([^"]+)"' % const, src, re.M)
+            self.assertIsNotNone(m, const)
+            assert m is not None
+            self.assertIn("`%s`" % m.group(1), en, const)
+        # دوره‌ها و سقف‌ها: ثابتِ کد ⇔ جمله‌ی README
+        for code, said in (("NQMO_META_EVERY = 60", "panel → engine, every 60 seconds"),
+                           ("NQMO_STATE_TTL = 10", "caches it for 10 seconds"),
+                           ("NQMO_STATE_STALE = 180", "older than 180 seconds counts as stale"),
+                           ("NQMO_STATE_MAX_BYTES = 8 << 20", "only up to 8 MB"),
+                           ("NQMO_CTL_TIMEOUT = 7.0", "7-second time-out"),
+                           ("NQMO_NOTIFY_BURST = 6", "at most 6 messages per 30-second check"),
+                           ("    INTERVAL = 30", "at most 6 messages per 30-second check"),
+                           ("NQMO_EVENTS_MAX = 200", "`limit` (1 to 200)"),
+                           ("NQMO_RTT_MIN_SAMPLES = 5", "at least 5 samples"),
+                           ("NQMO_LOSS_N_MIN = 1000", "at least 1000 judged packets"),
+                           ("}, 30000);", "refreshes every 30 seconds")):
+            hay = _read(REPO, "wgpanel/web/page.html") if code.startswith("}") else src
+            self.assertIn(code, hay, "ثابت عوض شد — بخشِ WG-NQMO ِ README را هم")
+            self.assertIn(said, flat(en))
+        # مجوزها: همان پنج مجوزِ کاتالوگ، همه با nqmo.view ِ ضمنی
+        perms = re.findall(r"^\| `(nqmo\.\w+)` \| [^|]+ \| (—|`nqmo\.view`) \|$", en, re.M)
+        grp = src[src.index('("nqmo", "'):src.index('("mgmt", "')]
+        self.assertEqual([p for p, _ in perms], re.findall(r'\("(nqmo\.\w+)", "', grp))
+        for p, imp in perms:
+            self.assertEqual(imp == "—", p == "nqmo.view", p)
+            if p != "nqmo.view":
+                self.assertIn('"%s": "nqmo.view"' % p, src)
+        # شش route با مجوزِ هرکدام، برابرِ PERM_MAP
+        routes = re.findall(r"^\| `(/api/nqmo/\w+)` \| `(nqmo\.\w+)` \|", en, re.M)
+        self.assertEqual(len(routes), 6)
+        self.assertEqual(sorted(routes), sorted(re.findall(
+            r'"(/api/nqmo/\w+)": "(nqmo\.\w+)"', src)))
+        # هر سریِ Prometheus در کد هست
+        names = set(re.findall(r"`(wg_nqmo_\w+)", en))
+        self.assertGreaterEqual(len(names), 20)
+        for n in names:
+            self.assertIn('"%s"' % n, src, "سریِ README در کد نیست: %s" % n)
+        # برچسب‌های رابط از خودِ کاتالوگ، به زبانِ همان README
+        # (پررنگ، چون همان واژه در متنِ عادی هم می‌آید و حضورِ ساده چیزی نمی‌سنجد)
+        idx = {"README.md": 1, "README.fa.md": 0, "README.ru.md": 2, "README.zh-CN.md": 3}
+        for pub, s in secs.items():
+            for key in ("ui.nqmo.title", "ui.nqmo.section", "ui.nqmo.ack",
+                        "ui.nqmo.md.OBSERVATION_ONLY",
+                        "ui.nqmo.md.DIAGNOSTICS_ENABLED",
+                        "ui.nqmo.md.RECOMMENDATIONS_ENABLED"):
+                self.assertIn("**%s**" % flat(cat[key][idx[pub]]), flat(s),
+                              "%s: %s" % (pub, key))
+            self.assertIn(flat(cat["ui.alertev.nqmo"][idx[pub]]), flat(s), pub)
 
     # آدرس‌های کمکِ مالی — هر حرفِ اشتباه یعنی پولِ گم‌شده. اینجا عمداً یک
     # نسخه‌ی دوم است تا ویرایشِ ناخواسته‌ی هر README قرمز شود.
@@ -245,6 +339,17 @@ class PublishToolingTests(unittest.TestCase):
     def test_github_sync_stacks_a_normal_commit(self):
         import subprocess
         import tempfile
+        # sync-github-folder.sh عمداً با public ِ کهنه رد می‌کند. ولی public را
+        # هوکِ post-commit فقط وقتی بازسازی می‌کند که **همه‌ی** تست‌ها سبز
+        # باشند — پس اگر این تست به تازگیِ public وابسته بماند، اولین کامیتی
+        # که فایلِ منتشرشونده‌ای را عوض کند بن‌بست می‌سازد: تست قرمز چون public
+        # کهنه است، public کهنه چون تست قرمز است (۲۶ سپتامبر ۲۰۲۶، کامیتِ
+        # §۲۹٫۱۱۶ دقیقاً در همین گیر کرد). موضوعِ این تست سازوکارِ همگام‌سازی
+        # است؛ تازگیِ public را گامِ ۵٫۵ ِ باتری جداگانه و قرمز گزارش می‌کند.
+        fresh = subprocess.run(["bash", os.path.join(PUB, "make-public.sh"),
+                                "--check"], capture_output=True, text=True)
+        if fresh.returncode != 0:
+            self.skipTest("public هنوز بازسازی نشده (هوکِ post-commit می‌سازدش)")
         tmp = tempfile.mkdtemp(prefix="wgsync-")
         dest = os.path.join(tmp, "dest")
         env = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@example.invalid",
@@ -281,32 +386,20 @@ class PublishToolingTests(unittest.TestCase):
             shutil.rmtree(tmp, ignore_errors=True)
 
     def test_contributing_js_check_passes_on_healthy_code(self):
-        """خانواده‌ی «دستورِ مستندی که روی کدِ سالم هم خطا می‌دهد»: نسخه‌ی قبلیِ
-        CONTRIBUTING هر <script> ِ کلِ فایل را برمی‌داشت — از جمله کامنت‌های
-        پایتون — و node همیشه SyntaxError می‌داد. اینجا خودِ بلوکِ مستند
-        عیناً روی کپیِ wg_panel.py اجرا می‌شود."""
+        """خانواده‌ی «دستورِ مستندی که روی کدِ سالم هم خطا می‌دهد»: CONTRIBUTING
+        اکنون فقط `python3 tests/check_js.py` را وعده می‌دهد؛ همین دستور عیناً
+        از ریشه‌ی مخزن اجرا می‌شود."""
         import shutil
         import subprocess
-        import tempfile
+        import sys
         if not shutil.which("node"):
             self.skipTest("node نیست")
         body = _read(REPO, "CONTRIBUTING.md")
-        blocks = [b for b in re.findall(r"```bash\n(.*?)```", body, re.S)
-                  if "node --check" in b]
-        self.assertEqual(len(blocks), 1, "بلوکِ بررسیِ JS در CONTRIBUTING پیدا نشد")
-        tmp = tempfile.mkdtemp(prefix="wgcontrib-")
-        try:
-            shutil.copy(os.path.join(REPO, "wg_panel.py"), tmp)
-            r = subprocess.run(["bash", "-c", blocks[0]], cwd=tmp,
-                               capture_output=True, text=True, timeout=120)
-            self.assertEqual(r.returncode, 0, r.stderr)
-            self.assertNotIn("FAILED", r.stdout + r.stderr)
-            made = sorted(os.listdir(os.path.join(tmp, "wgjs-check")))
-            self.assertIn("tv3d.mjs", made)
-            self.assertTrue(any(m.startswith("PAGE_HTML_") for m in made))
-            self.assertTrue(any(m.startswith("SHARE_HTML_") for m in made))
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+        self.assertIn("python3 tests/check_js.py", body)
+        r = subprocess.run([sys.executable, "tests/check_js.py"], cwd=REPO,
+                           capture_output=True, text=True, timeout=300)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("0 failed", r.stdout)
 
     def test_every_repository_link_names_the_same_owner(self):
         """۲۶ سپتامبر نامِ حسابِ گیت‌هاب عوض شد (vahidbakhtiari-ux ⇐
@@ -626,7 +719,7 @@ class PublishExecutionTests(unittest.TestCase):
         # origin/public. اتکا به وضعیتِ شاخه‌ی مخزنِ واقعی یعنی تست هر بار
         # که public عقب باشد — مثلاً درست بعد از یک کامیت — به دلیلِ اشتباه
         # قرمز می‌شود. --check موضوعِ کامیتِ آخرِ public را با
-        # «VERSION+sha12(wg_panel.py)» می‌سنجد، پس همان را می‌سازیم.
+        # «VERSION+id(wg_panel.pyz)» می‌سنجد، پس همان را می‌سازیم.
         subprocess.run(["git", "-C", self.clone, "branch", "-qD", "public"],
                        capture_output=True)
         subprocess.run(["git", "-C", self.clone, "branch", "-f", "public",
@@ -651,11 +744,13 @@ class PublishExecutionTests(unittest.TestCase):
         `commit-tree` بدونِ لمسِ HEAD یا working tree کار می‌کند، پس
         فیکسچر هیچ اثری روی وضعیتِ کلون نمی‌گذارد.
         """
-        import hashlib
         import subprocess
         ver = _read(self.clone, "publish", "VERSION").strip()
-        with open(os.path.join(self.clone, "wg_panel.py"), "rb") as fh:
-            sha12 = hashlib.sha256(fh.read()).hexdigest()[:12]
+        # شناسه = هشِ آرشیوِ ساخته‌شده از wgpanel/ (نه لانچر)
+        sha12 = subprocess.run(
+            ["python3", os.path.join(self.clone, "tools", "build_pyz.py"),
+             "--src", os.path.join(self.clone, "wgpanel"), "--id"],
+            capture_output=True, text=True, check=True).stdout.strip()
         tree = self._git("rev-parse", "HEAD^{tree}")
         r = subprocess.run(
             ["git", "-C", self.clone, "commit-tree", tree,
@@ -732,7 +827,7 @@ class PublishExecutionTests(unittest.TestCase):
         """
         self.assertEqual(self._run("--check").returncode, 0,
                          "کلونِ تازه باید هم‌گام باشد")
-        with open(os.path.join(self.clone, "wg_panel.py"), "a",
+        with open(os.path.join(self.clone, "wgpanel", "app.py"), "a",
                   encoding="utf-8") as fh:
             fh.write("\n# تغییرِ ساختگیِ تست\n")
         self._commit("source drift for test")
@@ -740,6 +835,23 @@ class PublishExecutionTests(unittest.TestCase):
         self.assertNotEqual(r.returncode, 0, "--check کهنگی را ندید")
         self.assertIn("عقب است", r.stdout + r.stderr,
                       "پیامِ کهنگی چاپ نشد")
+
+    def test_check_mode_follows_the_package_not_the_launcher(self):
+        """شناسه‌ی بیلد هشِ wgpanel/ است؛ لانچر در آن نیست.
+
+        تغییرِ لانچر نباید --check را کهنه کند (drift-check ِ پلنِ ۰۶۹ آن را
+        جدا می‌پاید).
+        """
+        self.assertEqual(self._run("--check").returncode, 0,
+                         "کلونِ تازه باید هم‌گام باشد")
+        with open(os.path.join(self.clone, "wg_panel.py"), "a",
+                  encoding="utf-8") as fh:
+            fh.write("\n# comment on the launcher\n")
+        self._commit("launcher touch for test")
+        r = self._run("--check")
+        self.assertEqual(r.returncode, 0,
+                         "تغییرِ لانچر نباید --check را کهنه کند: %s"
+                         % (r.stdout + r.stderr))
 
     def test_the_real_repository_is_never_touched(self):
         """قیدِ پیش‌نیازِ همه‌چیزِ این کلاس: مخزنِ واقعی دست‌نخورده بماند.

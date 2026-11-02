@@ -22,11 +22,11 @@ PREFIX="${PREFIX:-wg-panel}"
 # از همان مسیرِ AlertManager (تونل → تلگرام) خبر می‌دهد.
 notify() {
     python3 - "$1" 2>/dev/null <<'PY' || true
-import sys, importlib.util
-spec = importlib.util.spec_from_file_location("wgp", "/opt/wg-panel/wg_panel.py")
-m = importlib.util.module_from_spec(spec)
+import sys
+sys.path.insert(0, "/opt/wg-panel/wg_panel.pyz")
 try:
-    spec.loader.exec_module(m); m.load_config()
+    import wgpanel.app as m
+    m.load_config()
     c = m.alert_cfg()
     if c["enabled"] and c["events"].get("backup", True):
         m.ALERTS.send_now(sys.argv[1])

@@ -166,14 +166,14 @@ case "$verb" in
         case "$unit" in
             wg-quick@*|awg-quick@*) _stop_tunnel "$unit"; exit $? ;;
             squid)                  _stop_squid;          exit $? ;;
-            *) echo "یونیتِ «$unit» در نسخه‌ی Docker وجود ندارد" >&2; exit 1 ;;
+            *) echo "یونیتِ «${unit}» در نسخه‌ی Docker وجود ندارد" >&2; exit 1 ;;
         esac ;;
 
     restart)
         case "$unit" in
             wg-quick@*|awg-quick@*) _stop_tunnel "$unit" || true; _start_tunnel "$unit"; exit $? ;;
             squid)                  _stop_squid;                  _start_squid;          exit $? ;;
-            *) echo "یونیتِ «$unit» در نسخه‌ی Docker وجود ندارد" >&2; exit 1 ;;
+            *) echo "یونیتِ «${unit}» در نسخه‌ی Docker وجود ندارد" >&2; exit 1 ;;
         esac ;;
 
     show)

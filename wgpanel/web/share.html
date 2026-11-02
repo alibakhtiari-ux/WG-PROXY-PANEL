@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="__LANG__" dir="__DIR__"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>⟦ui.share.title⟧</title>
+<script src="/qr.js"></script>
+<style>
+/* فونت Vazirmatn به‌صورت خودمیزبان (base64، subsetِ لاتین+فارسی) امبد شده تا
+   تایپوگرافی فارسی روی همه‌ی سیستم‌عامل‌ها (ویندوز/مک/لینوکس/iOS/اندروید)
+   یکسان و بدون وابستگی به نصب‌بودنِ فونت روی دستگاهِ کاربر رندر شود.
+   منبع: Vazirmatn v33 (rastikerdar/vazirmatn، OFL). font-display:swap. */
+@font-face{font-family:'Vazirmatn';font-style:normal;font-weight:400;font-display:swap;src:url(data:font/woff2;base64,__FONT_VAZIRMATN_400__) format('woff2')}
+@font-face{font-family:'Vazirmatn';font-style:normal;font-weight:700;font-display:swap;src:url(data:font/woff2;base64,__FONT_VAZIRMATN_700__) format('woff2')}
+body{background:#0d1117;color:#e6edf3;font-family:Vazirmatn,-apple-system,
+  BlinkMacSystemFont,'Segoe UI',Roboto,'PingFang SC','Hiragino Sans GB',
+  'Microsoft YaHei','Noto Sans CJK SC','Noto Sans',Tahoma,sans-serif;
+  margin:0;padding:20px;display:flex;justify-content:center}
+.card{background:#161b22;border:1px solid #30363d;border-radius:12px;
+  padding:22px;max-width:440px;width:100%}
+h2{font-size:18px;margin:0 0 4px} .sub{color:#8b949e;font-size:12px;margin-bottom:14px}
+pre{background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:12px;
+  direction:ltr;text-align:left;font-size:12px;overflow:auto;
+  font-family:ui-monospace,monospace;user-select:all;white-space:pre-wrap}
+.qr{background:#fff;border-radius:8px;padding:12px;margin-top:12px;
+  display:flex;justify-content:center}
+button{background:#1f6feb;color:#fff;border:0;border-radius:6px;padding:9px 14px;
+  cursor:pointer;font-family:inherit;font-size:13px;margin-top:12px;width:100%}
+.warn{color:#d29922;font-size:11px;margin-top:12px;text-align:center}
+/* گزینشگرِ زبان — همیشه چپ‌به‌راست، چون نامِ زبان‌ها به خطِ خودشان‌اند و
+   ترتیبشان نباید با جهتِ صفحه برگردد. */
+.langnav{direction:ltr;text-align:center;font-size:11px;color:#8b949e;
+  margin:0 0 12px;unicode-bidi:isolate}
+.langnav a{color:#58a6ff;text-decoration:none} .langnav a:hover{text-decoration:underline}
+.langnav b{color:#e6edf3;font-weight:600}
+</style></head><body>
+<div class="card">
+  <div class="langnav">__LANGNAV__</div>
+  <h2>⟦ui.share.title⟧</h2>
+  <div class="sub" id="meta"></div>
+  <div class="sub" id="meta2"></div>
+  <pre id="conf"></pre>
+  <div class="qr" id="qr"></div>
+  <button onclick="dl()">⟦ui.share.dl⟧</button>
+  <button onclick="cp()">⟦ui.share.copy⟧</button>
+  <div id="usage-sec" style="display:none">
+    <h2 style="font-size:14px;margin:18px 0 2px">⟦ui.share.usage⟧</h2>
+    <div class="sub" id="u-sum"></div>
+    <canvas id="u-cv" style="width:100%;height:110px;display:block;background:#0d1117;border:1px solid #30363d;border-radius:8px"></canvas>
+    <div class="sub" style="margin:4px 0 0">⟦ui.share.usagesub⟧<span id="u-bnote"></span></div>
+  </div>
+  <div class="warn">⟦ui.share.warn⟧</div>
+</div>
+<script>
+__SHARE_BOOTSTRAP__
+function _t(k, p){
+  var s = (_T && _T[k]) || k;
+  return p ? s.replace(/\{(\w+)\}/g,
+    function(m, n){ return n in p ? String(p[n]) : m; }) : s;
+}
+var D = __PAYLOAD__;
+document.getElementById('meta').textContent = D.name + ' — ' + D.ip;
+(function(){
+  // اعتبارِ لینک و انقضای حساب — تا گیرنده بداند تا کِی فرصت دارد
+  var parts = [];
+  if(D.link_expires){
+    var d = new Date(D.link_expires * 1000);
+    parts.push(_t('ui.share.linkuntil', {t: d.toLocaleString()}));
+  }
+  if(D.expires) parts.push(_t('ui.share.acctexp', {d: D.expires}));
+  document.getElementById('meta2').textContent = parts.join(' · ');
+})();
+document.getElementById('conf').textContent = D.conf;
+function cp(){
+  var done = function(){ var b = document.querySelector('button[onclick="cp()"]');
+    if(b){ var t = b.textContent; b.textContent = _t('ui.share.copied');
+      setTimeout(function(){ b.textContent = t; }, 1500); } };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(D.conf).then(done, function(){});
+  } else {
+    var r = document.createRange(); r.selectNodeContents(document.getElementById('conf'));
+    var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    try{ document.execCommand('copy'); done(); }catch(e){}
+  }
+}
+try{ var q=qrcode(0,'M'); q.addData(D.conf,'Byte'); q.make();
+  document.getElementById('qr').innerHTML=q.createSvgTag({cellSize:4,margin:0}); }catch(e){}
+function dl(){
+  var b = new Blob([D.conf], {type:'text/plain'});
+  var a = document.createElement('a');
+  var u = URL.createObjectURL(b);
+  // wg-quick و اپِ اندروید نامِ تونل را از نامِ فایل می‌گیرند و فقط ≤۱۵
+  // نویسه از [a-zA-Z0-9_=+.-] را می‌پذیرند؛ نامِ بلند import را می‌شکست.
+  var fn = String(D.name).replace(/[^A-Za-z0-9_=+.-]/g, '').slice(0, 15) || 'wg';
+  a.href = u; a.download = fn + '.conf';
+  // به DOM اضافه شود: فایرفاکس click() روی المانِ جدا از سند را نادیده
+  // می‌گیرد. و باطل‌کردنِ URL به تعویق بیفتد — revoke ِ هم‌زمان می‌تواند
+  // دانلودی را که هنوز شروع نشده لغو کند. اینجا صفحه‌ی اشتراکِ بی‌احراز
+  // هویت است: کاربرِ نهایی با مرورگرِ خودش، و هیچ کنسولی که کسی ببیند.
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(function(){ URL.revokeObjectURL(u); }, 60000);
+}
+(function(){
+  var U = D.usage; if(!U || !U.rows || !U.rows.length) return;
+  document.getElementById('usage-sec').style.display = '';
+  var GB = 1073741824;
+  // ارقامِ فارسی فقط در زبانِ فارسی؛ در en/ru/zh لاتین می‌مانند (_FA از سرور)
+  var fa = function(x){ return _FA ? String(x).replace(/[0-9]/g,
+    function(d){ return '۰۱۲۳۴۵۶۷۸۹'[+d]; }) : String(x); };
+  var fmt = function(n){ var u=['B','KB','MB','GB','TB'], i=0;
+    while(n >= 1024 && i < 4){ n /= 1024; i++; }
+    return fa(n >= 100 ? n.toFixed(0) : n.toFixed(1)) + ' ' + u[i]; };
+  var q = (U.quota_gb || 0) * GB;
+  document.getElementById('u-sum').textContent =
+    _t('ui.share.month', {v: fmt(U.month || 0)}) +
+    (q ? _t('ui.share.quota', {q: fmt(q),
+      p: fa(Math.min(100, Math.round((U.month || 0) * 100 / q)))}) : '');
+  var cv = document.getElementById('u-cv');
+  var dpr = window.devicePixelRatio || 1;
+  var W = cv.width = (cv.clientWidth || 400) * dpr, H = cv.height = 110 * dpr;
+  var ctx = cv.getContext('2d');
+  var rows = U.rows;
+  var peak = 1;
+  rows.forEach(function(r){ peak = Math.max(peak, (r.rx||0) + (r.tx||0)); });
+  // مقیاس را مصرف تعیین می‌کند، نه سهمیه: سهمِ روزانه‌ی یک سهمیه‌ی بزرگ
+  // (۲۰۰GB ⇒ ~۶٫۷GB) میله‌های چندصد مگابایتی را به چند پیکسل می‌رساند.
+  // خطِ سهمیه فقط وقتی کشیده می‌شود که بی‌آنکه میله‌ها را له کند جا شود؛
+  // وگرنه مقدارش زیرِ نمودار نوشته می‌شود.
+  var budget = q ? q / 30 : 0;
+  var showLine = budget && budget <= peak * 1.5;
+  var max = (showLine ? Math.max(peak, budget) : peak) * 1.15;
+  // ۲۲px پایین برای تاریخ‌ها، تا برچسب روی پایه‌ی میله‌ها نیفتد
+  var pad = 6*dpr, gw = W - 2*pad, gh = H - 22*dpr - pad;
+  var bw = Math.max(2*dpr, gw / Math.max(rows.length, 30) * 0.7);
+  ctx.fillStyle = 'rgba(88,166,255,.85)';
+  rows.forEach(function(r, i){
+    var x = pad + gw * (rows.length > 1 ? i/(rows.length-1) : .5) - bw/2;
+    var h = ((r.rx||0) + (r.tx||0)) / max * gh;
+    ctx.fillRect(x, pad + gh - h, bw, h);
+  });
+  if(showLine){
+    var y = pad + gh - budget / max * gh;
+    ctx.strokeStyle = 'rgba(227,179,65,.9)'; ctx.lineWidth = dpr;
+    ctx.setLineDash([3*dpr, 3*dpr]);
+    ctx.beginPath(); ctx.moveTo(pad, y); ctx.lineTo(pad + gw, y); ctx.stroke();
+    ctx.setLineDash([]);
+    document.getElementById('u-bnote').textContent = _t('ui.share.budget');
+  } else if(budget){
+    document.getElementById('u-bnote').textContent =
+      _t('ui.share.budgetabove', {v: fmt(budget)});
+  }
+  ctx.fillStyle = '#8b949e'; ctx.font = (9*dpr) + 'px Vazirmatn,Tahoma,sans-serif';
+  ctx.direction = 'ltr';
+  ctx.fillText(fa(rows[0].t), pad, H - 5*dpr);
+  var lt = fa(rows[rows.length-1].t);
+  ctx.fillText(lt, pad + gw - ctx.measureText(lt).width, H - 5*dpr);
+})();
+</script></body></html>

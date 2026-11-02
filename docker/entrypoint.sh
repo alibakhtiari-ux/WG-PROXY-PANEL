@@ -36,6 +36,8 @@ fi
 # ---------- ۲) تازه‌کردنِ بارِ پنل داخلِ والیوم ----------
 # کد از ایمیج می‌آید و داده از والیوم؛ ارتقا = بیلدِ دوباره‌ی ایمیج.
 install -d -m 750 "$DATA"
+# اول آرشیو، بعد لانچر (اگر وسطِ کار قطع شد، لانچرِ قدیمی هنوز کار می‌کند).
+install -m 640 "$PAYLOAD/wg_panel.pyz" "$DATA/wg_panel.pyz"
 install -m 640 "$PAYLOAD/wg_panel.py" "$DATA/wg_panel.py"
 install -m 644 "$PAYLOAD/VERSION"     "$DATA/VERSION"
 install -m 644 "$PAYLOAD/qr.js"       "$DATA/qr.js"

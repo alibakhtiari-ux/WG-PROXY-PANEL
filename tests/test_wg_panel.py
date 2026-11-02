@@ -29,7 +29,7 @@ import types
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-PANEL = os.path.join(HERE, "..", "wg_panel.py")
+PANEL = os.path.join(HERE, "..", "wgpanel", "app.py")
 # ریشه‌ی مخزن — برای گاردهایی که فایل‌های بیرونِ wg_panel.py را می‌سنجند
 ROOT = pathlib.Path(HERE).parent
 
@@ -69,6 +69,28 @@ def _read_panel_source():
         with open(PANEL, encoding="utf-8") as fh:
             _PANEL_SRC = fh.read()
     return _PANEL_SRC
+
+
+_WEB = {"PAGE_HTML": "page.html", "SHARE_HTML": "share.html", "TV3D_JS": "tv3d.mjs"}
+
+
+def _web_source(name):
+    """متنِ خامِ یکی از سه ظرفِ HTML/JS از wgpanel/web/ — همان که پیش‌تر با رگکس از سورس بریده می‌شد."""
+    path = os.path.join(HERE, "..", "wgpanel", "web", _WEB[name])
+    with open(path, encoding="utf-8") as fh:
+        text = fh.read()
+    assert len(text) > 1000, "%s خالی/کوتاه است — تست روی ورودیِ تهی سبز نمی‌شود" % path
+    return text
+
+
+def _web_all():
+    """هر سه ظرفِ HTML/JS پشتِ هم — برای گاردهایی که کلِ رابط را اسکن می‌کنند."""
+    return "\n".join(_web_source(n) for n in _WEB)
+
+
+def _panel_with_web():
+    """پایتون + کلِ رابط (HTML/JS) — برای گاردی که هر دو طرف را می‌سنجد."""
+    return _read_panel_source() + "\n" + _web_all()
 
 FIXTURE_CONF = """[Interface]
 PrivateKey = FAKE_SERVER_PRIVATE_KEY_x
@@ -670,7 +692,7 @@ class PanelTestCase(unittest.TestCase):
                 self.assertIn(key, m.I18N, "برچسب بی‌ترجمه")
                 self.assertEqual(m.I18N[key][0], fa,
                                  "متنِ فارسیِ کاتالوگ با برچسبِ سرور فرق دارد")
-        js = _read_panel_source()
+        js = _web_source("PAGE_HTML")
         for prefix in ("ui.permgrp.", "ui.perm.", "ui.alertev.",
                        "ui.bk.comp.", "ui.svc.name.", "ui.warpev."):
             with self.subTest(prefix=prefix):
@@ -683,7 +705,7 @@ class PanelTestCase(unittest.TestCase):
         ردیفِ تاریخچه داده است و ماندگار؛ متنِ فارسی در آن برای همیشه در
         رابطِ en/ru/zh فارسی می‌ماند.
         """
-        src = _read_panel_source()
+        src = _panel_with_web()
         self.assertIn('det = "ui.audit.reason." + reason', src)
         for reason in ("expired", "quota", "total_cap"):
             with self.subTest(reason=reason):
@@ -2530,6 +2552,27 @@ class AlertTests(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
+    def test_every_offered_alert_kind_has_an_emitter(self):
+        """هر نوعِ هشدار که در تنظیمات تیک دارد باید دستِ‌کم یک فرستنده داشته باشد.
+
+        نوعِ «peer» از ۱۸ ژوئیه ۲۰۲۶ تیکِ روشنِ پیش‌فرض داشت ولی هیچ‌جا
+        فرستاده نمی‌شد — اپراتور خیال می‌کرد پایش دارد. سه شکلِ فرستادن:
+        ALERTS.event("k"، edge(..., category="k")، و بررسیِ مستقیمِ events.get("k".
+        """
+        src = _read_panel_source()
+        for key in sorted(self.m.ALERT_EVENT_KEYS):
+            with self.subTest(kind=key):
+                pat = (r'ALERTS\.event\(\s*"%s"|category="%s"|\["events"\]\.get\("%s"'
+                       % (key, key, key))
+                self.assertRegex(src, pat, "نوعِ هشدارِ بی‌فرستنده: %s" % key)
+
+    def test_a_stale_peer_toggle_in_config_is_ignored(self):
+        m = self.m
+        m.CONFIG["alerts"] = {"events": {"peer": True, "tunnel": False}}
+        c = m.alert_cfg()
+        self.assertNotIn("peer", c["events"])
+        self.assertFalse(c["events"]["tunnel"])
+
     def test_alert_cfg_defaults_and_merge(self):
         m = self.m
         c = m.alert_cfg()
@@ -3133,6 +3176,67 @@ class BotTests(unittest.TestCase):
             m.SPEEDTEST.state["running"] = False
         finally:
             m.SpeedTester.in_backup_window = real_win
+
+    def test_speedtest_gap_and_cannot_read_retry(self):
+        """۱۷ اکتبر ۲۰۲۶: ookla تستِ دوم/سومِ پشت‌سرهم را با «Cannot read:»
+        رد می‌کرد. فاصله‌ی ۳۰ثانیه‌ای بینِ اینترفیس‌ها، فقط همان خطا یک تلاشِ
+        دوباره پس از ۶۰ ثانیه، و هر انتظار با «لغو» قطع شود. برای هر اینترفیس
+        فقط **یک** ردیف (نتیجه‌ی نهایی) ثبت می‌شود."""
+        m = self.m
+        script = {"awg1": [{"ok": 1, "error": ""}],
+                  "awg3": [{"ok": 0, "error": '{"error":"Cannot read: "}'},
+                           {"ok": 1, "error": ""}],
+                  "awg4": [{"ok": 0, "error": "Network is unreachable"}]}
+        calls, waits = [], []
+
+        def fake_one(iface, sid):
+            calls.append(iface)
+            r = dict(script[iface].pop(0))
+            r.update(ts=m.time.time(), iface=iface, server_id=sid,
+                     ping_ms=None, down_bps=1e8 if r["ok"] else None,
+                     up_bps=1e8 if r["ok"] else None)
+            return r
+
+        real = (m.SpeedTester._one, m.SpeedTester.ifaces, m.SpeedTester._wait)
+        m.SpeedTester._one = staticmethod(fake_one)
+        m.SpeedTester.ifaces = staticmethod(lambda: ["awg1", "awg3", "awg4"])
+        m.SpeedTester._wait = lambda self, s: (waits.append(s), False)[1]
+        try:
+            t = m.SpeedTester()
+            t.state["running"] = True
+            t._worker()
+            self.assertEqual(calls, ["awg1", "awg3", "awg3", "awg4"])
+            self.assertEqual(waits, [30, 60, 30])   # فاصله · تلاشِ دوباره · فاصله
+            rows = {r["iface"]: r for r in m.META.speedtest_recent(10)}
+            self.assertEqual(len(m.META.speedtest_recent(10)), 3)
+            self.assertTrue(rows["awg3"]["ok"])      # تلاشِ دوم ثبت شد
+            self.assertFalse(rows["awg4"]["ok"])     # خطای دیگر: بی‌تلاشِ دوباره
+            self.assertFalse(t.state["running"])
+
+            # لغو وسطِ انتظارِ تلاشِ دوباره ⇒ همان ردیفِ ناموفق، و awg4 اجرا نشود
+            script.update(awg1=[{"ok": 1, "error": ""}],
+                          awg3=[{"ok": 0, "error": "Cannot read: "}],
+                          awg4=[{"ok": 1, "error": ""}])
+            calls.clear(); waits.clear()
+
+            def wait_cancel(self, s):
+                waits.append(s)
+                if s == 60:
+                    self.state["cancel"] = True
+                return bool(self.state["cancel"])
+            m.SpeedTester._wait = wait_cancel
+            t2 = m.SpeedTester()
+            t2._worker()
+            self.assertEqual(calls, ["awg1", "awg3"])
+            self.assertEqual(waits, [30, 60])
+        finally:
+            m.SpeedTester._one, m.SpeedTester.ifaces, m.SpeedTester._wait = real
+        # خودِ _wait لغوپذیر است (بی‌خواب‌ماندنِ کامل)
+        t3 = m.SpeedTester()
+        t3.state["cancel"] = True
+        t0 = m.time.time()
+        self.assertTrue(t3._wait(30))
+        self.assertLess(m.time.time() - t0, 1.5)
 
     def test_backup_full_status(self):
         """وضعیت پشتیبان‌گیری برای پنل وب: ساختار خروجی + پارس زمان systemd
@@ -5386,6 +5490,8 @@ class CloudRestoreTests(unittest.TestCase):
             "wg-panel/clients/wgtest/u1.conf": b"[Peer]\n",
             "wg-panel/config.json": b"{\"users\": []}",
             "wg-panel/wg_panel.py": b"print('evil')",
+            # آرشیوِ کدِ پنل هم هرگز بازیابی نمی‌شود (پلنِ ۰۶۹) — بازیابی فقط داده است
+            "wg-panel/wg_panel.pyz": b"PK-evil-archive",
             "squid/squid.conf": b"http_port 3128\n",
         }
 
@@ -5404,6 +5510,11 @@ class CloudRestoreTests(unittest.TestCase):
             os.path.join(self.tmp, "wg-panel", "config.json")))
         self.assertFalse(os.path.exists(
             os.path.join(self.tmp, "wg-panel", "wg_panel.py")))
+        # آرشیوِ کد در هیچ‌جای BASE_DIR نباید ظاهر شود
+        for dp, _dn, fns in os.walk(self.tmp):
+            self.assertNotIn("wg_panel.pyz", fns,
+                             "wg_panel.pyz بازیابی شد: %s" % dp)
+        self.assertFalse(os.path.exists(os.path.join(m.BASE_DIR, "wg_panel.pyz")))
         # اسنپ‌شاتِ pre-restore گرفته شد
         snaps = os.listdir(os.path.join(self.tmp, "restore-backups"))
         self.assertTrue(any(s.startswith("pre-restore-") for s in snaps))
@@ -5417,6 +5528,8 @@ class CloudRestoreTests(unittest.TestCase):
         self.assertIn(b"NEWDB", pathlib.Path(m.DB_PATH).read_bytes())
         self.assertTrue(os.path.exists(
             os.path.join(self.tmp, "clients", "wgtest", "u1.conf")))
+        # حتی با همه‌ی مؤلفه‌ها، کد (آرشیو) بازیابی نمی‌شود
+        self.assertFalse(os.path.exists(os.path.join(m.BASE_DIR, "wg_panel.pyz")))
 
     def test_rejects_symlink_traversal_and_empty(self):
         m = self.m
@@ -6186,7 +6299,9 @@ class PostRouteInventoryTests(unittest.TestCase):
         "/api/backup/cloud-restore", "/api/backup/run",
         "/api/backup/versions", "/api/bot/get", "/api/bot/save",
         "/api/ecmp/get", "/api/ecmp/save", "/api/graph/events",
-        "/api/login", "/api/logout", "/api/net/leak-audit", "/api/password",
+        "/api/login", "/api/logout", "/api/net/leak-audit",
+        "/api/nqmo/ack", "/api/nqmo/events", "/api/nqmo/mode", "/api/nqmo/peer",
+        "/api/nqmo/probe", "/api/nqmo/status", "/api/password",
         "/api/peer/add", "/api/peer/bulk", "/api/peer/conf",
         "/api/peer/delete", "/api/peer/ips", "/api/peer/meta",
         "/api/peer/psk", "/api/peer/rotate", "/api/peer/share",
@@ -6496,6 +6611,10 @@ class AnsibleSyncTests(unittest.TestCase):
         ("deploy/myserver-full-backup.timer", "myserver-full-backup.timer"),
     ]
 
+    # فایل‌هایی که sync-files.sh با ابزار می‌سازد، نه با cp؛ پس در PAIRS نیستند
+    # (wg_panel.pyz را tools/build_pyz.py از wgpanel/ می‌سازد — پلنِ ۰۶۹).
+    GENERATED = {"wg_panel.pyz"}
+
     def test_ansible_files_match_source(self):
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         files_dir = os.path.join(root, "ansible", "roles", "wg-panel", "files")
@@ -6512,18 +6631,31 @@ class AnsibleSyncTests(unittest.TestCase):
                     "را اجرا کنید" % (src_rel, dst_name))
 
     def test_ansible_version_stamp(self):
-        """VERSION داخلِ نقش باید ۱۲ رقمِ اولِ SHA-256 خودِ wg_panel.py باشد."""
+        """VERSION داخلِ نقش = build id ِ بیلدِ تازه‌ی wg_panel.pyz، و آرشیوِ
+        داخلِ نقش همان بیلدِ تازه است (یعنی از سورسِ فعلی ساخته شده)."""
+        import importlib.util
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        vpath = os.path.join(root, "ansible", "roles", "wg-panel", "files",
-                             "VERSION")
+        files_dir = os.path.join(root, "ansible", "roles", "wg-panel", "files")
+        vpath = os.path.join(files_dir, "VERSION")
         self.assertTrue(os.path.exists(vpath),
                         "VERSION نیست — ansible/sync-files.sh را اجرا کنید")
-        with open(os.path.join(root, "wg_panel.py"), "rb") as f:
-            want = hashlib.sha256(f.read()).hexdigest()[:12]
+        spec = importlib.util.spec_from_file_location(
+            "build_pyz_for_test", os.path.join(root, "tools", "build_pyz.py"))
+        bp = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(bp)
+        want = bp.build_id(bp.build_bytes(os.path.join(root, "wgpanel")))
         with open(vpath, encoding="utf-8") as f:
             got = f.read().strip()
         self.assertEqual(got, want,
                          "VERSION کهنه است — ansible/sync-files.sh را اجرا کنید")
+        pyz = os.path.join(files_dir, "wg_panel.pyz")
+        self.assertTrue(os.path.exists(pyz),
+                        "wg_panel.pyz نیست — ansible/sync-files.sh را اجرا کنید")
+        with open(pyz, "rb") as f:
+            self.assertEqual(
+                hashlib.sha256(f.read()).hexdigest()[:12], want,
+                "آرشیوِ داخلِ نقش با سورسِ فعلی نمی‌خواند — "
+                "ansible/sync-files.sh را اجرا کنید")
 
     # ——— گاردهای پوشش ———
     # شکافِ ۳۰ ژوئیه ۲۰۲۶ (هیچ یونیتِ warp-* در نقش نبود) از دیدِ تست‌ها
@@ -6543,7 +6675,7 @@ class AnsibleSyncTests(unittest.TestCase):
         """هر چیزی که sync-files.sh کپی می‌کند باید در PAIRS هم باشد."""
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         synced = self._synced_names(root) - {"VERSION"}
-        declared = {dst for _, dst in self.PAIRS}
+        declared = {dst for _, dst in self.PAIRS} | self.GENERATED
         self.assertEqual(
             synced - declared, set(),
             "sync-files.sh این‌ها را کپی می‌کند ولی PAIRS نمی‌سنجدشان — "
@@ -6557,7 +6689,8 @@ class AnsibleSyncTests(unittest.TestCase):
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         files_dir = os.path.join(root, "ansible", "roles", "wg-panel", "files")
         on_disk = {n for n in os.listdir(files_dir) if not n.startswith(".")}
-        known = {dst for _, dst in self.PAIRS} | {"VERSION"}
+        known = ({dst for _, dst in self.PAIRS} | {"VERSION"}
+                 | self.GENERATED)
         self.assertEqual(
             on_disk - known, set(),
             "فایلِ یتیم در roles/wg-panel/files/ — یا به PAIRS اضافه‌اش کنید "
@@ -6573,7 +6706,8 @@ class AnsibleSyncTests(unittest.TestCase):
         # templates/ منبعِ دیگری است (ansible.builtin.template) و از
         # sync-files.sh نمی‌آید، پس جزوِ «شناخته» حساب می‌شود.
         templates = set(os.listdir(os.path.join(role, "templates")))
-        known = {dst for _, dst in self.PAIRS} | {"VERSION"} | templates
+        known = ({dst for _, dst in self.PAIRS} | {"VERSION"} | templates
+                 | self.GENERATED)
         # src: هایی که مقدارشان ثابت است (نه Jinja) — loopها با {f: ...}
         # هم گرفته می‌شوند تا فایل‌های حلقه از قلم نیفتند.
         refs = set(re.findall(r'^\s*src:\s*([A-Za-z0-9._@-]+)\s*$',
@@ -7263,7 +7397,7 @@ class TestTv3d(unittest.TestCase):
         # BASE_DIR در load_module به tmp می‌رود و روتِ vendor از همان‌جا
         # می‌خوانَد؛ دو فایلِ واقعیِ سه‌جانبه را کنارِ tmp کپی می‌کنیم
         for fn in ("three.module.min.js.gz", "three.core.min.js.gz"):
-            shutil.copy(os.path.join(os.path.dirname(PANEL), fn),
+            shutil.copy(os.path.join(str(ROOT), fn),
                         os.path.join(self.tmp, fn))
 
     def tearDown(self):
@@ -7280,7 +7414,7 @@ class TestTv3d(unittest.TestCase):
     def test_vendor_files_present_and_valid(self):
         """دو فایل gz سه‌جانبه باید کنار پنل باشند و import نسبی core سالم."""
         import gzip
-        base = os.path.dirname(PANEL)
+        base = str(ROOT)
         mod_p = os.path.join(base, "three.module.min.js.gz")
         core_p = os.path.join(base, "three.core.min.js.gz")
         self.assertTrue(os.path.exists(mod_p), "three.module.min.js.gz گم است")
@@ -7322,7 +7456,7 @@ class TestTv3d(unittest.TestCase):
         فایل هم می‌خورد و گارد بی‌معنا می‌شد.
         """
         import gzip
-        p = os.path.join(os.path.dirname(PANEL), "three.core.min.js.gz")
+        p = os.path.join(str(ROOT), "three.core.min.js.gz")
         with gzip.open(p, "rb") as f:
             head = f.read(4096).decode("utf-8", "replace")
         found = re.search(r'^/\*\*.*?\*/\s*const\s+[A-Za-z_$]\w*\s*=\s*"(\d+)"',
@@ -7345,7 +7479,7 @@ class TestTv3d(unittest.TestCase):
         import hashlib
         for name, want in self.THREE_ASSET_SHA256.items():
             with self.subTest(f=name):
-                p = os.path.join(os.path.dirname(PANEL), name)
+                p = os.path.join(str(ROOT), name)
                 with open(p, "rb") as f:
                     got = hashlib.sha256(f.read()).hexdigest()[:16]
                 self.assertEqual(got, want,
@@ -8458,13 +8592,11 @@ class InlineJsScopeTests(unittest.TestCase):
         node --check این را نمی‌گیرد چون redeclaration نحواً مجاز است.
         """
         import collections
-        src = _read_panel_source()
         for name in self.CONTAINERS:
-            m = re.search(r'^%s = r"""(.*?)^"""' % name, src, re.S | re.M)
-            self.assertIsNotNone(m, "ظرفِ %s پیدا نشد — ساختارِ فایل عوض شده؟" % name)
+            body = _web_source(name)
             # فقط تعریف‌های ستونِ صفر = سطحِ بالا؛ تابعِ تودرتو اسکوپِ خودش را دارد
             names = re.findall(r"^function\s+([A-Za-z_$][\w$]*)\s*\(",
-                               m.group(1), re.M)
+                               body, re.M)
             dupes = {n: c for n, c in collections.Counter(names).items() if c > 1}
             with self.subTest(container=name):
                 self.assertEqual(dupes, {},
@@ -9065,7 +9197,7 @@ class InlineJsCatalogParityTests(unittest.TestCase):
             raise unittest.SkipTest("استخراج‌کننده‌ی JS نیست — مخزنِ عمومی")
         cls.tmpdir = tempfile.mkdtemp(prefix="wgjs-parity-")
         subprocess.run(
-            ["python3", str(cls.EXTRACTOR), str(ROOT / "wg_panel.py"),
+            ["python3", str(cls.EXTRACTOR), str(ROOT / "wgpanel"),
              cls.tmpdir],
             check=True, capture_output=True)
         cls.js = "".join(
@@ -9135,7 +9267,7 @@ class AttributeSinkTests(unittest.TestCase):
         حل می‌کند — لایه‌ی اشتباه. الگو باید esc(...) را پیش از خودش
         داشته باشد.
         """
-        src = _read_panel_source()
+        src = _web_all()
         # کامنت‌ها را بردار — گاردِ متنی نباید کامنتی را که همین تله را
         # توضیح می‌دهد به‌جای کد بگیرد (دو بار در این مخزن رخ داده)
         body = "\n".join(l for l in src.splitlines()
@@ -9151,7 +9283,7 @@ class AttributeSinkTests(unittest.TestCase):
         هر دو ورودی: hash و localStorage. اعتبارسنجیِ تنهای hash،
         پیلودی را که پیش از این رفع ماندگار شده زنده رها می‌کند.
         """
-        src = _read_panel_source()
+        src = _web_source("PAGE_HTML")
         self.assertTrue("GKEY_RE" in src, "الگوی اعتبارسنجیِ کلیدِ گراف نیست")
         for fn in ("applyGraphHash", "loadGraphState"):
             seg = src[src.index("function %s" % fn):][:900]
@@ -9174,7 +9306,7 @@ class SilentClientFailureTests(unittest.TestCase):
         آن پس renderUsers/renderTunnels/renderIfaces/drawOpenGraphs هرگز
         صدا نمی‌شوند — صفحه زنده به نظر می‌رسد و داده‌ی کهنه نشان می‌دهد.
         """
-        src = _read_panel_source()
+        src = _web_source("PAGE_HTML")
         lines = src.splitlines()
         sites = [mo.start() for mo in re.finditer(r"\bbusy\s*=\s*true", src)]
         self.assertTrue(sites, "هیچ busy=true پیدا نشد — ساختار عوض شده؟")
@@ -9193,7 +9325,7 @@ class SilentClientFailureTests(unittest.TestCase):
         لغوش می‌کند — و روی صفحه‌ی اشتراک، که کاربرِ نهایی با مرورگرِ
         خودش می‌بیند، هیچ کنسولی هم نیست که کسی نگاه کند.
         """
-        src = _read_panel_source()
+        src = _web_all()
         body = "\n".join(l for l in src.splitlines()
                           if not l.lstrip().startswith(("//", "#")))
         self.assertNotRegex(
@@ -9206,7 +9338,7 @@ class SilentClientFailureTests(unittest.TestCase):
         فایرفاکس تاریخاً click() روی المانِ جدا از سند را نادیده
         می‌گیرد — شکستی کاملاً بی‌صدا.
         """
-        src = _read_panel_source()
+        src = _web_all()
         body = "\n".join(l for l in src.splitlines()
                           if not l.lstrip().startswith(("//", "#")))
         n_click = len(re.findall(r"\ba\.click\(\)", body))
@@ -9218,7 +9350,7 @@ class SilentClientFailureTests(unittest.TestCase):
 
     def test_stats_poll_surfaces_failure(self):
         """شکستِ نظرسنجیِ آمار نباید بی‌صدا برگردد."""
-        src = _read_panel_source()
+        src = _web_source("PAGE_HTML")
         seg = src[src.index("async function refresh("):][:1400]
         self.assertNotRegex(
             seg, r"catch\s*\(\s*\w*\s*\)\s*\{\s*return;?\s*\}",
@@ -9242,7 +9374,7 @@ class DisplayLocaleTests(unittest.TestCase):
         سه جا 'fa-IR' سخت‌کد بود، پس کاربرِ en/ru/zh ساعتِ هدر و برچسبِ
         گراف را با تقویمِ هجریِ شمسی می‌دید — سالِ ۱۴۰۵ به‌جای ۲۰۲۶.
         """
-        src = _read_panel_source()
+        src = _web_all()
         body = "\n".join(l for l in src.splitlines()
                           if not l.lstrip().startswith(("//", "#")))
         bad = [(body[:mo.start()].count("\n") + 1, mo.group(0))
@@ -9257,7 +9389,7 @@ class DisplayLocaleTests(unittest.TestCase):
         بدکِ قابلِ دفاعی است، ولی باید تصمیم باشد نه تصادف.
         """
         m = self.m
-        src = _read_panel_source()
+        src = _web_source("PAGE_HTML")
         seg = src[src.index("const _LOCALE"):][:400]
         for lang in m.LANGS:
             with self.subTest(lang=lang):
@@ -9275,7 +9407,7 @@ class DisplayLocaleTests(unittest.TestCase):
         **ورودیِ** تاریخ عمداً بیرونِ این گارد است: انتخابگرِ تقویم
         دارد و کاربر خودش انتخاب می‌کند.
         """
-        src = _read_panel_source()
+        src = _web_source("PAGE_HTML")
         for fn in ("fmtTs", "faShamsi"):
             seg = src[src.index("function %s(" % fn):][:900]
             with self.subTest(fn=fn):
@@ -9312,7 +9444,7 @@ class CatalogContractTests(unittest.TestCase):
         ستونِ چینی یک `<` اضافه کند دقیقاً همان شکستی است که این
         می‌گیرد.
         """
-        src = _read_panel_source()
+        src = _panel_with_web()
         esc_used = set(re.findall(r"⟦([\w.]+)⟧", src))
         self.assertGreater(len(esc_used), 50,
                            "فقط %d نشانه‌ی escaped — الگو با سورس نمی‌خواند؟"
@@ -9339,7 +9471,7 @@ class CatalogContractTests(unittest.TestCase):
         # چهار «نشانه‌ی بی‌مقصد»ِ کاذب گزارش می‌داد — همان دامی که این
         # مخزن دو بار خورده: گارد کامنتِ توضیح‌دهنده‌ی تله را می‌گیرد،
         # نه کد را.
-        src = "\n".join(l for l in _read_panel_source().splitlines()
+        src = "\n".join(l for l in _panel_with_web().splitlines()
                          if not l.lstrip().startswith("#"))
         used = (set(re.findall(r"⟦([\w.]+)⟧", src))
                 | set(re.findall(r"⟪([\w.]+)⟫", src)))
@@ -9354,7 +9486,7 @@ class CatalogContractTests(unittest.TestCase):
         می‌شکند. بیرونِ صفت هر دو بی‌ضررند — چند کلید عمداً خطِ تازه
         دارند چون پیامِ تلگرام‌اند.
         """
-        src = _read_panel_source()
+        src = _panel_with_web()
         attr = set(re.findall(
             r"""\b\w+="'\s*\+\s*_t\(\s*['"]([\w.]+)['"]""", src))
         attr |= set(re.findall(r"""\b\w+="⟦([\w.]+)⟧""", src))
@@ -10699,6 +10831,358 @@ class LoginApprovalDocstringTests(unittest.TestCase):
                               "در کد نیست." % knob)
 
 
+
+# ═══════════════════════════════════════════════════════════════════════
+# گاردهای خانوادگیِ ۲۶ سپتامبر ۲۰۲۶ — بازگرداندنِ رفع‌های بازبینیِ نسخه‌ی عمومی
+# ═══════════════════════════════════════════════════════════════════════
+
+class _FakeWgKernel:
+    """کرنلِ جعلیِ WireGuard: `wg set ... peer` را همان‌طور تفسیر می‌کند که
+    wg(8) — پیرِ ناموجود ساخته می‌شود، remove برمی‌دارد، و PSK از **فایل**
+    خوانده می‌شود: صفربایتی = حذف، فقط «\n» = خطای طول (رفتارِ واقعیِ wg).
+
+    peers: pub -> [allowed, psk, keepalive]. بقیه‌ی دستورها به run ِ قبلی
+    می‌روند تا _run_calls همچنان ثبت شود.
+    """
+
+    def __init__(self, m, iface="wgtest"):
+        self.m, self.iface = m, iface
+        self.peers = {}
+        self.fail = False
+        self.inner = m.run
+        m.run = self.run
+
+    def run(self, cmd, timeout=20):
+        rc = self.inner(cmd, timeout)
+        if not (cmd[:2] == ["wg", "set"] and len(cmd) >= 5
+                and cmd[2] == self.iface and cmd[3] == "peer"):
+            return rc
+        if self.fail:
+            return 1, "", "simulated wg failure"
+        pub, rest = cmd[4], cmd[5:]
+        if rest == ["remove"]:
+            self.peers.pop(pub, None)
+            return 0, "", ""
+        new = list(self.peers.get(pub, ["", "", 0]))
+        for k, v in zip(rest[::2], rest[1::2]):
+            if k == "allowed-ips":
+                new[0] = v
+            elif k == "persistent-keepalive":
+                new[2] = 0 if v == "off" else int(v)
+            elif k == "preshared-key":
+                with open(v, "rb") as fh:
+                    raw = fh.read()
+                if raw == b"":
+                    new[1] = ""
+                elif not raw.strip():
+                    return 1, "", "Key is not the correct length or format"
+                else:
+                    new[1] = raw.decode().strip()
+        self.peers[pub] = new
+        return 0, "", ""
+
+    def file_state(self):
+        """آنچه wg-quick از فایل به کرنل می‌داد — مستقل از _peer_live_state،
+        تا گارد با همان کدی که می‌سنجد سبز نشود."""
+        with open(self.m.conf_path(self.iface), encoding="utf-8") as fh:
+            lines = fh.read().splitlines()
+        out = {}
+        for b in self.m.parse_user_blocks(self.iface, lines):
+            if not b["enabled"]:
+                continue
+            kv = {}
+            for ln in lines[b["start"]:b["end"] + 1]:
+                t = ln.strip()
+                if "=" in t and not t.startswith("#"):
+                    k, v = t.split("=", 1)
+                    kv[k.strip().lower()] = v.strip()
+            ka = kv.get("persistentkeepalive", "0")
+            out[kv["publickey"]] = [kv.get("allowedips", "").replace(" ", ""),
+                                    kv.get("presharedkey", ""),
+                                    0 if ka == "off" else int(ka)]
+        return out
+
+    def seed(self):
+        self.peers = {k: list(v) for k, v in self.file_state().items()}
+
+
+class _FreshPanel(unittest.TestCase):
+    """همان فیکسچرِ PanelTestCase بدونِ ارثِ تست‌هایش — ارث از خودِ
+    PanelTestCase همه‌ی ~۹۰ تستش را در هر زیرکلاس دوباره اجرا می‌کرد."""
+
+    setUp = PanelTestCase.setUp
+    tearDown = PanelTestCase.tearDown
+    read_conf = PanelTestCase.read_conf
+
+
+class KernelMatchesFileTests(_FreshPanel):
+    """خانواده‌ی «فایل می‌گوید X، کرنل Y دارد».
+
+    سه عضوِ شناخته‌شده‌اش، همه تا ۲۶ سپتامبر ۲۰۲۶ روی myserver:
+      • فعال‌سازیِ دوباره فقط allowed-ips می‌فرستاد ⇒ PSK و keepalive گم؛
+        کاربرِ PSK‌دار (پیش‌فرض) بعد از برگشت از قطعِ سهمیه هندشیک نمی‌گرفت.
+      • حذفِ PSK یک «\n» می‌نوشت ⇒ wg رد می‌کرد و rc نادیده گرفته می‌شد.
+      • keepalive=0 هرگز فرستاده نمی‌شد.
+    گارد به‌جای شمردنِ آرگومان‌ها، بعد از **هر** جهش‌دهنده‌ی پنل برابریِ کلِ
+    کرنل با فایل را می‌سنجد — عضوِ چهارمِ این خانواده هم همین‌جا قرمز می‌شود.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.k = _FakeWgKernel(self.m)
+        self.k.seed()
+
+    def assertKernelIsFile(self, step):
+        self.assertEqual(self.k.peers, self.k.file_state(),
+                         "بعد از «%s» کرنل با فایل نمی‌خواند" % step)
+
+    def _pub(self, name):
+        return next(b["public_key"] for b in self.m.parse_user_blocks("wgtest")
+                    if b["name"] == name)
+
+    def test_every_panel_mutator_leaves_kernel_equal_to_file(self):
+        m = self.m
+        steps = [
+            ("add k1", lambda: m.add_peer("wgtest", "k1")),
+            ("disable k1", lambda: m.set_peer_enabled("wgtest", "k1", False)),
+            ("enable k1", lambda: m.set_peer_enabled("wgtest", "k1", True)),
+            ("psk off k1", lambda: m.set_peer_psk("wgtest", "k1", False)),
+            ("psk on k1", lambda: m.set_peer_psk("wgtest", "k1", True)),
+            ("rotate k1", lambda: m.rotate_peer_key("wgtest", "k1")),
+            ("ips k1", lambda: m.update_peer_ips("wgtest", "k1",
+                                                 "192.168.188.77/32")),
+            ("enable user01", lambda: m.set_peer_enabled("wgtest", "user01",
+                                                         True)),
+            ("delete k1", lambda: m.delete_peer("wgtest", "k1")),
+        ]
+        for name, fn in steps:
+            fn()
+            self.assertKernelIsFile(name)
+
+    def test_reenable_restores_psk_and_server_keepalive(self):
+        """عضوِ مشخصِ ۱ — با عدد، نه فقط برابری: PSK ناتهی و keepalive=25."""
+        m = self.m
+        m.add_peer("wgtest", "q1")
+        pub = self._pub("q1")
+        m.set_peer_enabled("wgtest", "q1", False)
+        self.assertNotIn(pub, self.k.peers)
+        m.set_peer_enabled("wgtest", "q1", True)
+        allowed, psk, keep = self.k.peers[pub]
+        self.assertTrue(psk, "PSK بعد از فعال‌سازیِ دوباره به کرنل نرسید")
+        self.assertEqual(keep, 25)
+
+    def test_psk_removal_writes_an_empty_keyfile(self):
+        """عضوِ ۲: wg «حذف» را فقط از فایلِ صفربایتی می‌فهمد."""
+        m = self.m
+        seen = []
+        inner = m.run
+
+        def spy(cmd, timeout=20):
+            if "preshared-key" in cmd:
+                with open(cmd[cmd.index("preshared-key") + 1], "rb") as fh:
+                    seen.append(fh.read())
+            return inner(cmd, timeout)
+        m.run = spy
+        ok, _ = m._wg_set_peer("wgtest", "PUB", psk="")
+        self.assertTrue(ok)
+        ok, _ = m._wg_set_peer("wgtest", "PUB", psk="KEY=")
+        self.assertEqual(seen, [b"", b"KEY=\n"])
+
+    def test_keepalive_zero_is_sent(self):
+        """عضوِ ۳: «۰» حالت است، نه «دست نزن»."""
+        m = self.m
+        m._run_calls.clear()
+        m._wg_set_peer("wgtest", "PUB", "10.0.0.2/32", keepalive=0)
+        cmd = [c for c in m._run_calls if c[:2] == ["wg", "set"]][-1]
+        self.assertEqual(cmd[cmd.index("persistent-keepalive") + 1], "0")
+
+    # ---------------------------------------------------- ویرایشِ دستیِ فایل
+    def _edit(self, fn):
+        """ویرایشِ دستیِ فایل مثلِ ادمین، و اعمالِ دلتا مثلِ ناظر."""
+        old = self.m.ConfWatcher._snapshot("wgtest")
+        path = self.m.conf_path("wgtest")
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(fn(text))
+        new = self.m.ConfWatcher._snapshot("wgtest")
+        self.m.apply_conf_delta("wgtest", old, new)
+
+    def test_watcher_uncommented_block_gets_psk_and_keepalive(self):
+        m = self.m
+        m.add_peer("wgtest", "w1")
+        m.set_peer_enabled("wgtest", "w1", False)
+        lines = self.read_conf().splitlines()
+        blk = next(b for b in m.parse_user_blocks("wgtest") if b["name"] == "w1")
+
+        def uncomment(text):
+            ls = text.splitlines()
+            for i in range(blk["start"] + 1, blk["end"] + 1):
+                if ls[i].startswith("#"):
+                    ls[i] = ls[i][1:]
+            return "\n".join(ls) + "\n"
+        self.assertTrue(lines)
+        self._edit(uncomment)
+        self.assertKernelIsFile("دستی: از کامنت درآمدنِ w1")
+        self.assertTrue(self.k.peers[self._pub("w1")][1])
+
+    def test_watcher_keepalive_25_to_0_reaches_kernel(self):
+        m = self.m
+        m.add_peer("wgtest", "w2")
+        self._edit(lambda t: t.replace("PersistentKeepalive = 25\n", ""))
+        self.assertKernelIsFile("دستی: حذفِ PersistentKeepalive")
+        self.assertEqual(self.k.peers[self._pub("w2")][2], 0)
+
+    def test_watcher_psk_removed_by_hand_reaches_kernel(self):
+        m = self.m
+        m.add_peer("wgtest", "w3")
+        self._edit(lambda t: re.sub(r"PresharedKey = .*\n", "", t))
+        self.assertKernelIsFile("دستی: حذفِ PresharedKey")
+
+    # ------------------------------------------------- شکستِ اعمالِ زنده
+    def test_failed_live_apply_never_resyncs_the_watcher(self):
+        """resync ِ پیش از بررسیِ rc تغییرِ اعمال‌نشده را «اعمال‌شده» ثبت
+        می‌کرد و ناظر هرگز دوباره تلاش نمی‌کرد. هر جهش‌دهنده با کرنلِ
+        خراب: صفر resync، و شکست گزارش شود (جز حذف که فقط لاگ می‌کند)."""
+        m = self.m
+        calls = []
+        m.WATCHER = types.SimpleNamespace(resync=lambda: calls.append(1))
+        self.k.fail = True
+        cases = [
+            ("psk on user02", lambda: m.set_peer_psk("wgtest", "user02", True),
+             lambda r: r[0] is False),
+            ("rotate user02", lambda: m.rotate_peer_key("wgtest", "user02"),
+             lambda r: r[1] is not None),
+            ("ips user02", lambda: m.update_peer_ips("wgtest", "user02",
+                                                     "192.168.188.20/32"),
+             lambda r: r[0] is False),
+            ("add nf1", lambda: m.add_peer("wgtest", "nf1"),
+             lambda r: r[1] is not None),
+            ("enable user01", lambda: m.set_peer_enabled("wgtest", "user01",
+                                                         True),
+             lambda r: r[0] is False),
+            ("disable user02", lambda: m.set_peer_enabled("wgtest", "user02",
+                                                          False),
+             lambda r: r[0] is False),
+            ("delete user01", lambda: m.delete_peer("wgtest", "user01"),
+             lambda r: True),
+        ]
+        for name, fn, reported in cases:
+            calls.clear()
+            r = fn()
+            self.assertEqual(calls, [], "«%s» با شکستِ wg set، resync کرد" % name)
+            self.assertTrue(reported(r), "«%s» شکست را گزارش نکرد: %r" % (name, r))
+
+    def test_no_raw_wg_set_with_peer_fields_outside_the_helper(self):
+        """گاردِ منبع: هر `wg set` که allowed-ips/preshared-key/
+        persistent-keepalive می‌فرستد باید از _wg_set_peer برود. نوشتنِ
+        دوباره‌ی یک wg set ِ «فقط allowed-ips» همان خطای فعال‌سازی را
+        برمی‌گرداند."""
+        fields = {"allowed-ips", "preshared-key", "persistent-keepalive"}
+        bad = []
+        tree = ast.parse(_read_panel_source())
+        for fn in ast.walk(tree):
+            if not isinstance(fn, ast.FunctionDef) or fn.name == "_wg_set_peer":
+                continue
+            for node in ast.walk(fn):
+                if isinstance(node, ast.List):
+                    consts = {e.value for e in node.elts
+                              if isinstance(e, ast.Constant)
+                              and isinstance(e.value, str)}
+                    if {"wg", "set"} <= consts and consts & fields:
+                        bad.append("%s:%d" % (fn.name, node.lineno))
+        self.assertEqual(bad, [])
+
+
+class ResourceAlertTests(_FreshPanel):
+    """هشدارِ CPU/RAM/DISK از روزِ نوشته‌شدن هرگز شلیک نکرده بود: کلید را از
+    سطحِ بالای snapshot می‌خواند، در حالی که مقادیر زیرِ "cur"اند."""
+
+    def test_sustained_cpu_fires_then_recovers(self):
+        m = self.m
+        m.CONFIG["alerts"] = {"enabled": True}
+        events = []
+        m.ALERTS.event = lambda key, text: events.append((key, text))
+        m.ALERTS.state.clear()
+        m.SYSMON.cur = {"cpu": 97.0, "ram": 10.0, "disk": 10.0}
+        mon = m.AlertMonitor()
+        c = m.alert_cfg()
+        need = max(1, int(c["sustain_min"] * 60 / mon.INTERVAL))
+        for _ in range(need):
+            mon._check_resources()
+        self.assertEqual([k for k, _ in events], ["resource"])
+        self.assertIn("CPU", events[0][1])
+        m.SYSMON.cur = {"cpu": 5.0, "ram": 10.0, "disk": 10.0}
+        mon._check_resources()
+        self.assertEqual([k for k, _ in events], ["resource", "resource"])
+
+    def test_every_snapshot_consumer_reads_cur(self):
+        """گاردِ خانوادگی: هر تابعی که SYSMON.snapshot() را صدا می‌زند یا
+        "cur" را می‌خواند یا در ALLOWED با دلیل آمده است."""
+        ALLOWED = {
+            # کلِ شیء به API می‌رود و رابط خودش sys.cur را می‌خواند
+            "build_stats",
+        }
+        bad = []
+        for fn in ast.walk(ast.parse(_read_panel_source())):
+            if not isinstance(fn, ast.FunctionDef) or fn.name in ALLOWED:
+                continue
+            calls = [n for n in ast.walk(fn)
+                     if isinstance(n, ast.Call)
+                     and isinstance(n.func, ast.Attribute)
+                     and n.func.attr == "snapshot"
+                     and isinstance(n.func.value, ast.Name)
+                     and n.func.value.id == "SYSMON"]
+            reads_cur = any(isinstance(n, ast.Constant) and n.value == "cur"
+                            for n in ast.walk(fn))
+            if calls and not reads_cur:
+                bad.append(fn.name)
+        self.assertEqual(bad, [])
+
+
+class InlineHandlerArgFamilyTests(_FreshPanel):
+    """آرگومانِ رشته‌ایِ handler ِ inline فقط با jsArg ساخته شود.
+
+    esc() داخلِ \'…\' امن نیست: مرورگر &#39; را پیش از اجرای JS برمی‌گرداند،
+    پس برچسبِ سرویسِ سفارشیِ  x');alert(1);('  برای هر ادمینی که کارتِ
+    سرویس‌ها را باز می‌کرد اجرا می‌شد."""
+
+    def test_no_esc_inside_quoted_inline_handler_args(self):
+        hits = [ln for ln in self.m.PAGE_HTML.splitlines()
+                if re.search(r"\\'' \+\s*$|\\'' \+ esc\(", ln)
+                and "esc(" in ln]
+        self.assertEqual(hits, [])
+        self.assertEqual(re.findall(r"\\'' \+ esc\(", self.m.PAGE_HTML), [])
+
+    @unittest.skipUnless(shutil.which("node"), "node نصب نیست")
+    def test_jsarg_survives_attribute_decoding(self):
+        import html
+        src = self.m.PAGE_HTML
+        i = src.index("function esc(s)")
+        j = src.index("\n", src.index("function jsArg(v)"))
+        payloads = ["x');alert(1);('", 'a"b', "یوتیوب", "a\\b", "</script>",
+                    "a&#39;b", " "]
+        js = src[i:j] + "\nconsole.log(JSON.stringify(%s.map(jsArg)));" \
+            % json.dumps(payloads)
+        out = real_subprocess.run(["node", "-e", js], capture_output=True,
+                                  text=True, timeout=30)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        for want, attr in zip(payloads, json.loads(out.stdout)):
+            self.assertNotIn("'", attr)
+            self.assertNotIn('"', attr)
+            # همان کاری که مرورگر با مقدارِ attribute می‌کند، سپس لفظِ JS
+            self.assertEqual(json.loads(html.unescape(attr)), want)
+
+    def test_custom_service_label_rejects_markup(self):
+        m = self.m
+        for bad in ("x');alert(1);('", 'a"b', "a<b", "a`b", "a\\b", "a\nb"):
+            key, err = m.svc_add_custom("example.com", bad)
+            self.assertIsNone(key)
+            self.assertEqual(err, "api.err.svc.label_bad")
+        self.assertIsNotNone(m._SVC_LABEL_RE.fullmatch("یوتیوب موزیک"))
+
+
+
 class InlineHandlerArgTests(unittest.TestCase):
     """آرگومانِ داده در onclick ِ درون‌خطی (XSS ِ ذخیره‌شده از برچسبِ سرویس).
 
@@ -10708,7 +11192,7 @@ class InlineHandlerArgTests(unittest.TestCase):
     """
 
     def _helpers_js(self):
-        src = pathlib.Path(PANEL).read_text(encoding="utf-8")
+        src = _web_source("PAGE_HTML")
         m = re.search(r"(function el\(id\).*?)// ===== i18n", src, re.S)
         self.assertIsNotNone(m, "بلوکِ el/esc/jsArg در PAGE_HTML پیدا نشد")
         js = m.group(1)
@@ -10724,7 +11208,7 @@ class InlineHandlerArgTests(unittest.TestCase):
         جایگزینی نمی‌یافت) همان الگو را داشتند. تستِ تک‌موردی فقط همان یک
         مورد را می‌پایید.
         """
-        src = pathlib.Path(PANEL).read_text(encoding="utf-8")
+        src = _web_all()
         bad = [src.count("\n", 0, mt.start()) + 1
                for mt in re.finditer(r"\\''\s*\+\s*esc\(", src)]
         self.assertEqual(bad, [], "esc در کوتیشنِ تکیِ handler؛ jsArg بگیر")
@@ -10738,7 +11222,7 @@ class InlineHandlerArgTests(unittest.TestCase):
 
     def test_svc_card_handlers_do_not_embed_raw_data(self):
         """کارتِ سرویس‌ها باید از jsArg استفاده کند، نه esc در کوتیشنِ تکی."""
-        src = pathlib.Path(PANEL).read_text(encoding="utf-8")
+        src = _web_all()
         ok = re.search(r"deleteSvc\(' \+\s*jsArg\(row\.key\) \+ ',' \+ "
                        r"jsArg\(svcLabel\(row\)\) \+ '\)", src)
         self.assertTrue(ok, "deleteSvc باید آرگومان‌ها را با jsArg بسازد")
@@ -11159,7 +11643,7 @@ class RequestHardeningTests(unittest.TestCase):
 
     # ---- CSS ------------------------------------------------------------------
     def test_css_tokens_used_by_the_rbac_ui_are_defined(self):
-        src = _read_panel_source()
+        src = _web_source("PAGE_HTML")
         root = re.search(r":root\{(.*?)\}", src, re.S).group(1)
         self.assertIn("--line:", root)
         self.assertIn("--accent:", root)
@@ -11502,7 +11986,7 @@ class ProductAuthTests(unittest.TestCase):
         self.assertEqual(len(u["totp_recovery"]), m.TOTP_RECOVERY_COUNT - 2)
 
     def test_recovery_codes_leave_the_dom_and_have_their_own_copy_label(self):
-        src = _read_panel_source()
+        src = _web_source("PAGE_HTML")
         seg = src[src.index("async function confirmTotp(){"):]
         seg = seg[:seg.index("async function disableTotp(){")]
         self.assertIn("ui.js.confirmTotp.5", seg)
@@ -12422,7 +12906,7 @@ class ProductUxI18nTests(unittest.TestCase):
         st = m.build_svc_status()
         self.assertTrue(st["has_traceroute"])
         self.assertNotIn("has_mtr", st)
-        self.assertIn("s.has_traceroute === false", _read_panel_source())
+        self.assertIn("s.has_traceroute === false", _web_source("PAGE_HTML"))
 
     def test_shaper_loads_the_ifb_module_and_logs_when_it_is_missing(self):
         m = self.m

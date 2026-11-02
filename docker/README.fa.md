@@ -81,9 +81,9 @@ docker compose down && tar -czf wg-panel-data-$(date +%Y%m%d).tar.gz data/ && do
 docker compose up -d --build
 ```
 
-entrypoint در هر بوت `wg_panel.py` داخلِ والیوم را با نسخه‌ی ایمیج جایگزین
+entrypoint در هر بوت `wg_panel.pyz` و لانچرِ `wg_panel.py` داخلِ والیوم را با نسخه‌ی ایمیج جایگزین
 می‌کند (داده دست‌نخورده می‌ماند). شناسه‌ی نسخه همان قراردادِ مخزن است:
-۱۲ رقمِ اولِ SHA-256 ِ `wg_panel.py` — با `cat data/panel/VERSION` ببینید.
+۱۲ رقمِ اولِ SHA-256 ِ `wg_panel.pyz` (آرشیوی که از `wgpanel/` ساخته می‌شود) — با `cat data/panel/VERSION` ببینید.
 
 ## نکته‌های امنیتی که نباید نادیده بگیرید
 

@@ -26,7 +26,7 @@ NOT_FAKED = {"awg"}
 
 def _programs_the_panel_runs():
     """نامِ برنامه‌هایی که wg_panel.py اجرا یا جست‌وجو می‌کند."""
-    with open(os.path.join(ROOT, "wg_panel.py"), encoding="utf-8") as f:
+    with open(os.path.join(ROOT, "wgpanel", "app.py"), encoding="utf-8") as f:
         tree = ast.parse(f.read())
     found = set()
     for node in ast.walk(tree):
