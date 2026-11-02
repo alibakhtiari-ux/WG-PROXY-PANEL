@@ -205,6 +205,87 @@ class PublishToolingTests(unittest.TestCase):
             self.assertIn('"%s"' % key, src,
                           "کلیدِ پیکربندیِ README در کد نیست: %s" % key)
 
+    @staticmethod
+    def _nqmo_section(body):
+        i = body.index('<a id="wg-nqmo"></a>')
+        j = body.find('<a id="security"></a>', i)
+        return body[i:j if j > 0 else body.index("## Security", i)]
+
+    def test_wg_nqmo_section_matches_the_code_in_every_language(self):
+        """خانواده‌ی «سندی که از کد جلو یا عقب افتاد» برای بخشِ WG-NQMO: هر
+        ادعای این بخش (مسیر، مجوز، route، سری، دوره، سقف، برچسبِ رابط) باید با
+        کد و کاتالوگ بخواند، و هر چهار زبان دقیقاً همان شناسه‌ها را بگویند —
+        ترجمه‌ای که یک واقعیت را جا بیندازد یا عوض کند قرمز می‌شود."""
+        import collections
+        import json
+        src = _read(REPO, "wgpanel/app.py")
+        cat = json.loads(_read(REPO, "wgpanel/i18n/catalog.json"))
+        flat = lambda s: re.sub(r"\s+", " ", s)
+        secs = {pub: self._nqmo_section(_read(PUB, src_))
+                for pub, src_ in self.READMES.items()}
+        spans = lambda s: collections.Counter(re.findall(r"`([^`\n]+)`", s))
+        en = secs["README.md"]
+        for pub, s in secs.items():
+            self.assertEqual(spans(s), spans(en),
+                             "%s: شناسه‌های بخشِ WG-NQMO با انگلیسی نمی‌خوانند" % pub)
+            for frag in re.findall(r"\]\(#([^)]+)\)", s):
+                self.assertIn('<a id="%s"></a>' % frag, _read(PUB, self.READMES[pub]))
+        # پرچم فقط با true ِ واقعی، و پیش‌فرضِ user_iface
+        self.assertIn('c.get("enabled") is True', src)
+        self.assertIn('ncfg.get("user_iface") or "wg1udp"', src)
+        self.assertIn("The default is `wg1udp`", flat(en))
+        # مسیرهای چهار فایل
+        for const in ("NQMO_META_PATH", "NQMO_STATE_PATH", "NQMO_CTL_PATH",
+                      "NQMO_NOTIFIED_STATE"):
+            m = re.search(r'^%s = "([^"]+)"' % const, src, re.M)
+            self.assertIsNotNone(m, const)
+            assert m is not None
+            self.assertIn("`%s`" % m.group(1), en, const)
+        # دوره‌ها و سقف‌ها: ثابتِ کد ⇔ جمله‌ی README
+        for code, said in (("NQMO_META_EVERY = 60", "panel → engine, every 60 seconds"),
+                           ("NQMO_STATE_TTL = 10", "caches it for 10 seconds"),
+                           ("NQMO_STATE_STALE = 180", "older than 180 seconds counts as stale"),
+                           ("NQMO_STATE_MAX_BYTES = 8 << 20", "only up to 8 MB"),
+                           ("NQMO_CTL_TIMEOUT = 7.0", "7-second time-out"),
+                           ("NQMO_NOTIFY_BURST = 6", "at most 6 messages per 30-second check"),
+                           ("    INTERVAL = 30", "at most 6 messages per 30-second check"),
+                           ("NQMO_EVENTS_MAX = 200", "`limit` (1 to 200)"),
+                           ("NQMO_RTT_MIN_SAMPLES = 5", "at least 5 samples"),
+                           ("NQMO_LOSS_N_MIN = 1000", "at least 1000 judged packets"),
+                           ("}, 30000);", "refreshes every 30 seconds")):
+            hay = _read(REPO, "wgpanel/web/page.html") if code.startswith("}") else src
+            self.assertIn(code, hay, "ثابت عوض شد — بخشِ WG-NQMO ِ README را هم")
+            self.assertIn(said, flat(en))
+        # مجوزها: همان پنج مجوزِ کاتالوگ، همه با nqmo.view ِ ضمنی
+        perms = re.findall(r"^\| `(nqmo\.\w+)` \| [^|]+ \| (—|`nqmo\.view`) \|$", en, re.M)
+        grp = src[src.index('("nqmo", "'):src.index('("mgmt", "')]
+        self.assertEqual([p for p, _ in perms], re.findall(r'\("(nqmo\.\w+)", "', grp))
+        for p, imp in perms:
+            self.assertEqual(imp == "—", p == "nqmo.view", p)
+            if p != "nqmo.view":
+                self.assertIn('"%s": "nqmo.view"' % p, src)
+        # شش route با مجوزِ هرکدام، برابرِ PERM_MAP
+        routes = re.findall(r"^\| `(/api/nqmo/\w+)` \| `(nqmo\.\w+)` \|", en, re.M)
+        self.assertEqual(len(routes), 6)
+        self.assertEqual(sorted(routes), sorted(re.findall(
+            r'"(/api/nqmo/\w+)": "(nqmo\.\w+)"', src)))
+        # هر سریِ Prometheus در کد هست
+        names = set(re.findall(r"`(wg_nqmo_\w+)", en))
+        self.assertGreaterEqual(len(names), 20)
+        for n in names:
+            self.assertIn('"%s"' % n, src, "سریِ README در کد نیست: %s" % n)
+        # برچسب‌های رابط از خودِ کاتالوگ، به زبانِ همان README
+        # (پررنگ، چون همان واژه در متنِ عادی هم می‌آید و حضورِ ساده چیزی نمی‌سنجد)
+        idx = {"README.md": 1, "README.fa.md": 0, "README.ru.md": 2, "README.zh-CN.md": 3}
+        for pub, s in secs.items():
+            for key in ("ui.nqmo.title", "ui.nqmo.section", "ui.nqmo.ack",
+                        "ui.nqmo.md.OBSERVATION_ONLY",
+                        "ui.nqmo.md.DIAGNOSTICS_ENABLED",
+                        "ui.nqmo.md.RECOMMENDATIONS_ENABLED"):
+                self.assertIn("**%s**" % flat(cat[key][idx[pub]]), flat(s),
+                              "%s: %s" % (pub, key))
+            self.assertIn(flat(cat["ui.alertev.nqmo"][idx[pub]]), flat(s), pub)
+
     # آدرس‌های کمکِ مالی — هر حرفِ اشتباه یعنی پولِ گم‌شده. اینجا عمداً یک
     # نسخه‌ی دوم است تا ویرایشِ ناخواسته‌ی هر README قرمز شود.
     DONATION = ("TV4R2i7yQxzEVSzZEXwBJqfhDavifaGwMt",            # USDT TRC20

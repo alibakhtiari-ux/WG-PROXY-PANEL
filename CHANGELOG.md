@@ -21,6 +21,8 @@ release notes also give the **build id**: the first 12 characters of the SHA-256
   before, and the `/api/nqmo/*` routes answer `disabled`. The page makes no WG-NQMO
   request and shows no WG-NQMO section; its permission group and alert kind are hidden, and
   saving a role or the alert settings keeps their stored values.
+  The README section *Connection quality (WG-NQMO)*, in all four languages, describes the
+  files, permissions, alerts, API routes and Prometheus series the hooks use once switched on.
 
 ### Changed
 
