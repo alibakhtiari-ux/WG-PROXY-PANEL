@@ -276,6 +276,15 @@ class PublishToolingTests(unittest.TestCase):
         sec = self._nqmo_section(_read(PUB, "README.public.fa.md"))
         self.assertIn('<a id="wg-nqmo"></a>\n\n<div dir="rtl">\n', sec)
         self.assertTrue(sec.rstrip().endswith("</div>"))
+        # گیت‌هاب [!NOTE] را داخلِ div پردازش نمی‌کند و متنِ خام می‌آورد؛ ظرف‌ها هم باید جفت باشند
+        depth = 0
+        for tok in re.findall(r'<div dir="rtl">|</div>|^> \[!', sec, re.M):
+            if tok == "> [!":
+                self.assertEqual(depth, 0, "alert داخلِ ظرفِ rtl است")
+            else:
+                depth += 1 if tok.startswith("<div") else -1
+                self.assertIn(depth, (0, 1))
+        self.assertEqual(depth, 0)
         prose = re.sub(r"^```.*?^```$", "", sec, flags=re.M | re.S)
         # هر کدی که لبه‌اش حرف یا رقم نیست داخلِ span ِ ltr است
         for m in re.finditer(r"`([^`\n]+)`", prose):
