@@ -248,9 +248,9 @@ class PublishToolingTests(unittest.TestCase):
                 self.assertEqual(rows[c].strip(), cat["ui.nqmo.cls." + c][i], pub)
             # نُه دلیلِ نبودِ داده
             for w in const("NQMO_STATE_WHY"):
-                self.assertRegex(s, r"(?m)^\| `%s` \|" % w, "%s: %s" % (pub, w))
+                self.assertRegex(s, cell.replace("^", "(?m)^", 1) % w, "%s: %s" % (pub, w))
             # هر کدِ ردشده‌ی جدول واقعی است
-            refused = re.findall(r"^\| `([A-Z_]+)` \| [^|]+ \| [^|]+ \|$", s, re.M)
+            refused = re.findall(r'^\| (?:<span dir="ltr">)?`([A-Z_]+)`(?:</span>)? \| [^|]+ \| [^|]+ \|$', s, re.M)
             self.assertGreaterEqual(len(refused), 14, pub)
             for code in refused:
                 self.assertIn(code, const("NQMO_REFUSALS"), pub)
@@ -268,42 +268,74 @@ class PublishToolingTests(unittest.TestCase):
             for c in const("NQMO_COLLECTORS") + const("NQMO_MODES"):
                 self.assertIn("`%s`" % c, s, pub)
 
-    def test_persian_wg_nqmo_section_reads_right_to_left(self):
-        """خانواده‌ی «فارسی که در گیت‌هاب به‌هم می‌ریزد». گیت‌هاب برای هر بلوک dir=auto
-        می‌گذارد، پس جهت از نخستین حرفِ قوی می‌آید: پاراگرافی که با `WG-NQMO` شروع
-        شود چپ‌به‌راست می‌شود. جدول dir ندارد و بدونِ ظرفِ rtl ستون‌هایش برعکس است.
-        و کدی که با / شروع شود (`/metrics`) در متنِ راست‌به‌چپ `metrics/` دیده می‌شود."""
-        sec = self._nqmo_section(_read(PUB, "README.public.fa.md"))
-        self.assertIn('<a id="wg-nqmo"></a>\n\n<div dir="rtl">\n', sec)
-        self.assertTrue(sec.rstrip().endswith("</div>"))
-        # گیت‌هاب [!NOTE] را داخلِ div پردازش نمی‌کند و متنِ خام می‌آورد؛ ظرف‌ها هم باید جفت باشند
+    def test_persian_readme_reads_right_to_left(self):
+        """خانواده‌ی «فارسی که در گیت‌هاب به‌هم می‌ریزد»، روی کلِ سند. گیت‌هاب برای هر
+        بلوک dir=auto می‌گذارد، پس جهت از نخستین حرفِ قوی می‌آید: پاراگرافی که با
+        `WG-NQMO` شروع شود چپ‌به‌راست می‌شود. جدول dir ندارد و بدونِ ظرفِ rtl ستون‌هایش
+        برعکس است. و کدی که با / شروع شود (`/metrics`) در متنِ راست‌به‌چپ `metrics/`
+        دیده می‌شود. سرآیندِ وسط‌چین (نام، نشان‌ها، زبان‌ها) بیرون از این قاعده است."""
+        head, rule, body = _read(PUB, "README.public.fa.md").partition("\n---\n")
+        self.assertTrue(rule, "خطِ جداکننده‌ی سرآیند نیست")
+        self.assertIn('<div align="center">', head)
+        self.assertTrue(body.lstrip().startswith('<div dir="rtl">\n'))
+        self.assertTrue(body.rstrip().endswith("</div>"))
+        self.assertNotRegex(body, r'<div (?!dir="rtl">)')
+        # فنس‌ها (تورفته هم) کنار می‌روند؛ جای هرکدام یک خطِ تورفته می‌ماند تا فهرست را نبُرد
+        kept, fence = [], False
+        for ln in body.split("\n"):
+            if re.match(r"^[ >]*(```|~~~)", ln):
+                if fence and ln[0] == " ":
+                    kept.append("   FENCE")
+                fence = not fence
+            elif not fence:
+                kept.append(ln)
+        self.assertFalse(fence, "فنسِ بازمانده")
+        # گیت‌هاب [!NOTE] را داخلِ div پردازش نمی‌کند و متنِ خام می‌آورد؛ پس بیرون از ظرف
+        # فقط alert مجاز است، و داخلِ ظرف هیچ alert ای نیست
         depth = 0
-        for tok in re.findall(r'<div dir="rtl">|</div>|^> \[!', sec, re.M):
-            if tok == "> [!":
-                self.assertEqual(depth, 0, "alert داخلِ ظرفِ rtl است")
-            else:
-                depth += 1 if tok.startswith("<div") else -1
-                self.assertIn(depth, (0, 1))
+        for ln in kept:
+            if ln == '<div dir="rtl">' or ln == "</div>":
+                depth += 1 if ln[1] == "d" else -1
+                self.assertIn(depth, (0, 1), "ظرف‌ها جفت نیستند")
+            elif ln.startswith(">"):
+                self.assertEqual(depth, 0, "alert داخلِ ظرفِ rtl است: %s" % ln[:60])
+            elif ln.strip():
+                self.assertEqual(depth, 1, "متنِ بیرون از ظرفِ rtl: %s" % ln[:60])
         self.assertEqual(depth, 0)
-        prose = re.sub(r"^```.*?^```$", "", sec, flags=re.M | re.S)
-        # هر کدی که لبه‌اش حرف یا رقم نیست داخلِ span ِ ltr است
-        for m in re.finditer(r"`([^`\n]+)`", prose):
-            code = m.group(1)
-            if code[0].isalnum() and code[-1].isalnum():
+        # یک خطِ خالی در هر مورد فهرست را loose می‌کند: هر li یک p ِ dir=auto می‌گیرد،
+        # dir=auto ِ خودِ فهرست از آن‌ها می‌گذرد، حرفِ قوی نمی‌یابد و کلِ فهرست چپ‌به‌راست می‌شود
+        in_list = blank = False
+        for ln in kept:
+            if not ln.strip():
+                blank = True
                 continue
-            self.assertEqual(prose[max(0, m.start() - 16):m.start()], '<span dir="ltr">',
-                             "کدِ بی‌span: %s" % code)
-        # نخستین حرفِ قویِ هر پاراگراف و هر موردِ فهرست فارسی است
-        for block in re.split(r"\n\s*\n", prose):
-            first = block.strip()
-            if not first or first[0] in "<|":
+            marker = re.match(r"^\s*(?:[-*] |\d+\. )", ln)
+            if in_list and blank:
+                self.assertFalse(marker or ln[0] == " ", "فهرستِ loose: %s" % ln[:60])
+            in_list = bool(marker) or (in_list and ln[0] == " ")
+            blank = False
+        prose = "\n".join(k for k in kept if k != "   FENCE")
+        # هر کد داخلِ span ِ ltr است: هم ترتیبِ کدهای پشتِ‌هم درست می‌مانَد، هم dir=auto از
+        # span می‌گذرد و پاراگرافِ کدآغاز راست‌چین می‌مانَد
+        kept_span = r'<span dir="ltr">.*?</span>'
+        bare = re.sub(kept_span, "", prose)
+        self.assertEqual(re.findall(r"`[^`\n]+`", bare), [], "کدِ بی‌span")
+        self.assertEqual(re.findall(r"<code>.*?</code>", bare), [], "کدِ بی‌span")
+        # نخستین حرفِ قویِ هر بلوک فارسی است. li خودش dir ندارد، پس جهتِ فهرست فقط از موردِ
+        # نخستش می‌آید (تو در تو هم: هر ul ِ داخلی dir=auto ِ خودش را دارد)
+        strong = r"^[^A-Za-z؀-ۿ]*[؀-ۿ]"
+        for block in re.split(r"\n\s*\n", bare):
+            first = re.sub(r"^(?:>\s*\[![A-Z]+\]\s*>?|>|#+|-|\d+\.)\s*", "", block.strip())
+            if first[:1] in ("", "<", "|") or not re.search(r"[A-Za-z؀-ۿ]", first):
                 continue
-            first = re.sub(r"^(?:>\s*\[![A-Z]+\]\s*>?|>|#+|-|\d+\.)\s*", "", first)
-            first = re.sub(r"<span dir=\"ltr\">.*?</span>", "", first)
-            # نخستین حرف باید فارسی باشد؛ جست‌وجو تا اولین حرفِ هر دو خط پیش می‌رود
-            self.assertRegex(first, r"^[^A-Za-z]*[؀-ۿ]", "بلوکِ لاتین‌آغاز: %s" % block[:60])
-            for item in re.findall(r"(?m)^(?:- |\d+\. )(.+)$", block):
-                self.assertRegex(re.sub(r"[`*]", "", item), r"^[^A-Za-z]*[؀-ۿ]", item[:60])
+            self.assertRegex(first, strong, "بلوکِ لاتین‌آغاز: %s" % block[:60])
+            open_lists = []
+            for indent, item in re.findall(r"(?m)^(\s*)(?:[-*] |\d+\. )(.+)$", block):
+                while open_lists and open_lists[-1] > len(indent):
+                    open_lists.pop()
+                if not open_lists or open_lists[-1] < len(indent):
+                    open_lists.append(len(indent))
+                    self.assertRegex(item, strong, "فهرستِ لاتین‌آغاز: %s" % item[:60])
         # کسره‌ی جدا پس از واژه‌ی لاتین در رندر به‌هم می‌ریزد
         self.assertNotRegex(prose, r"\S ِ")
 

@@ -18,6 +18,9 @@ release notes also give the **build id**: the first 12 characters of the SHA-256
   It now opens with what the engine is for, explains the modes, every diagnosis, quality
   level and MTU status, adds a turn-on check and a troubleshooting guide, and folds the
   reference material. The Persian section also renders right to left on GitHub.
+- README (Persian): the whole document now renders right to left on GitHub, including
+  tables, lists, headings and collapsible sections, and code stays readable inside
+  Persian sentences.
 
 ## [1.3.0] — 2026-11-01
 
