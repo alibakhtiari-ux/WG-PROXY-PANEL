@@ -11,6 +11,14 @@ release notes also give the **build id**: the first 12 characters of the SHA-256
 
 ## [Unreleased]
 
+### Changed
+
+- README: the *Connection quality (WG-NQMO)* section moved up from near the end of the
+  file to right after the feature descriptions, and was rewritten in all four languages.
+  It now opens with what the engine is for, explains the modes, every diagnosis, quality
+  level and MTU status, adds a turn-on check and a troubleshooting guide, and folds the
+  reference material. The Persian section also renders right to left on GitHub.
+
 ## [1.3.0] — 2026-11-01
 
 ### Added

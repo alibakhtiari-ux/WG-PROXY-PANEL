@@ -208,8 +208,95 @@ class PublishToolingTests(unittest.TestCase):
     @staticmethod
     def _nqmo_section(body):
         i = body.index('<a id="wg-nqmo"></a>')
-        j = body.find('<a id="security"></a>', i)
-        return body[i:j if j > 0 else body.index("## Security", i)]
+        j = body.find('<a id="languages"></a>', i)
+        return body[i:j if j > 0 else body.index("## Languages", i)]
+
+    def test_wg_nqmo_section_sits_with_the_features(self):
+        """خانواده‌ی «بخشی که به انتهای README رفت و کسی نمی‌بیندش»: بخشِ WG-NQMO
+        درست بعد از موتورِ نمودار و پیش از بخش‌های نصب است، فهرست هم به همان ترتیب،
+        و از فهرستِ امکانات به آن لینک هست."""
+        for pub, src_ in self.READMES.items():
+            body = _read(PUB, src_)
+            toc = re.findall(r"^- \[[^\]]+\]\(#([^)]+)\)$", body, re.M)
+            self.assertEqual(toc[toc.index("chart-engine") + 1], "wg-nqmo", pub)
+            chart, nqmo = body.index('<a id="chart-engine"></a>'), body.index('<a id="wg-nqmo"></a>')
+            self.assertLess(chart, nqmo, pub)
+            self.assertLess(nqmo, body.index("```bash"), pub)     # پیش از نخستین دستورِ نصب
+            self.assertGreaterEqual(body[:chart].count("(#wg-nqmo)"), 2, pub)   # فهرست + امکانات
+
+    def test_wg_nqmo_vocabularies_are_complete_and_match_the_code(self):
+        """هر واژگانِ بسته‌ی بخشِ WG-NQMO با کد و کاتالوگ: نوعِ تازه‌ی تشخیص یا دلیلِ
+        تازه بدونِ سند نمی‌ماند، و برچسبی که رابط عوضش کرد در جدول کهنه نمی‌شود."""
+        import ast
+        import json
+        src = _read(REPO, "wgpanel/app.py")
+        cat = json.loads(_read(REPO, "wgpanel/i18n/catalog.json"))
+        def const(name):
+            m = re.search(r"^%s = (\([^)]*\)|\{[^}]*\})" % name, src, re.M)
+            self.assertIsNotNone(m, name)
+            assert m is not None
+            return ast.literal_eval(m.group(1))
+        idx = {"README.md": 1, "README.fa.md": 0, "README.ru.md": 2, "README.zh-CN.md": 3}
+        cell = r'^\| (?:<span dir="ltr">)?`(%s)`(?:</span>)? \| ([^|]+) \|'
+        for pub, src_ in self.READMES.items():
+            s = self._nqmo_section(_read(PUB, src_))
+            i = idx[pub]
+            # سیزده نوعِ تشخیص: کد، برچسبِ کاتالوگ، و دامنه‌ی هرکدام
+            rows = dict(re.findall(cell % "[A-Z_]+", s, re.M))
+            for c in const("NQMO_CLASSES"):
+                self.assertIn(c, rows, "%s: %s" % (pub, c))
+                self.assertEqual(rows[c].strip(), cat["ui.nqmo.cls." + c][i], pub)
+            # نُه دلیلِ نبودِ داده
+            for w in const("NQMO_STATE_WHY"):
+                self.assertRegex(s, r"(?m)^\| `%s` \|" % w, "%s: %s" % (pub, w))
+            # هر کدِ ردشده‌ی جدول واقعی است
+            refused = re.findall(r"^\| `([A-Z_]+)` \| [^|]+ \| [^|]+ \|$", s, re.M)
+            self.assertGreaterEqual(len(refused), 14, pub)
+            for code in refused:
+                self.assertIn(code, const("NQMO_REFUSALS"), pub)
+            # کیفیت و MTU: عددِ سری ⇔ برچسبِ کاتالوگ
+            for name, keyp, vocab in (("NQMO_PEER_QUALITY", "ui.nqmo.q.", const("NQMO_PEER_QUALITY")),
+                                      ("NQMO_MTU_STATUS", "ui.nqmo.mtu.", const("NQMO_MTU_STATUS"))):
+                for code, num in vocab.items():
+                    label = cat[keyp + code][i]
+                    shown = str(num).replace("-", "−")
+                    if pub == "README.fa.md":
+                        shown = shown.translate(str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹"))
+                    self.assertRegex(s, r"(?m)^\| [‎]?%s \| %s \|" % (
+                        re.escape(shown), re.escape(label)), "%s: %s %s" % (pub, name, code))
+            # سه جمع‌آور و سه حالت
+            for c in const("NQMO_COLLECTORS") + const("NQMO_MODES"):
+                self.assertIn("`%s`" % c, s, pub)
+
+    def test_persian_wg_nqmo_section_reads_right_to_left(self):
+        """خانواده‌ی «فارسی که در گیت‌هاب به‌هم می‌ریزد». گیت‌هاب برای هر بلوک dir=auto
+        می‌گذارد، پس جهت از نخستین حرفِ قوی می‌آید: پاراگرافی که با `WG-NQMO` شروع
+        شود چپ‌به‌راست می‌شود. جدول dir ندارد و بدونِ ظرفِ rtl ستون‌هایش برعکس است.
+        و کدی که با / شروع شود (`/metrics`) در متنِ راست‌به‌چپ `metrics/` دیده می‌شود."""
+        sec = self._nqmo_section(_read(PUB, "README.public.fa.md"))
+        self.assertIn('<a id="wg-nqmo"></a>\n\n<div dir="rtl">\n', sec)
+        self.assertTrue(sec.rstrip().endswith("</div>"))
+        prose = re.sub(r"^```.*?^```$", "", sec, flags=re.M | re.S)
+        # هر کدی که لبه‌اش حرف یا رقم نیست داخلِ span ِ ltr است
+        for m in re.finditer(r"`([^`\n]+)`", prose):
+            code = m.group(1)
+            if code[0].isalnum() and code[-1].isalnum():
+                continue
+            self.assertEqual(prose[max(0, m.start() - 16):m.start()], '<span dir="ltr">',
+                             "کدِ بی‌span: %s" % code)
+        # نخستین حرفِ قویِ هر پاراگراف و هر موردِ فهرست فارسی است
+        for block in re.split(r"\n\s*\n", prose):
+            first = block.strip()
+            if not first or first[0] in "<|":
+                continue
+            first = re.sub(r"^(?:>\s*\[![A-Z]+\]\s*>?|>|#+|-|\d+\.)\s*", "", first)
+            first = re.sub(r"<span dir=\"ltr\">.*?</span>", "", first)
+            # نخستین حرف باید فارسی باشد؛ جست‌وجو تا اولین حرفِ هر دو خط پیش می‌رود
+            self.assertRegex(first, r"^[^A-Za-z]*[؀-ۿ]", "بلوکِ لاتین‌آغاز: %s" % block[:60])
+            for item in re.findall(r"(?m)^(?:- |\d+\. )(.+)$", block):
+                self.assertRegex(re.sub(r"[`*]", "", item), r"^[^A-Za-z]*[؀-ۿ]", item[:60])
+        # کسره‌ی جدا پس از واژه‌ی لاتین در رندر به‌هم می‌ریزد
+        self.assertNotRegex(prose, r"\S ِ")
 
     def test_wg_nqmo_section_matches_the_code_in_every_language(self):
         """خانواده‌ی «سندی که از کد جلو یا عقب افتاد» برای بخشِ WG-NQMO: هر

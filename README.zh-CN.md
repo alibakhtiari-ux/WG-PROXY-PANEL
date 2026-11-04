@@ -37,6 +37,7 @@ WireGuard 接口的 Web 面板：每个客户端的实时流量、添加和停�
 - [截图](#screenshots)
 - [功能](#features)
 - [图表引擎](#chart-engine)
+- [连接质量（WG-NQMO）](#wg-nqmo)
 - [语言](#languages)
 - [系统要求](#requirements)
 - [使用 Docker 快速开始](#quick-start-with-docker)
@@ -48,7 +49,6 @@ WireGuard 接口的 Web 面板：每个客户端的实时流量、添加和停�
 - [备份](#backups)
 - [TLS 与反向代理](#tls-and-reverse-proxies)
 - [Prometheus](#prometheus)
-- [连接质量（WG-NQMO）](#wg-nqmo)
 - [安全](#security)
 - [出站连接](#outbound-connections)
 - [局限](#limitations)
@@ -174,6 +174,8 @@ WireGuard 接口的 Web 面板：每个客户端的实时流量、添加和停�
 - Squid 代理用户管理——参见 [Squid 代理](#squid-proxy)
 - Cloudflare WARP 状态，以及一个可选的 SNI 分流服务，按目标主机名路由连接
   （这些功能需要本仓库中没有的辅助脚本——参见[局限](#limitations)）
+- 每个客户端的连接质量（往返时间、丢包、MTU）以及诊断和告警，通过尚未发布的独立
+  WG-NQMO 引擎实现；默认关闭——见[连接质量（WG-NQMO）](#wg-nqmo)
 - 只读的泄漏审计（路由；DNS 和 IPv6 通过 Telegram 机器人）
 - 备份与恢复；每个配置文件在写入前都会自动备份，且写入是原子操作
 - 记录所有操作的审计日志：谁、做了什么、结果如何
@@ -283,6 +285,308 @@ Telegram 机器人无法运行浏览器，所以面板也会在服务器端用�
 先填充像素缓冲区，在其中画线和柱，用内置的点阵字体写上标签，再用 `zlib`
 打包成 PNG。图片尺寸为 900 × 400，柱状或折线。机器人发送的客户端图表、代理
 图表以及定期报告都使用这些图片。
+
+<a id="wg-nqmo"></a>
+
+## 连接质量（WG-NQMO）
+
+客户端反映连接很慢或经常断开。原因是对方自己的网络、服务器、某条出口隧道、MTU，还是只是
+你给它设置的限速？WG-NQMO 从服务器一侧逐个客户端回答这个问题，并给出证据和明确的置信度。
+客户端设备上不需要安装任何东西。
+
+它是一个独立的引擎，监视 WireGuard 握手的往返时间、上行丢包（客户端到服务器）和客户端
+MTU，诊断问题，并可以推荐 MTU。诊断和建议都只是报告：引擎从不自行更改任何设置。
+
+> [!NOTE]
+> **该引擎不属于本仓库，也尚未发布。** 1.3.0 版只加入了面板这一侧：一组钩子，用来显示
+> 引擎报告的内容，并把面板自己的数据和管理员的命令交给引擎。没有引擎，这些钩子就没有
+> 可显示的内容。它们默认关闭，因此没有引擎的面板就像没有这些钩子一样运行。
+
+```mermaid
+flowchart LR
+    panel["WG-PROXY-PANEL<br/>root"]
+    engine["WG-NQMO engine<br/>unprivileged user"]
+    browser["Browser"]
+    prom["Prometheus"]
+    tg["Telegram"]
+    panel -- "nqmo-meta.json" --> engine
+    engine -- "state.json" --> panel
+    panel -- "ctl.sock" --> engine
+    panel -- "/api/nqmo/*" --> browser
+    panel -- "/metrics" --> prom
+    panel -- "alerts" --> tg
+```
+
+### 你会看到什么
+
+- **在面板中。** **连接质量** 部分显示引擎模式及其数据的新旧程度、收集器（正常、故障或
+  关闭）、覆盖范围、数据库大小、全局诊断和配置发现；一张客户端表格，含质量、往返时间
+  中位数、上行丢包、MTU 状态和未关闭的诊断；以及最近 50 个事件。
+- **每个客户端。** 点击客户端可打开最近 15 分钟的情况、诊断及其证据，以及建议及其理由和
+  局限。客户端编辑对话框的 **质量与 MTU（WG-NQMO）** 区块显示相同内容。
+- **在 Telegram 中。** 新出现、升级或已解决的诊断会变成告警。
+- **在 Prometheus 中。** 同样的数字以 `wg_nqmo_*` 序列提供，示例查询见
+  [参考](#wg-nqmo-reference)。
+
+该部分每 30 秒刷新一次，仅在浏览器标签页可见时刷新。引擎没有报告的数字显示为“—”，绝不
+显示为 0。
+
+有三个按钮作用于引擎：诊断上的 **确认**、MTU 探测和模式切换。每个按钮都要求先确认，无论
+被接受还是被拒绝，都会写入历史记录。
+
+### 开启和关闭
+
+只有当 `config.json` 的 `nqmo.enabled` 为 JSON 值 `true` 时钩子才开启；`"true"`、`1` 或
+缺少该键都表示关闭。关闭时：
+
+- 面板不为引擎读取或写入任何内容；
+- `/api/stats` 和 `/metrics` 的响应与没有这些钩子时完全相同；
+- 六个 `/api/nqmo/*` 路由只返回“引擎已禁用”的错误（`"disabled": true`）；
+- 页面不发送任何 WG-NQMO 请求，也不显示任何 WG-NQMO 部分；WG-NQMO 的权限组和告警类型
+  被隐藏。保存角色或告警设置时，已存储的 WG-NQMO 值保持不变。
+
+安装引擎后，要开启钩子，请把下面的内容加入 `config.json`：
+
+```json
+"nqmo": {"enabled": true, "user_iface": "wg0"}
+```
+
+1. 把 `user_iface` 设为客户端连接的 WireGuard 接口；面板把它的 MTU 和防火墙标记报告给
+   引擎。默认值为 `wg1udp`。如果不存在这个名称的接口，面板不会为引擎写入任何内容，因此
+   请设置为你自己的接口。
+2. 重启面板。
+3. 给需要的人授予 `nqmo.view`。内置角色 `admin` 拥有所有 WG-NQMO 权限，内置角色 `viewer`
+   一个也没有。
+4. 检查 `/metrics` 是否报告 `wg_nqmo_up 1`。如果是 0，序列 `wg_nqmo_unavailable{why}` 会
+   说明原因；见[故障排查](#wg-nqmo-troubleshooting)。
+
+没有引擎时开启钩子也没有害处：该部分会提示引擎尚未写入任何输出。
+
+要关闭钩子，把 `enabled` 设为 `false` 或删除该键，然后重启面板。面板不再更新它写给引擎的
+文件。面板不会停止引擎，也不会删除引擎的文件，已存储的角色和告警值保持不变。
+
+### 引擎模式
+
+引擎从 **仅观察** 开始，手动逐步提升，这样你能在它下结论之前先看到它测量了什么。模式每次
+只能移动一级；面板和引擎都会拒绝跳级。
+
+| 模式 | 面板中 | Telegram | 建议和 MTU 探测 |
+|---|---|---|---|
+| **仅观察**（`OBSERVATION_ONLY`） | 往返时间和丢包。诊断会被计算并存储，但不显示 | 否 | 否 |
+| **诊断已启用**（`DIAGNOSTICS_ENABLED`） | 另加诊断和质量列 | 中等或高置信度的新诊断 | 否 |
+| **建议已启用**（`RECOMMENDATIONS_ENABLED`） | 另加建议 | 同上 | 是；探测还必须在引擎设置中被允许 |
+
+### 解读结果
+
+**质量** 是客户端未关闭诊断中最差的置信度。它不是连接本身的评分：“正常”表示没有规则发现
+问题。
+
+| `wg_nqmo_peer_quality_state` | 显示为 |
+|---|---|
+| −1 | 数据不足 |
+| 0 | 正常，无诊断 |
+| 1 | 诊断，低置信度 |
+| 2 | 诊断，中等置信度 |
+| 3 | 诊断，高置信度 |
+
+**诊断。** 每条诊断都说明其范围、置信度、数据质量和证据；拥有 `nqmo.detail` 时还会说明
+反面证据以及其他可能的解释。诊断是有依据的怀疑，而不是证明。
+
+| 代码 | 显示为 | 范围 | 含义 |
+|---|---|---|---|
+| `SERVER_RESOURCE_BOTTLENECK` | 服务器资源瓶颈 | 全局 | 服务器自身在丢包：内核队列、网卡、UDP 缓冲区、连接跟踪或分片重组内存 |
+| `HANDSHAKE_FLOOD` | 握手风暴 | 全局 | 到达的握手超过 WireGuard 同时能处理的数量 |
+| `EGRESS_TUNNEL_DEGRADATION` | 出口隧道质量下降 | 出口 | 某条出口隧道不健康；其后的客户端受到影响，并非自身问题 |
+| `TRAFFIC_SHAPING_EFFECT` | 限速影响 | 设备 | 客户端达到了面板中设置的限速；这是限速在起作用，不是故障 |
+| `HANDSHAKE_FAILURE` | 握手失败 | 设备 | 客户端发送握手而服务器没有应答；请检查密钥或配置 |
+| `NAT_OR_FIREWALL_ISSUE` | NAT 或防火墙问题 | 设备 | 服务器在发送却没有任何返回。常见于客户端一侧的 NAT 映射过期；无法从服务器一侧判断确切原因 |
+| `ROUTING_ANOMALY` | 路由异常 | 设备 | 返回客户端的路由没有走预期的接口，或路由恰好在质量下降时发生了变化 |
+| `UDP_INSTABILITY` | UDP 不稳定 | 设备 | 客户端地址频繁变化，或数据包乱序、重复到达 |
+| `PACKET_LOSS` | 丢包 | 设备 | 统计上明确的上行丢包，而不是偶然读数 |
+| `NETWORK_CONGESTION` | 网络拥塞 | 设备 | 握手往返时间明显高于该客户端自身的正常水平 |
+| `SUSPECTED_MTU_PROBLEM` | 疑似 MTU 问题 | 设备 | 客户端 MTU 大于路径能承载的大小，数据包分片到达 |
+| `SUSPECTED_PMTU_BLACKHOLE` | 疑似 PMTU 黑洞 | 设备 | 大数据包在途中丢失，而小数据包能够到达 |
+| `UNKNOWN_DEGRADATION` | 原因不明的质量下降 | 设备 | 比该客户端的正常水平差，且没有规则能解释原因 |
+
+**MTU 状态** 是引擎对客户端 MTU 能给出的判断。建议值由你决定是否应用；系统不会替你更改。
+
+| `wg_nqmo_peer_mtu_status` | 显示为 | 含义 |
+|---|---|---|
+| 0 | 未确定 | 证据不足以得出结论 |
+| 1 | 待测试 | 有建议值，但需要测试 |
+| 2 | 估算 | 由稳定的测量或探测得出的值 |
+| 3 | 已验证 | 完整大小的数据包在上行方向未分片到达；下行方向未确认 |
+
+**配置发现** 是根据配置计算得出，而不是测量得出，因此只出现在面板中，绝不会成为告警。
+
+### MTU 探测
+
+探测向某一个客户端发送少量测试数据包，以找到能够通过的最大大小；在被动观察无法判断时很有
+帮助。必须同时满足：
+
+- 模式为 **建议已启用**，并且引擎设置中允许探测；
+- 用户拥有 `nqmo.probe`；
+- 客户端的最后一次握手不超过 2 分钟，即处于在线状态；
+- 没有其他探测正在运行，且该客户端在过去一小时内没有被探测过；
+- 客户端名称没有在另一个接口上重复。
+
+不响应 ping 的客户端无法测试。
+
+<a id="wg-nqmo-troubleshooting"></a>
+
+### 故障排查
+
+**该部分或 `wg_nqmo_unavailable{why}` 表示数据不可用：**
+
+| `why` | 含义 | 处理方法 |
+|---|---|---|
+| `disabled` | 钩子已关闭 | 无需处理，除非你本来想开启。此状态下 `/metrics` 没有 WG-NQMO 序列 |
+| `missing` | 引擎尚未写入任何输出 | 未安装或刚刚启动；请检查其服务 |
+| `unreadable` | 文件无法读取 | 检查权限。符号链接以及任何非普通文件都会被有意拒绝 |
+| `too_large` | 文件超过大小上限 | 检查引擎；文件应当小得多 |
+| `corrupt` | 文件不是有效文档 | 查看引擎日志 |
+| `schema` | 文档版本与面板不匹配 | 让面板和引擎使用相互匹配的版本 |
+| `stale` | 文件已超过 3 分钟 | 引擎已停止或卡住 |
+| `clock` | 文件的时间在未来 | 校正系统时钟 |
+| `error` | 读取文件时发生内部错误 | 查看面板日志 |
+
+**命令被拒绝**（代码见 `refused` 字段和历史记录）：
+
+| 代码 | 含义 | 处理方法 |
+|---|---|---|
+| `UNREACHABLE` | 面板无法连接到引擎 | 启动引擎 |
+| `NO_REPLY` | 引擎未应答就关闭了连接 | 面板可能不是以 root 运行 |
+| `TIMEOUT` | 引擎没有及时应答 | 重试；如果反复出现，请检查引擎 |
+| `MODE_GATE` | 探测需要 **建议已启用** | 逐级提升模式 |
+| `FLAG_GATE` | 引擎设置中已禁用探测 | 如果需要，请在那里允许 |
+| `META_STALE` | 引擎持有的面板数据已过期 | 检查 `user_iface` 以及组 `wg-nqmo` 是否存在 |
+| `NO_SUCH_PEER` | 引擎不认识这个客户端 | 等待面板下一次更新 |
+| `PEER_NOT_PROBEABLE` | 客户端已禁用或没有隧道地址 | 没有可测试的内容 |
+| `STALE_HS` | 客户端不在线 | 在其连接时重试 |
+| `RATE` | 该客户端在过去一小时内已被探测 | 稍后重试 |
+| `BUSY` | 引擎繁忙或另一个探测正在运行 | 稍后重试 |
+| `AMBIGUOUS_PEER` | 该名称存在于多个接口 | 重命名其中一个客户端 |
+| `NOT_ADJACENT` | 模式每次只能移动一级 | 先经过中间模式 |
+| `NO_SUCH_OPEN_DIAGNOSIS` | 该诊断已不再处于未关闭状态 | 无需处理 |
+
+<a id="wg-nqmo-reference"></a>
+
+### 参考
+
+<details>
+<summary><b>权限</b></summary>
+
+<br>
+
+| 权限 | 允许 | 包含 |
+|---|---|---|
+| `nqmo.view` | 查看质量和诊断 | — |
+| `nqmo.detail` | 前缀、ASN、关联和完整证据 | `nqmo.view` |
+| `nqmo.ack` | 确认诊断 | `nqmo.view` |
+| `nqmo.probe` | 运行手动 MTU 探测 | `nqmo.view` |
+| `nqmo.manage` | 更改引擎模式 | `nqmo.view` |
+
+</details>
+
+<details>
+<summary><b>面板与引擎如何通信，以及信任什么</b></summary>
+
+<br>
+
+只通过下列文件；面板从不导入、启动或停止引擎，这些钩子也不建立任何出站连接。
+
+| 路径 | 方向 | 内容 |
+|---|---|---|
+| `/run/wg-panel/nqmo-meta.json` | 面板 → 引擎，每 60 秒 | 所有客户端接口的客户端（名称、公钥、隧道地址、endpoint、最后握手、流量计数、每个客户端的 MTU 和限速）、已开启的出口隧道及其健康状况，以及 `client_mtu`。模式 `0640`，组 `wg-nqmo`，目录 `0750`。仅当组 `wg-nqmo` 存在（即引擎已安装）时才写入 |
+| `/var/lib/wg-nqmo/state.json` | 引擎 → 面板，每 60 秒 | 引擎模式、收集器、未关闭的诊断、每个客户端的摘要和告警发件箱。面板将其缓存 10 秒；超过 180 秒的文件视为过期 |
+| `/run/wg-nqmo/ctl.sock` | 面板 → 引擎，按需 | 三条命令：确认诊断、运行 MTU 探测、更改模式。每个连接一个请求，超时 7 秒。引擎在此套接字上只接受 root |
+| `/opt/wg-panel/nqmo-notified.last` | 仅面板 | 面板发送的最后一条引擎告警的 ID |
+
+meta 文件包含客户端的名称、公钥和 endpoint（其公网地址），因此加入组 `wg-nqmo` 就意味着可以
+访问这些内容。
+
+引擎的文件不受信任。引擎以自己的非特权用户运行，面板以 root 运行，因此面板只把 `state.json`
+当作普通文件读取，绝不通过符号链接，且最多读取 8 MB。面板检查文档的 schema，从每个字符串中
+删除控制字符和双向字符并将其截短，只保留有限数字，并且只为自己认识的客户端显示诊断和序列，
+因此伪造的文件无法创建新的客户端或标签。
+
+</details>
+
+<details>
+<summary><b>Telegram 告警</b></summary>
+
+<br>
+
+钩子开启后，`alerts.events` 下会出现名为 `nqmo` 的第十二种告警类型
+（“网络质量引擎诊断（WG-NQMO）”）。面板转发引擎的告警发件箱：诊断的打开、升级或解决，使用
+面板自己的四种语言文本。
+
+- 去重、静默间隔和每小时上限由引擎负责；面板在每次 30 秒的检查中最多发送 6 条消息。
+- 首次运行以及引擎数据库重建后，只发送不足 180 秒的事件，这样开启时不会把历史记录一次性
+  倒进聊天。
+- 因数据耗尽而关闭的诊断会收到单独的 ⚪ 消息，不会被报告为已解决。
+- 低重要性和摘要条目绝不发送。
+
+</details>
+
+<details>
+<summary><b>API</b></summary>
+
+<br>
+
+全部六个路由都是带 JSON 请求体的 `POST`，与面板其他部分相同。
+
+| 路由 | 权限 | 输入 | 响应 |
+|---|---|---|---|
+| `/api/nqmo/status` | `nqmo.view` | — | 模式、收集器、覆盖范围、数据库、全局诊断、配置发现，以及面板认识的每个客户端的摘要 |
+| `/api/nqmo/peer` | `nqmo.view` | `name`，以及 `iface`（可选） | 一个客户端：摘要、诊断和建议 |
+| `/api/nqmo/events` | `nqmo.view` | `since`（0 或更大）、`limit`（1 到 200） | `since` 之后的发件箱事件，最早的在前 |
+| `/api/nqmo/ack` | `nqmo.ack` | `id` | 确认诊断；诊断仍保持未关闭 |
+| `/api/nqmo/probe` | `nqmo.probe` | `name`，以及 `iface`（可选） | 请求引擎运行 MTU 探测 |
+| `/api/nqmo/mode` | `nqmo.manage` | `to`（可选） | 不带 `to` 返回当前模式；带 `to` 则移动一级 |
+
+</details>
+
+<details>
+<summary><b>Prometheus</b></summary>
+
+<br>
+
+钩子开启后，`/metrics` 会增加下列序列。引擎未测量的值会被省略，绝不报告为 0。
+
+| 序列 | 含义 |
+|---|---|
+| `wg_nqmo_up` | 引擎文件新鲜且有效时为 1 |
+| `wg_nqmo_unavailable{why}` | 不可用的原因；当文件缺失、不可读或过期时，只出现此序列和 `wg_nqmo_up 0` |
+| `wg_nqmo_state_age_seconds` | 引擎文件的存在时间 |
+| `wg_nqmo_mode{mode}` | 当前模式为 1 |
+| `wg_nqmo_collector_ok{collector}` | 1 正常，0 故障，关闭时不存在：`C1_meta`（面板的文件）、`C2_kernel`（内核计数）、`C3_capture`（数据包头） |
+| `wg_nqmo_diagnoses_open{class}` | 每种未关闭的诊断 |
+| `wg_nqmo_peers`、`wg_nqmo_active_peers` | 引擎认识的客户端，以及过去 180 秒内有握手的客户端 |
+| `wg_nqmo_recent_errors` | 保存在引擎文件中的错误 |
+| `wg_nqmo_store_bytes`、`wg_nqmo_store_read_only` | 引擎数据库的大小，以及它是否只读 |
+
+每个客户端还有下列序列，其 `iface` 和 `name` 标签与 `wg_peer_*` 序列相同：
+
+| 序列 | 含义 |
+|---|---|
+| `wg_nqmo_peer_quality_state` | 上述质量；在 **仅观察** 下不存在 |
+| `wg_nqmo_peer_rtt_seconds`、`wg_nqmo_peer_rtt_min_seconds`、`wg_nqmo_peer_rtt_samples` | 握手往返时间的中位数和最小值，15 分钟窗口，至少 5 个样本 |
+| `wg_nqmo_peer_upstream_loss_ratio`、`wg_nqmo_peer_upstream_loss_lower_ratio`、`wg_nqmo_peer_upstream_loss_upper_ratio`、`wg_nqmo_peer_upstream_loss_judged_packets` | 上行丢包及其 95% Wilson 区间，5 分钟窗口，至少 1000 个已判定的数据包 |
+| `wg_nqmo_peer_mtu_status` | 上述 MTU 状态 |
+
+示例查询：
+
+```promql
+wg_nqmo_up == 0
+sum by (class) (wg_nqmo_diagnoses_open) > 0
+wg_nqmo_peer_quality_state >= 2
+wg_nqmo_peer_upstream_loss_lower_ratio > 0.01
+```
+
+</details>
+
+**未包含：** 引擎本身，以及用于它的 Telegram 机器人命令。
 
 <a id="languages"></a>
 
@@ -656,118 +960,6 @@ scrape_configs:
 
 这两个端点同样受 `allow_ips` 约束，因此如果使用白名单，请把 Prometheus 服务器
 的地址加进去。
-
-<a id="wg-nqmo"></a>
-
-## 连接质量（WG-NQMO）
-
-WG-NQMO 是一个独立的引擎，用于监视每个 WireGuard 客户端的连接：WireGuard
-握手的往返时间、客户端到服务器方向的丢包，以及客户端 MTU。它能诊断问题，并可以
-推荐客户端 MTU。**该引擎不属于本仓库，也没有发布。** 1.3.0 版只加入了面板这一侧：
-一组钩子，用来显示引擎报告的内容，并把面板自己的数据和管理员的命令交给引擎。
-没有引擎，这些钩子就没有可显示的内容。
-
-**默认关闭。** 只有当 `config.json` 的 `nqmo.enabled` 为 JSON 值 `true` 时
-钩子才开启；`"true"`、`1` 或缺少该键都表示关闭。关闭时：
-
-- 面板不为引擎读取或写入任何内容；
-- `/api/stats` 和 `/metrics` 的响应与没有这些钩子时完全相同；
-- 六个 `/api/nqmo/*` 路由只返回“引擎已禁用”的错误（`"disabled": true`）；
-- 页面不发送任何 WG-NQMO 请求，也不显示任何 WG-NQMO 部分；WG-NQMO 的权限组和
-  告警类型被隐藏。保存角色或告警设置时，已存储的 WG-NQMO 值保持不变。
-
-**开启。** 安装引擎后，把下面的内容加入 `config.json` 并重启面板：
-
-```json
-"nqmo": {"enabled": true, "user_iface": "wg0"}
-```
-
-`user_iface` 是客户端连接的 WireGuard 接口；面板把它的 MTU 和防火墙标记
-（fwmark）报告给引擎。默认值为 `wg1udp`。如果不存在这个名称的接口，面板不会为
-引擎写入任何内容，因此请设置为你自己的接口。
-
-**面板与引擎如何通信。** 只通过下列文件；面板从不导入、启动或停止引擎。
-
-| 路径 | 方向 | 内容 |
-|---|---|---|
-| `/run/wg-panel/nqmo-meta.json` | 面板 → 引擎，每 60 秒 | 所有客户端接口上的客户端（名称、公钥、隧道地址、endpoint、最近握手、流量计数、每个客户端的 MTU 和限速）、已开启的出站隧道及其健康状态，以及 `client_mtu`。权限 `0640`，组 `wg-nqmo`，目录 `0750`。仅在组 `wg-nqmo` 存在（即引擎已安装）时写入 |
-| `/var/lib/wg-nqmo/state.json` | 引擎 → 面板，每 60 秒 | 引擎模式、采集器（collector）、未关闭的诊断、每个客户端的摘要和告警发件箱。面板缓存 10 秒；超过 180 秒的文件视为过期 |
-| `/run/wg-nqmo/ctl.sock` | 面板 → 引擎，按需 | 三条命令：确认诊断、运行 MTU 探测、切换模式。每个连接一个请求，超时 7 秒。引擎在此套接字上只接受 root |
-| `/opt/wg-panel/nqmo-notified.last` | 仅面板 | 面板已发送的最后一条引擎告警的编号 |
-
-meta 文件包含客户端的名称、公钥和 endpoint（客户端的公网地址），因此加入
-`wg-nqmo` 组就意味着可以访问这些信息。
-
-**引擎的文件不可信。** 引擎以自己的非特权用户运行，而面板以 root 运行，因此面板
-只把 `state.json` 当作普通文件读取，从不跟随符号链接，且最多读取 8 MB。面板会
-检查文档的 schema，去掉每个字符串中的控制字符和双向字符并截短，只保留有限数值，
-并且只为面板自己认识的客户端显示诊断和指标，所以伪造的文件无法添加客户端或标签。
-
-**在面板中。** 以下内容都需要 `nqmo.view` 权限。
-
-- **连接质量** 部分：引擎模式及其数据的时长、采集器（正常、失败或关闭）、覆盖
-  范围、数据库大小、全局诊断和配置发现；客户端表格，包含质量、往返时间中位数、
-  上行丢包、MTU 状态和未关闭的诊断；以及最近 50 条事件。网络前缀、ASN、关联和
-  完整证据需要 `nqmo.detail`。
-- 点击某个客户端，可查看它最近 15 分钟的摘要、带证据的诊断，以及带理由和限制的
-  建议。客户端编辑对话框中的 **质量与 MTU（WG-NQMO）** 区块显示相同内容。
-- 浏览器标签页可见时，该部分每 30 秒刷新一次。引擎未报告的数字显示为“—”，
-  绝不显示为 0。
-- **确认** 需要 `nqmo.ack`，MTU 探测需要 `nqmo.probe`，切换模式需要
-  `nqmo.manage`。每项操作执行前都要求确认，无论被接受还是被拒绝都会写入审计日志。
-- 引擎有三种模式：**仅观察**、**诊断已启用** 和 **建议已启用**。模式每次只能
-  移动一级；面板和引擎都会拒绝跳级。
-
-| 权限 | 允许 | 包含 |
-|---|---|---|
-| `nqmo.view` | 查看质量与诊断 | — |
-| `nqmo.detail` | 前缀、ASN 与完整证据 | `nqmo.view` |
-| `nqmo.ack` | 确认诊断 | `nqmo.view` |
-| `nqmo.probe` | 手动运行 MTU 探测 | `nqmo.view` |
-| `nqmo.manage` | 更改引擎模式 | `nqmo.view` |
-
-内置的 `viewer` 角色不具备其中任何一项。
-
-**Telegram 告警。** 钩子开启后，`alerts.events` 下会出现第十二种告警 `nqmo`
-（“网络质量引擎诊断（WG-NQMO）”）。面板转发引擎的告警发件箱：诊断的打开、
-升级或解除，使用面板自己的四种语言文本。去重、冷却和每小时上限由引擎负责；面板
-每次 30 秒检查最多发送 6 条消息。首次运行时，以及引擎数据库重建之后，只发送
-不超过 180 秒的事件，这样开启时不会把历史一次性涌入聊天。因数据不足而关闭的诊断
-会收到单独的 ⚪ 消息，不会被报告为已修复。低严重度条目和摘要条目从不发送。
-
-**API。** 六个路由都是带 JSON 请求体的 `POST`，与面板的其他部分相同：
-
-| 路由 | 权限 | 输入 | 响应 |
-|---|---|---|---|
-| `/api/nqmo/status` | `nqmo.view` | — | 模式、采集器、覆盖范围、数据库、全局诊断、配置发现，以及面板认识的每个客户端的摘要 |
-| `/api/nqmo/peer` | `nqmo.view` | `name`，可选 `iface` | 单个客户端：摘要、诊断和建议 |
-| `/api/nqmo/events` | `nqmo.view` | `since`（0 或更大）、`limit`（1 到 200） | `since` 之后的发件箱事件，从旧到新 |
-| `/api/nqmo/ack` | `nqmo.ack` | `id` | 确认一条诊断 |
-| `/api/nqmo/probe` | `nqmo.probe` | `name`，可选 `iface` | 请求引擎进行 MTU 探测 |
-| `/api/nqmo/mode` | `nqmo.manage` | 可选 `to` | 不带 `to` 返回当前模式；带 `to` 则移动一级 |
-
-**Prometheus。** 钩子开启后，`/metrics` 会增加：
-
-- `wg_nqmo_up`、`wg_nqmo_state_age_seconds`、`wg_nqmo_mode{mode}`、
-  `wg_nqmo_collector_ok{collector}`、`wg_nqmo_diagnoses_open{class}`、
-  `wg_nqmo_peers`、`wg_nqmo_active_peers`、`wg_nqmo_recent_errors`、
-  `wg_nqmo_store_bytes` 和 `wg_nqmo_store_read_only`；
-- 每个客户端的指标，使用与 `wg_peer_*` 相同的 `iface` 和 `name` 标签：
-  `wg_nqmo_peer_quality_state`（−1 数据不足，0 正常，1 低，2 中，3 高；仅观察
-  模式下不输出）；`wg_nqmo_peer_rtt_seconds`、`wg_nqmo_peer_rtt_min_seconds`
-  和 `wg_nqmo_peer_rtt_samples`（15 分钟窗口，至少 5 个样本）；
-  `wg_nqmo_peer_upstream_loss_ratio` 及其 Wilson 95% 置信界
-  `wg_nqmo_peer_upstream_loss_lower_ratio` 和
-  `wg_nqmo_peer_upstream_loss_upper_ratio`，以及
-  `wg_nqmo_peer_upstream_loss_judged_packets`（5 分钟窗口，至少 1000 个已判定
-  的数据包）；以及 `wg_nqmo_peer_mtu_status`（0 未确定，1 待测试，2 已估计，
-  3 已验证）。
-
-当引擎的文件不存在、无法读取或已过期时，只输出 `wg_nqmo_up 0` 和
-`wg_nqmo_unavailable{why}`。引擎未测量的值会被省略，绝不报告为 0。
-
-**不包含的内容。** 引擎本身，以及用于它的 Telegram 机器人命令。这些钩子不建立
-任何出站连接。
 
 <a id="security"></a>
 
