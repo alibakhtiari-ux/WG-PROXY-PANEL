@@ -38,6 +38,7 @@ means copying one file.
 - [Screenshots](#screenshots)
 - [Features](#features)
 - [The chart engine](#chart-engine)
+- [Connection quality (WG-NQMO)](#wg-nqmo)
 - [Languages](#languages)
 - [Requirements](#requirements)
 - [Quick start with Docker](#quick-start-with-docker)
@@ -49,7 +50,6 @@ means copying one file.
 - [Backups](#backups)
 - [TLS and reverse proxies](#tls-and-reverse-proxies)
 - [Prometheus](#prometheus)
-- [Connection quality (WG-NQMO)](#wg-nqmo)
 - [Security](#security)
 - [Outbound connections](#outbound-connections)
 - [Limitations](#limitations)
@@ -184,6 +184,9 @@ complete second way to manage the server — no SSH, no browser:
 - Cloudflare WARP status, and an optional SNI-splitting daemon that routes
   connections by destination hostname (these need helper scripts that are not
   in this repository — see [Limitations](#limitations))
+- Per-client connection quality (round trip, packet loss, MTU) with diagnoses and
+  alerts, through the separate WG-NQMO engine, which is not published yet; off by
+  default — see [Connection quality (WG-NQMO)](#wg-nqmo)
 - Read-only leak audits (routing; DNS and IPv6 from the Telegram bot)
 - Backup and restore; every config file is backed up automatically before it
   is written, and writes are atomic
@@ -312,6 +315,333 @@ server, in pure Python. It fills a pixel buffer, draws lines and bars into
 it, writes the labels with a built-in bitmap font, and packs the result into
 a PNG with `zlib`. The PNG is 900 × 400, bars or lines. These images go into
 the client and proxy graphs in the bot and into the periodic report.
+
+<a id="wg-nqmo"></a>
+
+## Connection quality (WG-NQMO)
+
+A client says the connection is slow or keeps dropping. Is the cause their own
+network, the server, an outbound tunnel, the MTU, or simply the speed limit you
+set for them? WG-NQMO answers that from the server side, for each client, with
+the evidence and a stated confidence. Nothing is installed on the client.
+
+It is a separate engine. It watches the round trip of the WireGuard handshake,
+upstream packet loss (client to server) and the client MTU, diagnoses what goes
+wrong and can recommend an MTU. Diagnoses and recommendations are reports only:
+the engine never changes a setting on its own.
+
+> [!NOTE]
+> **The engine is not part of this repository and is not published yet.** Release
+> 1.3.0 adds only the panel's side of it: hooks that show what the engine reports
+> and pass it the panel's own data and the administrator's commands. Without the
+> engine they have nothing to show. They are off by default, so a panel without
+> the engine behaves as if they were not there.
+
+```mermaid
+flowchart LR
+    panel["WG-PROXY-PANEL<br/>root"]
+    engine["WG-NQMO engine<br/>unprivileged user"]
+    browser["Browser"]
+    prom["Prometheus"]
+    tg["Telegram"]
+    panel -- "nqmo-meta.json" --> engine
+    engine -- "state.json" --> panel
+    panel -- "ctl.sock" --> engine
+    panel -- "/api/nqmo/*" --> browser
+    panel -- "/metrics" --> prom
+    panel -- "alerts" --> tg
+```
+
+### What you see
+
+- **In the panel.** A **Connection quality** section shows the engine mode and the
+  age of its data, the collectors (healthy, failing or off), coverage, database
+  size, global diagnoses and configuration findings; a table of clients with
+  quality, median round trip, upstream packet loss, MTU status and open diagnoses;
+  and the last 50 events.
+- **For each client.** Clicking a client opens the last 15 minutes, the diagnoses
+  with their evidence, and the recommendations with their reason and limits. The
+  client edit dialog has the same content in a **Quality and MTU (WG-NQMO)** block.
+- **In Telegram.** A new, escalated or cleared diagnosis becomes an alert.
+- **In Prometheus.** The same numbers as `wg_nqmo_*` series, with example queries
+  under [Reference](#wg-nqmo-reference).
+
+The section refreshes every 30 seconds, only while the browser tab is visible. A
+number the engine did not report is shown as “—”, never as 0.
+
+Three buttons act on the engine: **Acknowledge** on a diagnosis, the MTU probe, and
+the mode change. Each one asks for confirmation and, accepted or refused, is
+written to the history.
+
+### Turning it on and off
+
+The hooks are on only when `config.json` has the JSON value `true` under
+`nqmo.enabled`; `"true"`, `1` or a missing key all mean off. While they are off:
+
+- the panel reads and writes nothing for the engine;
+- `/api/stats` and `/metrics` answer exactly as they would without the hooks;
+- the six `/api/nqmo/*` routes return only a “disabled” error (`"disabled": true`);
+- the page sends no WG-NQMO request and shows no WG-NQMO section, and the WG-NQMO
+  permission group and alert kind are hidden. Saving a role or the alert settings
+  keeps their stored WG-NQMO values.
+
+To turn them on once the engine is installed, add this to `config.json`:
+
+```json
+"nqmo": {"enabled": true, "user_iface": "wg0"}
+```
+
+1. Set `user_iface` to the WireGuard interface your clients connect to; the panel
+   reports its MTU and firewall mark to the engine. The default is `wg1udp`. If no
+   interface has that name, the panel writes nothing for the engine, so use your own.
+2. Restart the panel.
+3. Give the people who need it `nqmo.view`. The built-in `admin` role has every
+   WG-NQMO permission and the built-in `viewer` role has none.
+4. Check that `/metrics` reports `wg_nqmo_up 1`. If it reports 0, the
+   `wg_nqmo_unavailable{why}` series says why; see [Troubleshooting](#wg-nqmo-troubleshooting).
+
+Turning the hooks on without the engine does no harm: the section says the engine
+has written no output yet.
+
+To turn them off, set `enabled` to `false` or remove the key, and restart the panel.
+The panel stops updating its file for the engine. It does not stop the engine and
+does not delete its files, and stored role and alert values stay as they are.
+
+### Engine modes
+
+The engine starts in **Observation only** and moves up by hand, so you can see what
+it measures before it says anything. The mode moves only one step at a time; the
+panel and the engine both refuse a jump.
+
+| Mode | In the panel | Telegram | Recommendations and MTU probe |
+|---|---|---|---|
+| **Observation only** (`OBSERVATION_ONLY`) | Round trip and packet loss. Diagnoses are worked out and stored, but not shown | No | No |
+| **Diagnostics enabled** (`DIAGNOSTICS_ENABLED`) | Also diagnoses and the quality column | New diagnoses with medium or high confidence | No |
+| **Recommendations enabled** (`RECOMMENDATIONS_ENABLED`) | Also recommendations | Same as above | Yes; the probe must also be allowed in the engine settings |
+
+### Reading the results
+
+**Quality** is the worst confidence among a client's open diagnoses. It is not a
+score of the connection itself: “healthy” means that no rule found a problem.
+
+| `wg_nqmo_peer_quality_state` | Shown as |
+|---|---|
+| −1 | Insufficient data |
+| 0 | Healthy, no diagnosis |
+| 1 | Diagnosis, low confidence |
+| 2 | Diagnosis, medium confidence |
+| 3 | Diagnosis, high confidence |
+
+**Diagnoses.** Each one names its scope, confidence, data quality, evidence and,
+with `nqmo.detail`, what speaks against it and what else could explain it. A
+diagnosis is a reasoned suspicion, not proof.
+
+| Code | Shown as | Scope | What it means |
+|---|---|---|---|
+| `SERVER_RESOURCE_BOTTLENECK` | Server resource bottleneck | Global | The server itself is dropping packets: kernel queues, the network card, UDP buffers, connection tracking or reassembly memory |
+| `HANDSHAKE_FLOOD` | Handshake flood | Global | More handshakes arrive than WireGuard can process at once |
+| `EGRESS_TUNNEL_DEGRADATION` | Egress tunnel degradation | Egress | An outbound tunnel is unhealthy; clients behind it suffer through no fault of their own |
+| `TRAFFIC_SHAPING_EFFECT` | Traffic shaping effect | Device | The client is reaching the speed limit set in the panel; this is the limit working, not a fault |
+| `HANDSHAKE_FAILURE` | Handshake failure | Device | The client sends handshakes and the server does not answer them; suspect a wrong key or configuration |
+| `NAT_OR_FIREWALL_ISSUE` | NAT or firewall issue | Device | The server sends and nothing comes back. Typical of an expired NAT mapping on the client's side; the exact cause cannot be told from the server |
+| `ROUTING_ANOMALY` | Routing anomaly | Device | The route back to the client does not leave by the expected interface, or routes changed just as quality fell |
+| `UDP_INSTABILITY` | UDP instability | Device | The client's address keeps changing, or packets arrive reordered or duplicated |
+| `PACKET_LOSS` | Packet loss | Device | Upstream loss that is statistically clear, not a chance reading |
+| `NETWORK_CONGESTION` | Network congestion | Device | The handshake round trip is well above this client's own normal level |
+| `SUSPECTED_MTU_PROBLEM` | Suspected MTU problem | Device | The client's MTU is larger than the path can carry, so its packets arrive in fragments |
+| `SUSPECTED_PMTU_BLACKHOLE` | Suspected PMTU black hole | Device | Large packets are being lost on the way while small ones get through |
+| `UNKNOWN_DEGRADATION` | Unexplained degradation | Device | Worse than this client's normal level, and no rule explains why |
+
+**MTU status** is what the engine can say about a client's MTU. Any suggested value
+is yours to apply; nothing is changed for you.
+
+| `wg_nqmo_peer_mtu_status` | Shown as | Meaning |
+|---|---|---|
+| 0 | Undetermined | Not enough evidence for a conclusion |
+| 1 | Candidate for testing | There is a suggested value, but it needs a test |
+| 2 | Estimated | A value worked out from stable measurements or a probe |
+| 3 | Verified | Full-size packets arrived unfragmented on the way up; the way down is not confirmed |
+
+**Configuration findings** are calculated from the configuration rather than
+measured, so they appear only in the panel and never as an alert.
+
+### MTU probe
+
+The probe sends a few test packets to one client to find the largest size that
+gets through, which helps when passive observation cannot decide. It needs all of
+these:
+
+- the mode is **Recommendations enabled**, and probes are allowed in the engine settings;
+- the user has `nqmo.probe`;
+- the client's last handshake is under 2 minutes old, so it is online;
+- no other probe is running, and this client had none in the last hour;
+- the client's name is not repeated on another interface.
+
+A client that does not answer ping cannot be tested.
+
+<a id="wg-nqmo-troubleshooting"></a>
+
+### Troubleshooting
+
+**The section or `wg_nqmo_unavailable{why}` says the data is not usable:**
+
+| `why` | Meaning | What to do |
+|---|---|---|
+| `disabled` | The hooks are off | Nothing, unless you meant to turn them on. `/metrics` has no WG-NQMO series in this state |
+| `missing` | The engine has written no output yet | It is not installed, or has just started; check its service |
+| `unreadable` | The file cannot be read | Check its permissions. A symlink or anything that is not a regular file is refused on purpose |
+| `too_large` | The file is over the size limit | Look at the engine; the file should be far smaller |
+| `corrupt` | The file is not a valid document | Look at the engine's log |
+| `schema` | The document version does not match the panel | Bring the panel and the engine to matching versions |
+| `stale` | The file is over 3 minutes old | The engine has stopped or hung |
+| `clock` | The file is dated in the future | Fix the system clock |
+| `error` | Internal error while reading the file | Look at the panel's log |
+
+**A command was refused** (the code is in the `refused` field and in the history):
+
+| Code | Meaning | What to do |
+|---|---|---|
+| `UNREACHABLE` | The panel could not connect to the engine | Start the engine |
+| `NO_REPLY` | The engine closed the connection without replying | The panel is probably not running as root |
+| `TIMEOUT` | The engine did not answer in time | Try again; if it repeats, look at the engine |
+| `MODE_GATE` | Probes need **Recommendations enabled** | Move the mode up one step at a time |
+| `FLAG_GATE` | Probes are disabled in the engine settings | Allow them there, if you want them |
+| `META_STALE` | The engine's copy of the panel data is stale | Check `user_iface` and that the group `wg-nqmo` exists |
+| `NO_SUCH_PEER` | The engine does not know this client | Wait for the next panel update |
+| `PEER_NOT_PROBEABLE` | The client is disabled or has no tunnel address | Nothing to test |
+| `STALE_HS` | The client is not online | Try while it is connected |
+| `RATE` | This client had a probe in the last hour | Try later |
+| `BUSY` | The engine is busy or another probe is running | Try again shortly |
+| `AMBIGUOUS_PEER` | The name exists on several interfaces | Rename one of the clients |
+| `NOT_ADJACENT` | The mode moves one step at a time | Go through the middle mode |
+| `NO_SUCH_OPEN_DIAGNOSIS` | The diagnosis is no longer open | Nothing to do |
+
+<a id="wg-nqmo-reference"></a>
+
+### Reference
+
+<details>
+<summary><b>Permissions</b></summary>
+
+<br>
+
+| Permission | Allows | Includes |
+|---|---|---|
+| `nqmo.view` | Seeing quality and diagnoses | — |
+| `nqmo.detail` | Prefix, ASN, correlations and full evidence | `nqmo.view` |
+| `nqmo.ack` | Acknowledging a diagnosis | `nqmo.view` |
+| `nqmo.probe` | Running a manual MTU probe | `nqmo.view` |
+| `nqmo.manage` | Changing the engine mode | `nqmo.view` |
+
+</details>
+
+<details>
+<summary><b>How the panel and the engine talk, and what is trusted</b></summary>
+
+<br>
+
+Only through these files; the panel never imports, starts or stops the engine, and
+the hooks make no outbound connection.
+
+| Path | Direction | Contents |
+|---|---|---|
+| `/run/wg-panel/nqmo-meta.json` | panel → engine, every 60 seconds | The clients of every client interface (name, public key, tunnel address, endpoint, last handshake, traffic counters, per-client MTU and speed limit), the outbound tunnels that are on and their health, and `client_mtu`. Mode `0640`, group `wg-nqmo`, directory `0750`. Written only while the group `wg-nqmo` exists, that is, while the engine is installed |
+| `/var/lib/wg-nqmo/state.json` | engine → panel, every 60 seconds | The engine mode, collectors, open diagnoses, a summary of each client and the alert outbox. The panel caches it for 10 seconds; a file older than 180 seconds counts as stale |
+| `/run/wg-nqmo/ctl.sock` | panel → engine, on demand | Three commands: acknowledge a diagnosis, run an MTU probe, change the mode. One request per connection, with a 7-second time-out. The engine accepts only root on this socket |
+| `/opt/wg-panel/nqmo-notified.last` | panel only | The id of the last engine alert the panel sent |
+
+The meta file holds the clients' names, public keys and endpoints (their public
+addresses), so membership of the group `wg-nqmo` means access to those.
+
+The engine's file is untrusted. The engine runs as its own unprivileged user and
+the panel as root, so the panel reads `state.json` only as a regular file, never
+through a symbolic link, and only up to 8 MB. It checks the document's schema,
+strips control and bidirectional characters from every string and shortens it,
+keeps only finite numbers, and shows diagnoses and series only for clients it
+knows itself, so a forged file cannot create a client or a label.
+
+</details>
+
+<details>
+<summary><b>Telegram alert</b></summary>
+
+<br>
+
+With the hooks on, a twelfth alert kind named `nqmo` (“Network quality engine
+diagnoses (WG-NQMO)”) appears under `alerts.events`. The panel forwards the
+engine's alert outbox: a diagnosis opening, escalating or clearing, in the panel's
+own wording in all four languages.
+
+- Removing duplicates, the quiet interval and the hourly cap are the engine's job;
+  the panel sends at most 6 messages per 30-second check.
+- On the first run, and after the engine's database is rebuilt, only events younger
+  than 180 seconds are sent, so switching on does not pour the history into the chat.
+- A diagnosis closed because data ran out gets a separate ⚪ message and is not
+  reported as cleared.
+- Low-importance and digest rows are never sent.
+
+</details>
+
+<details>
+<summary><b>API</b></summary>
+
+<br>
+
+All six routes are `POST` with a JSON body, like the rest of the panel.
+
+| Route | Permission | Input | Answer |
+|---|---|---|---|
+| `/api/nqmo/status` | `nqmo.view` | — | Mode, collectors, coverage, database, global diagnoses, configuration findings, and a summary of each client the panel knows |
+| `/api/nqmo/peer` | `nqmo.view` | `name`, and `iface` (optional) | One client: summary, diagnoses and recommendations |
+| `/api/nqmo/events` | `nqmo.view` | `since` (0 or more), `limit` (1 to 200) | Outbox events after `since`, oldest first |
+| `/api/nqmo/ack` | `nqmo.ack` | `id` | Acknowledges a diagnosis; it stays open |
+| `/api/nqmo/probe` | `nqmo.probe` | `name`, and `iface` (optional) | Asks the engine for an MTU probe |
+| `/api/nqmo/mode` | `nqmo.manage` | `to` (optional) | Without `to`, the current mode; with `to`, a move of one step |
+
+</details>
+
+<details>
+<summary><b>Prometheus</b></summary>
+
+<br>
+
+With the hooks on, `/metrics` adds the series below. A value the engine did not
+measure is left out and never reported as 0.
+
+| Series | Meaning |
+|---|---|
+| `wg_nqmo_up` | 1 when the engine's file is fresh and valid |
+| `wg_nqmo_unavailable{why}` | Why not; when the file is missing, unreadable or stale, only this and `wg_nqmo_up 0` appear |
+| `wg_nqmo_state_age_seconds` | Age of the engine's file |
+| `wg_nqmo_mode{mode}` | 1 for the current mode |
+| `wg_nqmo_collector_ok{collector}` | 1 healthy, 0 failing, absent when off: `C1_meta` (the panel's file), `C2_kernel` (kernel counters), `C3_capture` (packet headers) |
+| `wg_nqmo_diagnoses_open{class}` | Open diagnoses of each class |
+| `wg_nqmo_peers`, `wg_nqmo_active_peers` | Clients the engine knows, and those with a handshake in the last 180 seconds |
+| `wg_nqmo_recent_errors` | Engine errors kept in its file |
+| `wg_nqmo_store_bytes`, `wg_nqmo_store_read_only` | Size of the engine's database, and whether it is read-only |
+
+Each client also gets these, with the same `iface` and `name` labels as the
+`wg_peer_*` series:
+
+| Series | Meaning |
+|---|---|
+| `wg_nqmo_peer_quality_state` | The quality above; absent in **Observation only** |
+| `wg_nqmo_peer_rtt_seconds`, `wg_nqmo_peer_rtt_min_seconds`, `wg_nqmo_peer_rtt_samples` | Median and minimum handshake round trip, 15-minute window, at least 5 samples |
+| `wg_nqmo_peer_upstream_loss_ratio`, `wg_nqmo_peer_upstream_loss_lower_ratio`, `wg_nqmo_peer_upstream_loss_upper_ratio`, `wg_nqmo_peer_upstream_loss_judged_packets` | Upstream loss with its 95% Wilson bounds, 5-minute window, at least 1000 judged packets |
+| `wg_nqmo_peer_mtu_status` | The MTU status above |
+
+Example queries:
+
+```promql
+wg_nqmo_up == 0
+sum by (class) (wg_nqmo_diagnoses_open) > 0
+wg_nqmo_peer_quality_state >= 2
+wg_nqmo_peer_upstream_loss_lower_ratio > 0.01
+```
+
+</details>
+
+**Not included:** the engine itself, and a Telegram bot command for it.
 
 ## Languages
 
@@ -692,140 +1022,6 @@ has stopped — suitable for an external uptime check or a Docker healthcheck.
 
 Both endpoints also obey `allow_ips`, so add the Prometheus server's address
 there if you use an allowlist.
-
-<a id="wg-nqmo"></a>
-
-## Connection quality (WG-NQMO)
-
-WG-NQMO is a separate engine that watches the connection of every WireGuard
-client: the round trip of the WireGuard handshake, upstream packet loss and the
-client MTU. It diagnoses what goes wrong and can recommend a client MTU. **The
-engine is not part of this repository and is not published.** Release 1.3.0
-adds only the panel's side of it: hooks that show what the engine reports and
-pass it the panel's own data and the administrator's commands. Without the
-engine they have nothing to show.
-
-**Off by default.** The hooks stay off unless `config.json` has the JSON value
-`true` under `nqmo.enabled`; `"true"`, `1` or a missing key all mean off. While
-they are off:
-
-- the panel reads and writes nothing for the engine;
-- `/api/stats` and `/metrics` answer exactly as they would without the hooks;
-- the six `/api/nqmo/*` routes answer only with an error saying the engine is
-  disabled (`"disabled": true`);
-- the page sends no WG-NQMO request and shows no WG-NQMO section, and the
-  WG-NQMO permission group and alert kind are hidden. Saving a role or the
-  alert settings keeps their stored WG-NQMO values.
-
-**Turning it on.** With the engine installed, add this to `config.json` and
-restart the panel:
-
-```json
-"nqmo": {"enabled": true, "user_iface": "wg0"}
-```
-
-`user_iface` is the WireGuard interface your clients connect to; the panel
-reports its MTU and firewall mark to the engine. The default is `wg1udp`. If no
-interface of that name exists, the panel writes nothing for the engine, so set
-it to your own interface.
-
-**How the panel and the engine talk.** Only through these files; the panel
-never imports, starts or stops the engine.
-
-| Path | Direction | Content |
-|---|---|---|
-| `/run/wg-panel/nqmo-meta.json` | panel → engine, every 60 seconds | The clients of every client interface (name, public key, tunnel address, endpoint, last handshake, traffic counters, per-client MTU and speed limit), the outbound tunnels that are on and their health, and `client_mtu`. Mode `0640`, group `wg-nqmo`, directory `0750`. Written only while the group `wg-nqmo` exists, that is, while the engine is installed |
-| `/var/lib/wg-nqmo/state.json` | engine → panel, every 60 seconds | The engine's mode, collectors, open diagnoses, per-client summaries and alert outbox. The panel caches it for 10 seconds; a file older than 180 seconds counts as stale |
-| `/run/wg-nqmo/ctl.sock` | panel → engine, on demand | The three commands: acknowledge a diagnosis, run an MTU probe, change the mode. One request per connection, 7-second time-out. The engine accepts only root on this socket |
-| `/opt/wg-panel/nqmo-notified.last` | panel only | The id of the last engine alert the panel sent |
-
-The meta file holds client names, public keys and endpoints (the clients'
-public addresses), so membership of the group `wg-nqmo` is access to them.
-
-**The engine's file is untrusted.** The engine runs as its own unprivileged
-user and the panel as root, so the panel reads `state.json` only as a regular
-file, never through a symbolic link, and only up to 8 MB. It checks the
-document's schema, strips control and bidirectional characters from every
-string and shortens it, keeps only finite numbers, and shows diagnoses and
-series only for clients it knows itself, so a forged file cannot add clients
-or labels.
-
-**In the panel.** Everything below needs the `nqmo.view` permission.
-
-- A **Connection quality** section: the engine's mode and the age of its data,
-  its collectors (OK, failed or off), coverage, database size, global
-  diagnoses and configuration findings; a client table with quality, median
-  round trip, upstream loss, MTU status and open diagnoses; and the last 50
-  events. Network prefixes, ASNs, correlations and full evidence need
-  `nqmo.detail`.
-- Click a client for its 15-minute summary, its diagnoses with their evidence,
-  and recommendations with their reason and limits. The client edit dialog has
-  the same content in a **Quality and MTU (WG-NQMO)** block.
-- The section refreshes every 30 seconds while the browser tab is visible. A
-  number the engine did not report is shown as "—", never as 0.
-- **Acknowledge** needs `nqmo.ack`, the MTU probe needs `nqmo.probe`, and
-  changing the mode needs `nqmo.manage`. Each asks for confirmation and is
-  written to the audit log, accepted or refused.
-- The engine has three modes: **Observation only**, **Diagnostics enabled** and
-  **Recommendations enabled**. The mode moves one step at a time; both the
-  panel and the engine refuse a jump.
-
-| Permission | Allows | Implies |
-|---|---|---|
-| `nqmo.view` | Viewing quality and diagnoses | — |
-| `nqmo.detail` | Prefixes, ASNs and full evidence | `nqmo.view` |
-| `nqmo.ack` | Acknowledging a diagnosis | `nqmo.view` |
-| `nqmo.probe` | Running a manual MTU probe | `nqmo.view` |
-| `nqmo.manage` | Changing the engine mode | `nqmo.view` |
-
-The built-in `viewer` role gets none of them.
-
-**Telegram alerts.** With the hooks on, a twelfth alert kind, `nqmo`
-("Network quality engine diagnoses (WG-NQMO)"), appears under `alerts.events`.
-The panel forwards the engine's alert outbox: a diagnosis opened, escalated or
-cleared, in the panel's own texts in all four languages. Deduplication,
-cool-downs and the hourly limit are the engine's; the panel sends at most 6
-messages per 30-second check. On the first run, and after the engine's
-database was rebuilt, only events younger than 180 seconds are sent, so
-switching on does not flood the chat with history. A diagnosis that closed
-because data ran out gets its own ⚪ message and is not reported as fixed.
-Low-severity and digest entries are never sent.
-
-**API.** All six routes are `POST` with a JSON body, like the rest of the
-panel:
-
-| Route | Permission | Input | Answer |
-|---|---|---|---|
-| `/api/nqmo/status` | `nqmo.view` | — | Mode, collectors, coverage, database, global diagnoses, configuration findings, and a summary of every client the panel knows |
-| `/api/nqmo/peer` | `nqmo.view` | `name`, optional `iface` | One client: summary, diagnoses and recommendations |
-| `/api/nqmo/events` | `nqmo.view` | `since` (0 or more), `limit` (1 to 200) | Outbox events after `since`, oldest first |
-| `/api/nqmo/ack` | `nqmo.ack` | `id` | Acknowledges a diagnosis |
-| `/api/nqmo/probe` | `nqmo.probe` | `name`, optional `iface` | Asks the engine for an MTU probe |
-| `/api/nqmo/mode` | `nqmo.manage` | optional `to` | Without `to`, the current mode; with `to`, a move of one step |
-
-**Prometheus.** With the hooks on, `/metrics` adds:
-
-- `wg_nqmo_up`, `wg_nqmo_state_age_seconds`, `wg_nqmo_mode{mode}`,
-  `wg_nqmo_collector_ok{collector}`, `wg_nqmo_diagnoses_open{class}`,
-  `wg_nqmo_peers`, `wg_nqmo_active_peers`, `wg_nqmo_recent_errors`,
-  `wg_nqmo_store_bytes` and `wg_nqmo_store_read_only`;
-- per client, with the same `iface` and `name` labels as `wg_peer_*`:
-  `wg_nqmo_peer_quality_state` (−1 not enough data, 0 OK, 1 low, 2 medium,
-  3 high; absent in observation-only mode); `wg_nqmo_peer_rtt_seconds`,
-  `wg_nqmo_peer_rtt_min_seconds` and `wg_nqmo_peer_rtt_samples` (15-minute
-  window, at least 5 samples); `wg_nqmo_peer_upstream_loss_ratio` with its
-  Wilson 95% bounds `wg_nqmo_peer_upstream_loss_lower_ratio` and
-  `wg_nqmo_peer_upstream_loss_upper_ratio`, and
-  `wg_nqmo_peer_upstream_loss_judged_packets` (5-minute window, at least 1000
-  judged packets); and `wg_nqmo_peer_mtu_status` (0 undetermined, 1 candidate
-  for testing, 2 estimated, 3 verified).
-
-When the engine's file is missing, unreadable or stale, only `wg_nqmo_up 0` and
-`wg_nqmo_unavailable{why}` appear. A value the engine did not measure is left
-out, never reported as 0.
-
-**Not included.** The engine itself, and a Telegram bot command for it. The
-hooks make no outbound connections.
 
 ## Security
 
