@@ -3,7 +3,8 @@
 # WG-PROXY-PANEL
 
 **用于监控和管理 WireGuard 与 Squid 代理的 Web 面板，以单个文件部署。**<br>
-仅使用 Python 标准库——无需 pip 包，无需构建，支持四种语言。
+仅使用 Python 标准库——无需 pip 包，无需构建，支持四种语言。<br>
+已为 [WG-NQMO](#wg-nqmo) 引擎做好准备：从服务器一侧诊断每个客户端的连接质量（引擎尚未发布）。
 
 [![verify](https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/actions/workflows/verify.yml/badge.svg)](https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/actions/workflows/verify.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -25,6 +26,11 @@ WireGuard 接口的 Web 面板：每个客户端的实时流量、添加和停�
 
 它最初是为一台既没有 Docker 也没有 pip 的服务器开发的，因此部署面板只需复制
 一个文件。
+
+面板还为 **WG-NQMO** 做好了准备。这是一个独立的引擎，用来判断客户端的缓慢或断线来自哪里：
+对方自己的网络、服务器、某条出口隧道、MTU，还是你设置的限速。它从服务器一侧给出答案，并附上
+证据和明确的置信度，客户端设备上不需要安装任何东西。该引擎尚未发布，因此这项支持默认关闭，
+面板没有它也能完整运行。详见[连接质量（WG-NQMO）](#wg-nqmo)。
 
 <p align="center">
   <img src="docs/screenshots/overview.png" width="900"
