@@ -3,7 +3,8 @@
 # WG-PROXY-PANEL
 
 **A web panel for monitoring and managing WireGuard and a Squid proxy, deployed as a single file.**<br>
-Pure Python standard library — no pip packages, no build step, four languages.
+Pure Python standard library — no pip packages, no build step, four languages.<br>
+Ready for the [WG-NQMO](#wg-nqmo) engine: server-side diagnosis of each client's connection quality (the engine is not published yet).
 
 [![verify](https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/actions/workflows/verify.yml/badge.svg)](https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/actions/workflows/verify.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -26,6 +27,13 @@ an advanced Telegram bot, and Prometheus metrics.
 
 It was built for a server with no Docker and no pip, so deploying the panel
 means copying one file.
+
+The panel is also ready for **WG-NQMO**, a separate engine that tells you where a
+client's slowness or dropouts come from: their own network, the server, an outbound
+tunnel, the MTU, or the speed limit you set. It answers from the server side, with the
+evidence and a stated confidence, and nothing is installed on the client. The engine is
+not published yet, so this support is off by default and the panel works fully without
+it. See [Connection quality (WG-NQMO)](#wg-nqmo).
 
 <p align="center">
   <img src="docs/screenshots/overview.png" width="900"

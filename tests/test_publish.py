@@ -224,6 +224,30 @@ class PublishToolingTests(unittest.TestCase):
             self.assertLess(nqmo, body.index("```bash"), pub)     # پیش از نخستین دستورِ نصب
             self.assertGreaterEqual(body[:chart].count("(#wg-nqmo)"), 2, pub)   # فهرست + امکانات
 
+    def test_readme_opening_introduces_wg_nqmo_honestly(self):
+        """خانواده‌ی «بالای صفحه قابلیتی را می‌فروشد که نصبِ عمومی ندارد»: هر چهار زبان
+        WG-NQMO را در سرآیند و مقدمه، پیش از نخستین تصویر، معرفی می‌کنند و هر دو جا
+        می‌گویند موتور منتشر نشده است. اگر موتور روزی منتشر شد، خطِ filelist همین تست
+        را قرمز می‌کند تا این جمله‌ها کهنه نمانند."""
+        self.assertNotRegex(_read(PUB, "filelist.txt"), r"(?m)^nqmo/")
+        facts = {"README.md": ("not published yet", "off by default", "works fully without it"),
+                 "README.fa.md": ("هنوز منتشر نشده", "پیش‌فرض خاموش", "بدونِ آن کامل کار می‌کند"),
+                 "README.ru.md": ("пока не опубликован", "по умолчанию выключена",
+                                  "полностью работает без него"),
+                 "README.zh-CN.md": ("尚未发布", "默认关闭", "没有它也能完整运行")}
+        flat = lambda s: re.sub(r"\s+", " ", s)
+        for pub, src_ in self.READMES.items():
+            body = _read(PUB, src_)
+            end = body.index("</div>")
+            hero, opening = body[:end], flat(body[end:body.index('<p align="center">')])
+            unpublished, off, works = facts[pub]
+            self.assertIn("(#wg-nqmo)", hero, pub)
+            self.assertIn(unpublished, flat(hero), pub)
+            self.assertIn("**WG-NQMO**", opening, pub)
+            self.assertIn("(#wg-nqmo)", opening, pub)
+            for fact in (unpublished, off, works):
+                self.assertIn(fact, opening, pub)
+
     def test_wg_nqmo_vocabularies_are_complete_and_match_the_code(self):
         """هر واژگانِ بسته‌ی بخشِ WG-NQMO با کد و کاتالوگ: نوعِ تازه‌ی تشخیص یا دلیلِ
         تازه بدونِ سند نمی‌ماند، و برچسبی که رابط عوضش کرد در جدول کهنه نمی‌شود."""

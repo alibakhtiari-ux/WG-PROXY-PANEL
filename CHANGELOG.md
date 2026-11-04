@@ -13,6 +13,8 @@ release notes also give the **build id**: the first 12 characters of the SHA-256
 
 ### Changed
 
+- README: the opening of all four languages now introduces WG-NQMO, says what it answers,
+  and states that the engine is not published yet and that the panel works fully without it.
 - README: the *Connection quality (WG-NQMO)* section moved up from near the end of the
   file to right after the feature descriptions, and was rewritten in all four languages.
   It now opens with what the engine is for, explains the modes, every diagnosis, quality

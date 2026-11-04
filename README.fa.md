@@ -3,7 +3,8 @@
 # WG-PROXY-PANEL
 
 **پنلِ تحتِ وب برای پایش و مدیریتِ WireGuard و پروکسیِ Squid، با استقرارِ تک‌فایلی.**<br>
-فقط کتابخانه‌ی استانداردِ پایتون — بدونِ بسته‌ی pip، بدونِ مرحله‌ی build، با چهار زبان.
+فقط کتابخانه‌ی استانداردِ پایتون — بدونِ بسته‌ی pip، بدونِ مرحله‌ی build، با چهار زبان.<br>
+آماده برای موتورِ [WG-NQMO](#wg-nqmo): تشخیصِ کیفیتِ ارتباطِ هر کاربر از سمتِ سرور (موتور هنوز منتشر نشده است).
 
 [![verify](https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/actions/workflows/verify.yml/badge.svg)](https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/actions/workflows/verify.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -28,6 +29,12 @@
 
 این پنل برای سروری ساخته شده که نه Docker دارد نه pip؛ پس نصبِ آن یعنی
 کپی‌کردنِ یک فایل.
+
+پنل برای **WG-NQMO** هم آماده است؛ موتوری جدا که می‌گوید کندی یا قطعیِ هر کاربر از
+کجا می‌آید: شبکه‌ی خودِ او، سرور، یک تونلِ خروجی، MTU، یا محدودیتِ سرعتی که خودتان
+گذاشته‌اید. این پاسخ از سمتِ سرور می‌آید، با شواهد و سطحِ اطمینانِ صریح، و روی دستگاهِ
+کاربر چیزی نصب نمی‌شود. موتور هنوز منتشر نشده است؛ پس این پشتیبانی پیش‌فرض خاموش است و
+پنل بدونِ آن کامل کار می‌کند. جزئیات در [کیفیتِ ارتباط (WG-NQMO)](#wg-nqmo).
 
 <p align="center">
   <img src="docs/screenshots/rtl-fa.png" width="900"
