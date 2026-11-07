@@ -8170,12 +8170,14 @@ def nqmo_ctl(req):
     """یک درخواست به ctl.sock ِ موتور. پاسخ همیشه dict ِ پاک‌شده است:
     {"ok": True, ...} یا {"ok": False, "refused": <کد از NQMO_REFUSALS>}."""
     s = None
+    data = b""
+    connected = False
     try:
         s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         s.settimeout(NQMO_CTL_TIMEOUT)
         s.connect(NQMO_CTL_PATH)
+        connected = True
         s.sendall(json.dumps(req, separators=(",", ":")).encode() + b"\n")
-        data = b""
         while b"\n" not in data:
             chunk = s.recv(4096)
             if not chunk:
@@ -8186,7 +8188,11 @@ def nqmo_ctl(req):
     except socket.timeout:
         return {"ok": False, "refused": "TIMEOUT"}
     except OSError:
-        return {"ok": False, "refused": "UNREACHABLE"}
+        # پس از connect، بستنِ بی‌پاسخِ موتور روی لینوکس ریست است (ECONNRESET/EPIPE،
+        # چون درخواستِ ما خوانده‌نشده مانده) و روی مک EOF؛ هر دو یعنی NO_REPLY ِ پایین
+        if not connected:
+            return {"ok": False, "refused": "UNREACHABLE"}
+        data = b""
     finally:
         if s is not None:
             s.close()

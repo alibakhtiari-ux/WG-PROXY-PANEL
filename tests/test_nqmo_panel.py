@@ -1425,6 +1425,62 @@ class NqmoApiTests(unittest.TestCase):
                                  self.E("api.err.nqmo.bad_id"))
         self.assertEqual(len(e.calls), n_calls)
 
+    def test_a_silent_close_is_no_reply_in_every_platform_shape(self):
+        """The engine closes a non-root caller without a word. macOS hands the
+        client EOF, Linux a reset (our request is still unread), so the 1.4.0 CI
+        saw UNREACHABLE where the Mac saw NO_REPLY. Family guard: whatever error
+        shape arrives after connect, it is NO_REPLY; before connect, UNREACHABLE."""
+        import socket as so
+        from unittest import mock
+        m = self.m
+
+        class Fake:
+            def __init__(self, at=None, err=None, reply=b""):
+                self.at, self.err, self.reply = at, err, reply
+
+            def __call__(self, *a):
+                return self
+
+            def settimeout(self, t):
+                pass
+
+            def close(self):
+                pass
+
+            def _maybe(self, step):
+                if self.at == step:
+                    raise self.err
+
+            def connect(self, p):
+                self._maybe("connect")
+
+            def sendall(self, b):
+                self._maybe("send")
+
+            def recv(self, n):
+                self._maybe("recv")
+                r, self.reply = self.reply, b""
+                return r
+
+        cases = [
+            ("connect", FileNotFoundError(2, "gone"), "UNREACHABLE"),
+            ("connect", ConnectionRefusedError(111, "refused"), "UNREACHABLE"),
+            ("connect", PermissionError(13, "denied"), "UNREACHABLE"),
+            ("connect", so.timeout("slow"), "TIMEOUT"),
+            ("send", BrokenPipeError(32, "pipe"), "NO_REPLY"),
+            ("send", ConnectionResetError(104, "reset"), "NO_REPLY"),
+            ("recv", ConnectionResetError(104, "reset"), "NO_REPLY"),
+            ("recv", so.timeout("slow"), "TIMEOUT"),
+            (None, None, "NO_REPLY"),                    # the macOS shape: plain EOF
+        ]
+        for at, err, want in cases:
+            with self.subTest(at=at, err=type(err).__name__):
+                with mock.patch.object(m.socket, "socket", Fake(at, err)):
+                    self.assertEqual(m.nqmo_ctl({"v": 1, "op": "ping"}),
+                                     {"ok": False, "refused": want})
+        with mock.patch.object(m.socket, "socket", Fake(reply=b'{"ok":true}\n')):
+            self.assertEqual(m.nqmo_ctl({"v": 1, "op": "ping"}), {"ok": True})
+
     def test_mode_moves_one_step_and_both_sides_refuse_a_jump(self):
         e = self.engine(mode="OBSERVATION_ONLY")
         self.assertEqual(self.post("/api/nqmo/mode")[1],

@@ -93,6 +93,11 @@ build id, the same measure of `wg_nqmo.pyz`.
   report, as "Download backup — *". The `*` is no longer shown.
 - On the egress map, the details of the *Users* box listed the number of clients under
   *Total traffic*; the row is now labelled *Users*.
+- WG-NQMO commands on Linux: when the engine closed the connection without replying (the
+  panel is not running as root), the panel reported `UNREACHABLE`, which points at a
+  stopped engine. Linux delivers that close as a reset rather than an end of stream, and
+  the panel treated every socket error the same way. It now reports `NO_REPLY`, as the
+  README describes, and keeps `UNREACHABLE` for a socket it could not connect to.
 
 ## [1.3.0] — 2026-11-01
 
