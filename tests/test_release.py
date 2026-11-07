@@ -66,6 +66,24 @@ class ChangelogTests(unittest.TestCase):
             capture_output=True, text=True, check=True, cwd=ROOT).stdout.strip()
         self.assertIn("`%s`" % bid, out.getvalue())
 
+    def test_notes_carry_the_engine_build_id_and_both_checksum_lists(self):
+        """از 1.4.0 ریلیز موتور را هم دارد؛ یادداشت شناسه‌اش را از سورس می‌سازد
+        (همان قاعده‌ی پنل) و هر دو فهرستِ هش را نام می‌برد."""
+        import subprocess
+        v = re.search(r"^## \[(\d+\.\d+\.\d+)\]", _changelog(), re.M).group(1)
+        out = io.StringIO()
+        with redirect_stdout(out):
+            self.assertEqual(notes.main(["x", "v" + v], _changelog_path()), 0)
+        eid = subprocess.run(
+            ["python3", os.path.join(ROOT, "tools", "build_nqmo_pyz.py"), "--id",
+             "--allow-untracked"],
+            capture_output=True, text=True, check=True, cwd=ROOT).stdout.strip()
+        self.assertEqual(notes.engine_build_id(), eid)
+        text = out.getvalue()
+        self.assertIn("Engine build id: `%s`" % eid, text)
+        self.assertIn("`sha256sum -c SHA256SUMS`", text)
+        self.assertIn("`sha256sum -c SHA256SUMS.nqmo`", text)
+
     def test_build_id_ignores_a_stale_dist_archive(self):
         """شناسه همیشه از سورس ساخته می‌شود، نه از dist/wg_panel.pyz ِ موجود:
         dist ِ محلیِ کهنه پیش از این شناسه‌ی قدیمی چاپ می‌کرد و همین تست را

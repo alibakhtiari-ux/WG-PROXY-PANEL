@@ -6,12 +6,23 @@ All notable changes to WG-PROXY-PANEL are listed here. The format follows
 
 Each release on GitHub attaches `wg_panel.pyz` (the panel), `wg_panel.py` (its launcher),
 `wg-panel.service`, the bundled `qr.js` and three.js files, and a `SHA256SUMS` file. From
-1.4.0 it also attaches `wg_nqmo.pyz` (the WG-NQMO engine) with `deploy/wg-nqmo.service`.
+1.4.0 it also attaches `wg_nqmo.pyz` (the WG-NQMO engine) with `deploy/wg-nqmo.service`,
+checked by their own list, `SHA256SUMS.nqmo`.
 The release notes also give the **build id**: the first 12 characters of the SHA-256 of
 `wg_panel.pyz`, the same value a Docker install prints as its version, and the engine's
 build id, the same measure of `wg_nqmo.pyz`.
 
 ## [Unreleased]
+
+### Fixed
+
+- Releases 1.4.0 and 1.4.1: `SHA256SUMS` also listed the two engine files, which the
+  install steps in the README do not download, so `sha256sum -c SHA256SUMS` stopped with
+  "No such file". Both releases now carry a `SHA256SUMS` for the panel files only and a
+  separate `SHA256SUMS.nqmo` for `wg_nqmo.pyz` and `wg-nqmo.service`; no other file
+  changed. Those two releases had been made by hand. The release workflow now builds
+  and attaches the engine itself and writes both lists, and the release notes give the
+  engine's build id.
 
 ## [1.4.1] — 2026-11-07
 
