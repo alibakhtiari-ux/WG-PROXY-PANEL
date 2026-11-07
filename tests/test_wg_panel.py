@@ -3901,6 +3901,88 @@ class BotTests(unittest.TestCase):
             m.tg_api = orig_api
 
 
+class BotPrivateOnlyTests(unittest.TestCase):
+    """رازِ کاربر (کلیدِ خصوصی، PSK، رمز و لینکِ پروکسی) در چتِ گروهی فرستاده نمی‌شود.
+
+    گاردِ خانوادگی: «چرخشِ کلید» کانفیگِ تازه را بی‌چک می‌فرستاد، در حالی که
+    «کانفیگ/QR» چک داشت (§۲۹٫۱۶۸). هر مسیرِ حاملِ راز این‌جا از همان ورودیِ
+    دکمه‌ها زده می‌شود — از جمله «بله» ای که پس از پرسشِ خصوصی در گروه زده شود —
+    و نه فایل، نه عکس، نه متنِ حاوی راز نباید برود و کلید هم نباید بچرخد."""
+
+    ADMIN = "111"
+    SECRET = "PrivateKey = SECRET_CLIENT_KEY_DO_NOT_LEAK="
+
+    setUp_panel = PanelTestCase.setUp           # فیکسچرِ wgtest، بی‌آنکه تست‌های آن کلاس تکرار شوند
+    tearDown = PanelTestCase.tearDown
+
+    def setUp(self):
+        self.setUp_panel()
+        m = self.m
+        m.CONFIG["bot"] = {"enabled": True, "users": [{"id": self.ADMIN, "role": "admin"}]}
+        path = m._client_conf_path("wgtest", "user02")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("[Interface]\n%s\n" % self.SECRET)
+        self.bot = b = m.TelegramBot()
+        self.texts, self.files = [], []
+        b.send = lambda chat, text, keyboard=None: self.texts.append(text)
+        b._send_fresh = lambda chat, text, keyboard=None: self.texts.append(text)
+        b.send_doc = lambda *a, **k: self.files.append(("doc", a))
+        b.send_photo = lambda *a, **k: self.files.append(("photo", a))
+        self.refusal = b.T("bot.private_only")
+
+    def pubkey(self):
+        return next(x["public_key"] for x in self.m.parse_user_blocks("wgtest")
+                    if x["name"] == "user02")
+
+    def press(self, data, chat_type):
+        self.bot._chat_type = chat_type
+        self.bot._on_action(self.ADMIN, -100 if chat_type != "private" else 7, data)
+
+    def test_every_secret_path_refuses_in_a_group(self):
+        cases = ["wg:conf:wgtest|user02", "wg:key:wgtest|user02", "wg:add",
+                 "px:conf:pxuser", "px:add"]
+        for chat_type in ("group", "supergroup", "channel"):
+            for data in cases:
+                with self.subTest(chat=chat_type, button=data):
+                    self.texts.clear(), self.files.clear()
+                    before = self.pubkey()
+                    self.bot.convo.clear()
+                    self.press(data, chat_type)
+                    self.assertEqual(self.files, [])
+                    self.assertFalse([t for t in self.texts if "SECRET_CLIENT_KEY" in t])
+                    self.assertTrue([t for t in self.texts if self.refusal in t], self.texts)
+                    self.assertNotIn(self.ADMIN, {k for k, v in self.bot.convo.items()
+                                                  if v.get("act") in ("key", "pwd")})
+                    self.assertEqual(self.pubkey(), before)
+
+    def test_a_yes_pressed_in_a_group_after_a_private_question_does_nothing(self):
+        """دفاعِ دوم: پرسش در خصوصی، «بله» در گروه ⇒ نه چرخش، نه ارسال."""
+        for st in ({"flow": "confirm", "kind": "wg", "act": "key",
+                    "iface": "wgtest", "name": "user02"},
+                   {"flow": "confirm", "kind": "px", "act": "pwd", "name": "pxuser"}):
+            with self.subTest(act=st["act"]):
+                self.texts.clear(), self.files.clear()
+                before = self.pubkey()
+                self.bot.convo[self.ADMIN] = dict(st)
+                self.press("ok:yes", "group")
+                self.assertEqual(self.files, [])
+                self.assertTrue([t for t in self.texts if self.refusal in t], self.texts)
+                self.assertEqual(self.pubkey(), before)
+
+    def test_the_same_paths_work_in_a_private_chat(self):
+        """کنترلِ مثبت: بدونِ این، گاردِ بالا با شکستنِ کلِ مسیر هم سبز می‌ماند."""
+        self.press("wg:conf:wgtest|user02", "private")
+        self.assertTrue(self.files)
+        self.files.clear()
+        before = self.pubkey()
+        self.press("wg:key:wgtest|user02", "private")
+        self.assertEqual(self.bot.convo[self.ADMIN]["act"], "key")
+        self.press("ok:yes", "private")
+        self.assertNotEqual(self.pubkey(), before)
+        self.assertEqual([k for k, _ in self.files], ["doc"])
+
+
 class WarpAutodetectStateTests(unittest.TestCase):
     """خواندنِ نتیجه‌ی کشفِ خودکار — سرویسی بیرون از پنل که فهرستِ مقصدها را
     خودش تغییر می‌دهد، پس پنل/ربات باید بتواند بی‌سروصدا نبودنش را تحمل کند

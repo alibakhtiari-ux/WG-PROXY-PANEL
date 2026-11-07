@@ -31,7 +31,8 @@ SHOTS = {"overview.png": 2400, "client-chart.png": 2400, "heatmap.png": 2400,
          "share-mobile.png": 780, "telegram-chart.png": 900,
          "egress-map.png": 2400, "egress-map-fa.png": 2400, "user-trace.png": 2400,
          "event-timeline.png": 2400, "event-center.png": 2400,
-         "command-palette.png": 2400, "mobile-cards.png": 780}
+         "command-palette.png": 2400, "mobile-cards.png": 780,
+         "nqmo-quality.png": 2400, "nqmo-peer.png": 1120}
 # کارپوشه‌های Excel ِ همان اجرا — برای تصویرِ excel-*.png که از خودِ Excel گرفته می‌شود
 REPORTS = ("report-en.xlsx", "report-fa.xlsx")
 # پیش‌نمایشِ مخزن: گرادیان دارد و ۲۵۶ رنگ آن را نواری می‌کند، پس فشرده

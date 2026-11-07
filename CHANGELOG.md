@@ -13,6 +13,29 @@ build id, the same measure of `wg_nqmo.pyz`.
 
 ## [Unreleased]
 
+## [1.4.1] — 2026-11-07
+
+### Fixed
+
+- Telegram bot: rotating a client's key is now refused in a group chat, both when the
+  bot would ask and when the confirmation arrives. The new config, which holds the private
+  key, is only ever sent in a private chat, so a rotation started in a group cut the client
+  off without ever delivering their new config. Every path that sends a config, a key, a
+  proxy link or a password is now covered by one test, in group, supergroup and channel
+  chats.
+
+### Changed
+
+- README, in all four languages: the screenshot gallery is grouped by topic (Map & report,
+  Connection quality, traffic charts, everyday use, clients and phones), shows the
+  egress map, the user trace, the timeline and the Excel sheets, and adds two WG-NQMO
+  screenshots. The Telegram bot section is rewritten to match the bot: it no longer
+  claims a rename the bot does not have, says that proxy users get a link and a QR code,
+  and lists the leak audit, the ECMP guard, the WARP pages, speed test charts, the
+  periodic chart report, bot user management and `/botwatch`.
+- The demo (`demo/run.py`) writes a WG-NQMO engine state in the engine's own format, so
+  the demo panel shows the Connection quality section with diagnoses and recommendations.
+
 ## [1.4.0] — 2026-11-07
 
 ### Added
@@ -462,7 +485,8 @@ build id, the same measure of `wg_nqmo.pyz`.
 
 First public release.
 
-[Unreleased]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/compare/v1.4.1...HEAD
+[1.4.1]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/compare/v1.2.3...v1.3.0
 [1.2.3]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/compare/v1.2.2...v1.2.3

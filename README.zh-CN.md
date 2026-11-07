@@ -78,6 +78,57 @@ WireGuard 接口的 Web 面板：每个客户端的实时流量、添加和停�
 
 <table>
   <tr>
+    <th colspan="2"><a href="#map-and-report">地图与报告（SvgStudio 和 Excel）</a><br><sub>根据服务器实时状态绘制的 SvgStudio 图表，以及包含同样信息的 Excel 工作簿</sub></th>
+  </tr>
+  <tr>
+    <td colspan="2" valign="top">
+      <a href="docs/screenshots/egress-map.png"><img src="docs/screenshots/egress-map.png" alt="实时出口路径图：用户、WireGuard 入口、路由决策、母隧道和子隧道、WARP 链、AI 出口池、断网保护以及物理上行"></a>
+      <p align="center"><b>实时出口路径图</b><br><sub>数据包离开服务器的每一条路径，按实时健康状况着色；点击任意方框或箭头即可查看其背后的事实</sub></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/user-trace.png"><img src="docs/screenshots/user-trace.png" alt="一次用户追踪，结论是运营商 NAT，侧边抽屉中打开了流量特征"></a>
+      <p align="center"><b>这个用户为什么断线？</b><br><sub>逐步展示一个客户端的路径并给出结论（此处为运营商 NAT），旁边是流量特征</sub></p>
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/event-timeline.png"><img src="docs/screenshots/event-timeline.png" alt="24 小时甘特图：每条隧道一条泳道，带流量色条和一次中断，另有 tunnel-guard、网络质量、AI 路径和审计事件的泳道"></a>
+      <p align="center"><b>隧道与事件时间线</b><br><sub>每条隧道过去 24 小时的状态，包括中断，以及 tunnel-guard、连接质量、AI 路径和审计日志的事件</sub></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/excel-dashboard.png"><img src="docs/screenshots/excel-dashboard.png" alt="Excel 报告的概览工作表，按 Microsoft Excel 中的显示效果呈现"></a>
+      <p align="center"><b>Excel 报告：概览</b><br><sub>关键数字、发现的问题以及指向每张工作表的链接</sub></p>
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/excel-egress.png"><img src="docs/screenshots/excel-egress.png" alt="出口工作表：由可编辑的 Excel 原生形状构成的路径图，下方是节点表格"></a>
+      <p align="center"><b>Excel 报告：出口</b><br><sub>同一张图，由可以移动和编辑的 Excel 原生形状构成</sub></p>
+    </td>
+  </tr>
+</table>
+
+<table>
+  <tr>
+    <th colspan="2"><a href="#wg-nqmo">连接质量（WG-NQMO）</a><br><sub>在服务器端为每台设备得出的诊断，附带证据和明确的置信度</sub></th>
+  </tr>
+  <tr>
+    <td width="68%" valign="top">
+      <a href="docs/screenshots/nqmo-quality.png"><img src="docs/screenshots/nqmo-quality.png" alt="连接质量区块：引擎模式、采集器、引擎开销和覆盖范围，下方是按严重程度排序的全部 WireGuard 设备，含质量、RTT、上行丢包、MTU 状态和未关闭的诊断"></a>
+      <p align="center"><b>所有设备一览</b><br><sub>引擎状态、采集器和开销，以及按严重程度排序的每台设备：质量、RTT、上行丢包、MTU 状态和未关闭的诊断</sub></p>
+    </td>
+    <td width="32%" valign="top">
+      <a href="docs/screenshots/nqmo-peer.png"><img src="docs/screenshots/nqmo-peer.png" alt="单台设备详情：疑似 MTU 问题及其证据，以及两条附带局限说明的建议"></a>
+      <p align="center"><b>单台设备详情</b><br><sub>疑似 MTU 问题及其证据，以及两条待验证的 MTU 建议</sub></p>
+    </td>
+  </tr>
+</table>
+
+<table>
+  <tr>
+    <th colspan="2">流量图表</th>
+  </tr>
+  <tr>
     <td width="50%" valign="top">
       <a href="docs/screenshots/client-chart.png"><img src="docs/screenshots/client-chart.png" alt="单个客户端 30 天流量图，含总量、平均值、峰值、p95 和月底预测"></a>
       <p align="center"><b>客户端流量图</b><br><sub>30 天每日用量，含平均值、峰值、p95、与上一周期的对比以及月底预测</sub></p>
@@ -85,6 +136,22 @@ WireGuard 接口的 Web 面板：每个客户端的实时流量、添加和停�
     <td width="50%" valign="top">
       <a href="docs/screenshots/heatmap.png"><img src="docs/screenshots/heatmap.png" alt="按星期和小时统计的客户端用量热力图"></a>
       <p align="center"><b>星期 × 小时热力图</b><br><sub>客户端何时使用连接，以及最繁忙的时段</sub></p>
+    </td>
+  </tr>
+</table>
+
+<table>
+  <tr>
+    <th colspan="2">日常使用</th>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/event-center.png"><img src="docs/screenshots/event-center.png" alt="事件中心：过去 24 小时的管理员操作、WARP、连接质量和隧道事件"></a>
+      <p align="center"><b>事件中心</b><br><sub>过去 24 小时汇成一个列表：管理员操作、WARP、连接质量和隧道健康状况，重复项会合并</sub></p>
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/command-palette.png"><img src="docs/screenshots/command-palette.png" alt="搜索与命令：与输入文字匹配的客户端、隧道和接口"></a>
+      <p align="center"><b>搜索与命令</b><br><sub>按 <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>K</kbd> 查找客户端、隧道、接口、页面区块或命令</sub></p>
     </td>
   </tr>
   <tr>
@@ -97,6 +164,12 @@ WireGuard 接口的 Web 面板：每个客户端的实时流量、添加和停�
       <p align="center"><b>浅色主题</b><br><sub>深色和浅色主题，可在工具栏中切换</sub></p>
     </td>
   </tr>
+</table>
+
+<table>
+  <tr>
+    <th colspan="2">客户端、Telegram 和手机</th>
+  </tr>
   <tr>
     <td width="50%" valign="top">
       <a href="docs/screenshots/config-qr.png"><img src="docs/screenshots/config-qr.png" alt="客户端的 WireGuard 配置及二维码"></a>
@@ -105,16 +178,6 @@ WireGuard 接口的 Web 面板：每个客户端的实时流量、添加和停�
     <td width="50%" valign="top">
       <a href="docs/screenshots/telegram-chart.png"><img src="docs/screenshots/telegram-chart.png" alt="Telegram 机器人绘制的 PNG 流量图"></a>
       <p align="center"><b>Telegram 机器人生成的图表</b><br><sub>机器人用纯 Python 自行绘制 PNG</sub></p>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" valign="top">
-      <a href="docs/screenshots/event-center.png"><img src="docs/screenshots/event-center.png" alt="事件中心：过去 24 小时的管理员操作、WARP、连接质量和隧道事件"></a>
-      <p align="center"><b>事件中心</b><br><sub>过去 24 小时汇成一个列表：管理员操作、WARP、连接质量和隧道健康状况，重复项会合并</sub></p>
-    </td>
-    <td width="50%" valign="top">
-      <a href="docs/screenshots/command-palette.png"><img src="docs/screenshots/command-palette.png" alt="搜索与命令：与输入文字匹配的客户端、隧道和接口"></a>
-      <p align="center"><b>搜索与命令</b><br><sub>按 <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>K</kbd> 查找客户端、隧道、接口、页面区块或命令</sub></p>
     </td>
   </tr>
   <tr>
@@ -129,12 +192,11 @@ WireGuard 接口的 Web 面板：每个客户端的实时流量、添加和停�
   </tr>
 </table>
 
-<p align="center"><sub>出口路径图、用户追踪、时间线和 Excel 报告的截图见<a href="#map-and-report">地图与报告</a>。</sub></p>
-
 > [!NOTE]
 > 这些截图取自一个真实运行、但填充了**虚构数据**的面板：虚构的客户端名称、
 > 生成的密钥、示例域名 `vpn.example.com`，以及 RFC 5737 文档保留网段中的 IP
-> 地址。其中不包含任何真实的服务器、用户或密钥。除两张 Excel 截图外，所有截图都
+> 地址。连接质量的数据同样是虚构的：演示程序按 WG-NQMO 引擎自己的状态格式写入。
+> 其中不包含任何真实的服务器、用户或密钥。除两张 Excel 截图外，所有截图都
 > 可以用 `python3 demo/screenshots.py` 重新生成；那两张是在 Microsoft Excel 中截取的。
 
 <a id="features"></a>
@@ -182,20 +244,37 @@ WireGuard 接口的 Web 面板：每个客户端的实时流量、添加和停�
 ### 高级 Telegram 机器人
 
 机器人运行在面板进程内部，无需额外服务。它是管理服务器的第二条完整途径——
-不需要 SSH，也不需要浏览器：
+不需要 SSH，也不需要浏览器。每位机器人用户只能看到其角色允许的按钮。
 
-- **18 条命令**（其中 `/botwatch` 仅限所有者使用）和按钮菜单：创建、查看、
-  重命名、启用/停用和删除 WireGuard 客户端及代理用户；设置**配额**和**限速**；发送**配置文件**和**二维码**
+- **18 条命令**（其中 `/botwatch` 仅限所有者使用）和按钮菜单。命令列表以每位
+  用户自己的语言显示，语言用 `/lang` 选择
+- **WireGuard 客户端**：分步创建（可选预共享密钥、月度配额、总量上限、限速和
+  到期日），之后可以续期、修改配额或限速、启用或停用、更换密钥和删除。机器人
+  会发送**配置文件**、**二维码**以及一点即可复制的配置文本
+- **代理用户**：创建带密码的用户，或不设密码、只允许指定来源地址的用户，协议
+  可选 HTTP、HTTPS 或两者；查看每个用户访问的网站；设置新密码；获取完整的代理
+  链接及其二维码
+- 每项修改执行前都需要确认，并记入审计日志
 - **以图片形式发送图表**——机器人自己绘制 PNG（纯 Python，不依赖图像库）：
   客户端流量（24 小时 / 7 天 / 30 天 / 6 个月）、代理流量和测速结果，并在说明
   中附上总量、平均值和峰值
-- 在线用户、搜索、按到期时间和按用量排序的报告、备份状态、测速，以及每日或
-  每周摘要
-- **11 类告警**：出口隧道断开/恢复、达到配额、账户即将到期、CPU/RAM/磁盘占用
-  过高、swap 使用、多次登录失败、备份上传失败、网速下降、面板重启等
+- **服务器与网络**：出口隧道及其真实健康状况、服务器负载、DNS 和 IPv6 泄漏
+  检查、ECMP 守护，以及 WARP 路由的路径质量、事件、端点排名、按客户端统计的
+  AI 流量和自动发现新增的内容
+- 在线用户、搜索、按到期时间和按用量排序的列表、每个接口最近一次测速，以及带
+  SHA-256 校验值的备份状态
+- 每日或每周的文字摘要；另有每日或每周的图表报告，包含三张图：7 天 WAN 流量、
+  用量最多的 5 个客户端和测速趋势
+- **11 类告警**：出口隧道断开或恢复、失效隧道被移出 ECMP 或重新加入、WARP
+  故障、达到配额、账户即将到期、CPU、RAM 或磁盘持续过高、swap 使用、多次登录
+  失败、备份上传失败、网速下降和面板重启。启用 [WG-NQMO](#wg-nqmo) 引擎后还有
+  第十二类：引擎的诊断。DNS 和 IPv6 泄漏也会报告
 - 在 Telegram 中一键**批准面板登录**（可选）
-- 机器人用户的角色（`owner`、`admin`、`viewer`），每位用户可使用不同语言
-  （`/lang`）
+- **机器人用户与角色**：`owner`、`admin`、`viewer` 或面板中的任意自定义角色。
+  机器人用户可以在机器人内部管理，任何人都不能授予比自己权限更大的角色。只有
+  所有者可以开关 ECMP 守护、添加 WARP 目标以及打开 `/botwatch`，后者显示所有
+  用户在机器人和网页面板中的操作，最长六个月
+- 配置、密钥、代理链接和密码只在私聊中发送；在群组中机器人不会发送
 
 ### 其他功能
 

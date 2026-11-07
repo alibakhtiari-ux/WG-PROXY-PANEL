@@ -80,6 +80,57 @@ and the panel works fully without it. See [Connection quality (WG-NQMO)](#wg-nqm
 
 <table>
   <tr>
+    <th colspan="2"><a href="#map-and-report">Map &amp; report</a><br><sub>SvgStudio diagrams drawn from the server's live state, and the same facts as an Excel workbook</sub></th>
+  </tr>
+  <tr>
+    <td colspan="2" valign="top">
+      <a href="docs/screenshots/egress-map.png"><img src="docs/screenshots/egress-map.png" alt="The live egress path map: users, the WireGuard ingress, the route decision, mother and nested tunnels, the WARP chain, the AI egress pool, the kill switch and the physical uplink"></a>
+      <p align="center"><b>Live egress map</b><br><sub>Every way a packet can leave the server, coloured by live health; click any box or arrow for the facts behind it</sub></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/user-trace.png"><img src="docs/screenshots/user-trace.png" alt="A user trace ending in the Carrier NAT verdict, with the traffic signature open in the side drawer"></a>
+      <p align="center"><b>Why is this user disconnected?</b><br><sub>One client's path step by step, ending in a verdict, here Carrier NAT, with the traffic signature beside it</sub></p>
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/event-timeline.png"><img src="docs/screenshots/event-timeline.png" alt="A 24-hour Gantt chart: one lane per tunnel with traffic bars and an outage, and lanes for tunnel-guard, network quality, AI path and audit events"></a>
+      <p align="center"><b>Tunnel and event timeline</b><br><sub>The last 24 hours of every tunnel, with outages and the events of tunnel-guard, connection quality, the AI path and the audit log</sub></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/excel-dashboard.png"><img src="docs/screenshots/excel-dashboard.png" alt="The Dashboard sheet of the Excel report, as rendered by Microsoft Excel"></a>
+      <p align="center"><b>Excel report: Dashboard</b><br><sub>Key figures, findings and a link to every sheet</sub></p>
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/excel-egress.png"><img src="docs/screenshots/excel-egress.png" alt="The Egress sheet: the egress map as native, editable Excel shapes above the table of its nodes"></a>
+      <p align="center"><b>Excel report: Egress</b><br><sub>The same map as native Excel shapes you can move and edit</sub></p>
+    </td>
+  </tr>
+</table>
+
+<table>
+  <tr>
+    <th colspan="2"><a href="#wg-nqmo">Connection quality (WG-NQMO)</a><br><sub>Per-device diagnoses with their evidence and a stated confidence, worked out on the server</sub></th>
+  </tr>
+  <tr>
+    <td width="68%" valign="top">
+      <a href="docs/screenshots/nqmo-quality.png"><img src="docs/screenshots/nqmo-quality.png" alt="The Connection quality section: engine mode, collectors, engine cost and coverage, then every WireGuard device sorted by severity with its quality, RTT, upstream packet loss, MTU status and open diagnoses"></a>
+      <p align="center"><b>Every device at a glance</b><br><sub>Engine state, collectors and cost, then each device sorted by severity: quality, RTT, upstream loss, MTU status and open diagnoses</sub></p>
+    </td>
+    <td width="32%" valign="top">
+      <a href="docs/screenshots/nqmo-peer.png"><img src="docs/screenshots/nqmo-peer.png" alt="One device in detail: a suspected MTU problem with its evidence, and two recommendations with their limitations"></a>
+      <p align="center"><b>One device in detail</b><br><sub>A suspected MTU problem with its evidence, and two MTU recommendations to test</sub></p>
+    </td>
+  </tr>
+</table>
+
+<table>
+  <tr>
+    <th colspan="2">Traffic charts</th>
+  </tr>
+  <tr>
     <td width="50%" valign="top">
       <a href="docs/screenshots/client-chart.png"><img src="docs/screenshots/client-chart.png" alt="30-day traffic chart of one client, with totals, average, peak, p95 and a month-end forecast"></a>
       <p align="center"><b>Per-client traffic chart</b><br><sub>30 days of daily usage with average, peak, p95, change against the previous range and a month-end forecast</sub></p>
@@ -87,6 +138,22 @@ and the panel works fully without it. See [Connection quality (WG-NQMO)](#wg-nqm
     <td width="50%" valign="top">
       <a href="docs/screenshots/heatmap.png"><img src="docs/screenshots/heatmap.png" alt="Heat map of a client's usage by weekday and hour"></a>
       <p align="center"><b>Weekday × hour heat map</b><br><sub>When a client uses the connection, and its busiest hour</sub></p>
+    </td>
+  </tr>
+</table>
+
+<table>
+  <tr>
+    <th colspan="2">Everyday use</th>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/event-center.png"><img src="docs/screenshots/event-center.png" alt="The event center: the last 24 hours of admin actions, WARP, connection quality and tunnel events"></a>
+      <p align="center"><b>Event center</b><br><sub>The last 24 hours in one list: admin actions, WARP, connection quality and tunnel health, with repeats merged</sub></p>
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/command-palette.png"><img src="docs/screenshots/command-palette.png" alt="Search and commands: clients, tunnels and interfaces that match the typed text"></a>
+      <p align="center"><b>Search and commands</b><br><sub><kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>K</kbd> finds a client, tunnel, interface, section or command</sub></p>
     </td>
   </tr>
   <tr>
@@ -99,6 +166,12 @@ and the panel works fully without it. See [Connection quality (WG-NQMO)](#wg-nqm
       <p align="center"><b>Light theme</b><br><sub>Dark and light themes, switched from the toolbar</sub></p>
     </td>
   </tr>
+</table>
+
+<table>
+  <tr>
+    <th colspan="2">Clients, Telegram and phones</th>
+  </tr>
   <tr>
     <td width="50%" valign="top">
       <a href="docs/screenshots/config-qr.png"><img src="docs/screenshots/config-qr.png" alt="A client's WireGuard config with its QR code"></a>
@@ -107,16 +180,6 @@ and the panel works fully without it. See [Connection quality (WG-NQMO)](#wg-nqm
     <td width="50%" valign="top">
       <a href="docs/screenshots/telegram-chart.png"><img src="docs/screenshots/telegram-chart.png" alt="A traffic chart drawn as a PNG image by the Telegram bot"></a>
       <p align="center"><b>Chart from the Telegram bot</b><br><sub>The bot draws the PNG itself, in pure Python</sub></p>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" valign="top">
-      <a href="docs/screenshots/event-center.png"><img src="docs/screenshots/event-center.png" alt="The event center: the last 24 hours of admin actions, WARP, connection quality and tunnel events"></a>
-      <p align="center"><b>Event center</b><br><sub>The last 24 hours in one list: admin actions, WARP, connection quality and tunnel health, with repeats merged</sub></p>
-    </td>
-    <td width="50%" valign="top">
-      <a href="docs/screenshots/command-palette.png"><img src="docs/screenshots/command-palette.png" alt="Search and commands: clients, tunnels and interfaces that match the typed text"></a>
-      <p align="center"><b>Search and commands</b><br><sub><kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>K</kbd> finds a client, tunnel, interface, section or command</sub></p>
     </td>
   </tr>
   <tr>
@@ -131,13 +194,13 @@ and the panel works fully without it. See [Connection quality (WG-NQMO)](#wg-nqm
   </tr>
 </table>
 
-<p align="center"><sub>The egress map, the user trace, the timeline and the Excel report are pictured in <a href="#map-and-report">Map &amp; report</a>.</sub></p>
-
 > [!NOTE]
 > The screenshots were taken from a real running panel filled with **synthetic
 > data**: made-up client names, generated keys, the example domain
 > `vpn.example.com`, and IP addresses from the RFC 5737 documentation ranges.
-> No real server, user or key appears in them. `python3 demo/screenshots.py`
+> The connection quality figures are made up as well: the demo writes them in
+> the WG-NQMO engine's own state format. No real server, user or key appears in
+> them. `python3 demo/screenshots.py`
 > regenerates all of them except the two Excel images, which are taken from
 > Microsoft Excel itself.
 
@@ -194,23 +257,47 @@ See [Map & report](#map-and-report) for the details.
 ### Advanced Telegram bot
 
 The bot runs inside the panel process, so it needs no extra service. It is a
-complete second way to manage the server — no SSH, no browser:
+complete second way to manage the server — no SSH, no browser. Each bot user
+sees only the buttons their role allows.
 
 - **18 commands** (one of them, `/botwatch`, only for the owner) and a button
-  menu: create, show, rename, enable/disable and
-  delete WireGuard clients and proxy users; set **quotas** and **speed
-  limits**; send the **config file** and the **QR code**
+  menu. Each user gets the command list in their own language, chosen with
+  `/lang`
+- **WireGuard clients**: create one step by step (an optional preshared key, a
+  monthly quota, a lifetime cap, a speed limit and an expiry date), then renew
+  it, change its quota or speed limit, enable or disable it, rotate its key or
+  delete it. The bot sends the **config file**, the **QR code** and the config
+  as text that copies with one tap
+- **Proxy users**: create one with a password, or without one and limited to
+  allowed source addresses, for HTTP, HTTPS or both; see the sites each user
+  reaches; set a new password; get the full proxy link with its QR code
+- Every change asks for confirmation first and is written to the audit log
 - **Charts as images** — the bot draws the PNG itself (pure Python, no image
   library) for client traffic (24 hours / 7 days / 30 days / 6 months), proxy
   traffic and speed tests, with totals, averages and peaks in the caption
-- Online users, search, reports sorted by expiry and by usage, backup status,
-  speed test, and a daily or weekly summary
-- **11 kinds of alerts**: egress tunnel down/up, quota reached, accounts about
-  to expire, high CPU/RAM/disk, swap use, repeated failed logins, failed
-  backup upload, speed drop, panel restart, and more
+- **Server and network**: egress tunnels with their real health, server load,
+  a DNS and IPv6 leak audit, the ECMP guard, and WARP routing with path
+  quality, events, endpoint ranking, AI traffic per client and what automatic
+  discovery has added
+- Online users, search, lists sorted by expiry and by usage, the last speed
+  test of each interface, and backup status with SHA-256 checksums
+- A daily or weekly text digest and, separately, a daily or weekly report of
+  three charts: WAN traffic over 7 days, the top 5 clients and the speed test
+  trend
+- **11 kinds of alerts**: egress tunnel down or back up, a dead tunnel taken
+  out of ECMP or restored, WARP problems, quota reached, accounts about to
+  expire, sustained high CPU, RAM or disk, swap use, repeated failed logins,
+  failed backup upload, speed drop and panel restart. With the
+  [WG-NQMO](#wg-nqmo) engine on, there is a twelfth: its diagnoses. DNS and
+  IPv6 leaks are reported as well
 - **Approve panel logins** with one tap in Telegram (optional)
-- Roles for bot users (`owner`, `admin`, `viewer`), and a separate language
-  for every user (`/lang`)
+- **Bot users and roles**: `owner`, `admin`, `viewer` or any custom panel role.
+  Bot users are managed from the bot itself, and nobody can grant a role with
+  more rights than their own. Only the owner can switch the ECMP guard, add a
+  WARP target and open `/botwatch`, which shows what every user did, in the bot
+  and in the web panel, for up to six months
+- Configs, keys, proxy links and passwords are sent only in a private chat; in
+  a group the bot refuses
 
 ### More features
 

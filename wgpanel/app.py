@@ -12204,6 +12204,9 @@ class TelegramBot(threading.Thread):
                  "iface": iface, "name": name, "val": newv},
                 self.T('bot.wg_action.6', p0=self.T('bot.px_show.1') if newv else self.T('bot.px_show.2'), p1=name))
         elif act == "key" and "wg.edit" in p:
+            # کانفیگِ تازه کلیدِ خصوصی دارد: در گروه نه پرسیده می‌شود نه اجرا
+            if self._refuse_in_group(chat):
+                return
             iface, _, name = arg.partition("|")
             self._ask_confirm(frm, chat,
                 {"flow": "confirm", "kind": "wg", "act": "key",
@@ -13770,6 +13773,10 @@ class TelegramBot(threading.Thread):
             self.send(chat, (self.T('bot.apply_wg.2', p0=self.T('bot.px_show.1') if st['val'] else self.T('bot.px_show.2'), p1=name)) if ok
                       else self.M(msg), [self._back_row()])
         elif act == "key":
+            # دفاعِ دوم: «بله» ممکن است از چتِ دیگری زده شود. پیش از چرخش، چون
+            # چرخشی که کانفیگش نرسد اتصالِ کاربر را بی‌دلیل قطع می‌کند
+            if self._refuse_in_group(chat):
+                return
             res, err = rotate_peer_key(iface, name)
             if err:
                 self.send(chat, self.M(err), [self._back_row()])
