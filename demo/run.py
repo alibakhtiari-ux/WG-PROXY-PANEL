@@ -96,7 +96,9 @@ def build(state_dir):
            "client_dns": "1.1.1.1, 8.8.8.8", "client_mtu": 1420,
            "server_ifaces": ["wg0"],
            # پروبِ سرویس‌ها DNS و HTTPS ِ واقعی می‌زند — در دمو خاموش
-           "svc_enabled": False}
+           "svc_enabled": False,
+           # بخشِ «کیفیتِ ارتباط»؛ state از nqmo_demo می‌آید، نه از موتورِ واقعی
+           "nqmo": {"enabled": True}}
     with open(os.path.join(panel, "config.json"), "w", encoding="utf-8") as f:
         json.dump(cfg, f, indent=2)
     bin_dir = os.path.join(state_dir, "bin")
@@ -205,6 +207,7 @@ def patch(m):
     m.read_self_rss_mb = lambda: 47.8
 
     topology(m)
+    nqmo_demo(m)
 
     # فقط روی لوکال‌هاست — دمو هرگز نباید از بیرون دیده شود
     server = m.TLSThreadingHTTPServer
@@ -303,17 +306,12 @@ def topology(m):
         now = time.time()
         ev = orig_events(t0, perms, lang)
         extra = [(7.5, "warp", "", "rotate", "info", "warp-guard", "203.0.113.90:2408 -> 203.0.113.91:2408"),
-                 (3.1, "warp", "", "egress", "warn", "warp-guard", "wgs2 -> wgs1"),
-                 (12.4, "nqmo", "", "open", "warn", "bob-desktop", "WARNING 0.82"),
-                 (11.9, "nqmo", "", "close", "ok", "bob-desktop", "WARNING 0.82"),
-                 (2.2, "nqmo", "", "open", "bad", "office-nas", "CRITICAL 0.91"),
-                 (1.8, "nqmo", "", "close", "ok", "office-nas", "CRITICAL 0.91")]
+                 (3.1, "warp", "", "egress", "warn", "warp-guard", "wgs2 -> wgs1")]
         for h, src, subj, a, sev, actor, det in extra:
             ts = now - h * 3600
             if ts < t0:
                 continue
-            title = {"warp": lambda: m._t_or("ui.warpev." + a, a, lang),
-                     "nqmo": lambda: "%s · %s" % (m._t_or("ui.nqmo.cls.PACKET_LOSS", "PACKET_LOSS", lang), a)}[src]()
+            title = m._t_or("ui.warpev." + a, a, lang)     # nqmo از notify_outbox ِ nqmo_demo
             ev.append({"ts": ts, "src": src, "subject": subj, "action": a, "title": title,
                        "actor": actor, "detail": det, "sev": sev})
         return ev
@@ -346,6 +344,146 @@ def topology(m):
     m.viz_egress_facts, m.viz_trace_facts = viz_egress_facts, viz_trace_facts
     m.report_facts = report_facts
     m.guard_events, m.viz_events, m.viz_timeline_facts = guard_events, viz_events, viz_timeline_facts
+
+
+# ── WG-NQMO ِ ساختگی: state.json با همان nqmo.export ِ موتور ────────────────
+# موتورِ واقعی شنودِ AF_PACKET و لینوکس می‌خواهد؛ این‌جا فقط خروجی‌اش ساخته
+# می‌شود. خواننده، پاک‌سازی، API و رندر همان کدِ پنل‌اند. سناریو با بقیه‌ی دمو
+# می‌خواند: NAT_USER داده‌ی کافی ندارد (rx یخ‌زده)، و رویدادهای مرکزِ رویداد و
+# خطِ زمانی از همین notify_outbox می‌آیند.
+# (نام، کیفیت، RTT ِ میانه، RTT ِ کمینه، نمونه‌ها، بسته‌ها، گمشده، وضعیتِ MTU)
+NQMO_PEERS = [
+    ("alice-laptop", "OK", 41.3, 36.8, 18, 48210, 29, "VERIFIED"),
+    ("alice-phone", "OK", 58.2, 47.5, 14, 21730, 22, "UNDETERMINED"),
+    ("bob-desktop", "OK", 44.9, 39.1, 21, 96400, 87, "VERIFIED"),
+    ("carol-ipad", "OK", 63.0, 52.4, 9, 8840, 11, "UNDETERMINED"),
+    (NAT_USER, "INSUFFICIENT", None, None, 0, 0, None, None),
+    ("erin-macbook", "MEDIUM", 186.4, 71.2, 24, 70250, 63, "UNDETERMINED"),
+    ("frank-router", "MEDIUM", 52.7, 44.0, 17, 39120, 41, "CANDIDATE_FOR_TESTING"),
+    ("heidi-iphone", "OK", 49.6, 42.3, 12, 15310, 9, "UNDETERMINED"),
+    ("office-nas", "HIGH", 47.1, 40.6, 16, 61440, 1905, "UNDETERMINED"),
+]
+
+
+def nqmo_demo(m):
+    import threading
+    sys.path.insert(0, ROOT)
+    from nqmo import export as nexport
+    from nqmo import stats as nstats
+    data = os.path.dirname(m.CONFIG_PATH)
+    m.NQMO_STATE_PATH = os.path.join(data, "nqmo-state.json")
+    m.NQMO_META_PATH = os.path.join(data, "nqmo-meta.json")
+    m.NQMO_CTL_PATH = os.path.join(data, "nqmo-ctl.sock")   # بی‌شنونده: دکمه‌ها UNREACHABLE
+
+    def ev(metric, value, source, point, direction, n=None):
+        d = {"metric": metric, "value": value, "source": source, "point": point,
+             "direction": direction}
+        if n is not None:
+            d["n"] = n
+        return d
+
+    def state(now):
+        peers = []
+        for name, q, med, mn, rn, ln, lk, mtu in NQMO_PEERS:
+            p = {"iface": "wg0", "name": name, "window": now - now % 300 - 300,   # پنجره‌ی ۵ دقیقه‌ایِ پنل (NQMO_WINDOW)
+                 "quality": q, "rtt_ms_med": med, "rtt_ms_min": mn, "rtt_n": rn,
+                 "loss_n": ln, "loss_k": lk, "loss_point": None, "loss_lb": None,
+                 "loss_ub": None, "mtu_status": mtu,
+                 "streams": {"S1": "GOOD" if rn else "INVALID", "S2": "GOOD",
+                             "S4": "GOOD" if ln else "INVALID"},
+                 "why": [] if rn else ["NO_HANDSHAKE_PAIRS"]}
+            if ln and lk is not None:
+                lb, ub = nstats.wilson(lk, ln)
+                p.update(loss_point=round(lk / ln, 6), loss_lb=round(lb, 6),
+                         loss_ub=round(ub, 6))
+            peers.append(p)
+        nas = next(p for p in peers if p["name"] == "office-nas")
+        diags = [
+            {"id": 41, "since": now - 2.2 * 3600, "scope": "PEER", "peer": "office-nas",
+             "iface": "wg0", "class": "PACKET_LOSS", "confidence": "HIGH",
+             "last_window_end": now - 60,
+             "evidence": [ev("upstream_loss_wilson_lb", round(nas["loss_lb"], 5),
+                             "AF_PACKET S4 counters", "eth0", "in", nas["loss_n"]),
+                          ev("upstream_loss_point", round(nas["loss_point"], 5),
+                             "AF_PACKET S4", "eth0", "in", nas["loss_n"])],
+             "counter_evidence": [], "alternatives": ["UDP_INSTABILITY"],
+             "data_quality": "GOOD", "mode": "LIVE", "acked_by": None},
+            {"id": 44, "since": now - 0.9 * 3600, "scope": "PEER", "peer": "frank-router",
+             "iface": "wg0", "class": "SUSPECTED_MTU_PROBLEM", "confidence": "MEDIUM",
+             "last_window_end": now - 60,
+             "evidence": [ev("first_fragments", 312, "AF_PACKET S2", "eth0", "in"),
+                          ev("first_fragment_len", [1432, 1436], "AF_PACKET S2", "eth0", "in")],
+             "counter_evidence": [], "alternatives": ["SUSPECTED_PMTU_BLACKHOLE"],
+             "data_quality": "GOOD", "mode": "LIVE", "acked_by": None},
+            {"id": 45, "since": now - 0.4 * 3600, "scope": "PEER", "peer": "erin-macbook",
+             "iface": "wg0", "class": "NETWORK_CONGESTION", "confidence": "MEDIUM",
+             "last_window_end": now - 60,
+             "evidence": [ev("rtt_median_ms", 186.4, "AF_PACKET S1 handshake pairs",
+                             "eth0", "both", 24),
+                          ev("baseline_threshold_ms", 96.0, "nqmo baseline", "per peer",
+                             "both", 412)],
+             "counter_evidence": [], "alternatives": ["TRAFFIC_SHAPING_EFFECT"],
+             "data_quality": "GOOD", "mode": "LIVE", "acked_by": None}]
+
+        def box(i, h, sev, kind, name, cls, lv, evidence):
+            return {"id": i, "ts": now - h * 3600, "severity": sev, "key": "PEER:%s:%s" % (name, cls),
+                    "text_key": "nqmo.alert." + kind,
+                    "params": {"class": cls, "scope": "PEER", "peer": name, "iface": "wg0",
+                               "confidence": lv, "stale": False,
+                               "evidence": [{"metric": e["metric"], "value": e["value"]}
+                                            for e in evidence]}}
+        outbox = [box(36, 12.4, "MEDIUM", "open", "bob-desktop", "NETWORK_CONGESTION", "MEDIUM",
+                      [ev("rtt_median_ms", 172.0, "", "", "")]),
+                  box(37, 11.9, "INFO", "cleared", "bob-desktop", "NETWORK_CONGESTION", "MEDIUM", []),
+                  box(41, 2.2, "MEDIUM", "open", "office-nas", "PACKET_LOSS", "MEDIUM",
+                      diags[0]["evidence"]),
+                  box(42, 1.8, "HIGH", "escalated", "office-nas", "PACKET_LOSS", "HIGH",
+                      diags[0]["evidence"]),
+                  box(44, 0.9, "MEDIUM", "open", "frank-router", "SUSPECTED_MTU_PROBLEM", "MEDIUM",
+                      diags[1]["evidence"]),
+                  box(45, 0.4, "MEDIUM", "open", "erin-macbook", "NETWORK_CONGESTION", "MEDIUM",
+                      diags[2]["evidence"])]
+        # همان دو توصیه‌ی nqmo/recommend.py برای SUSPECTED_MTU_PROBLEM با سطحِ MEDIUM:
+        # MTU = F_min − 60 (CANDIDATE، چون ESTIMATED سطحِ HIGH می‌خواهد) و MSS = MTU − 40
+        recs = {"wg0/frank-router": [
+            {"target": "CLIENT_IFACE_MTU", "current_value": 1420, "current_source": "CONFIG",
+             "suggested_value": 1372, "status": "CANDIDATE_FOR_TESTING",
+             "direction_scope": "UPSTREAM",
+             "rationale": ["first fragments of 1432–1436 B: a 1372-byte tunnel packet is "
+                           "delivered unfragmented"],
+             "limitations": ["downstream direction not verified",
+                             "a reassembling middlebox would hide the true limit"]},
+            {"target": "SERVER_PEER_TCP_MSS", "current_value": None, "current_source": "KERNEL",
+             "suggested_value": 1332, "status": "CANDIDATE_FOR_TESTING",
+             "direction_scope": "UPSTREAM",
+             "rationale": ["alternative if the client config cannot be changed"],
+             "limitations": ["fixes TCP only, not UDP/QUIC",
+                             "apply manually via tunnel-ops; never automatic"]}]}
+        coverage = {"capture_enabled": True, "threads": {}, "meta_age_s": 4.2,
+                    "meta_error": None, "peers_total": len(CLIENTS),
+                    "peers_handshake_180s": len([p for p in NQMO_PEERS if p[4]]),
+                    "ambiguous_endpoints": 0, "unmodelled_endpoints": 0,
+                    "last_minute_unmapped": {}, "asn": None,
+                    "loop_ms": {}, "engine": {"cpu_pct": 3.1, "rss_mb": 61.4,
+                                              "cpu_pct_max": 20, "sampling": False}}
+        return nexport.build_state(
+            now, "RECOMMENDATIONS_ENABLED",
+            {"C1_meta": True, "C2_kernel": True, "C3_capture": True}, coverage, [],
+            {"size_mb": 38.7, "read_only": False, "recreated": False},
+            analysis={"diagnoses": diags, "notify_outbox": outbox, "recommendations": recs,
+                      "peers": peers, "advisories": [], "correlations": [],
+                      "groups_eligible": 3, "last_window": now - now % 60 - 60,
+                      "probe": None, "promotion": None})
+
+    def loop():
+        while True:     # هر ۲۰ ثانیه، مثلِ خروجیِ موتور؛ کهنه‌تر از ۱۸۰ ثانیه «stale» می‌شود
+            try:
+                nexport.write_atomic(m.NQMO_STATE_PATH, state(time.time()))
+            except OSError as e:
+                print("demo: nqmo state: %s" % e, flush=True)
+            time.sleep(20)
+    nexport.write_atomic(m.NQMO_STATE_PATH, state(time.time()))
+    threading.Thread(target=loop, name="demo-nqmo", daemon=True).start()
 
 
 def seed(m, state_dir):

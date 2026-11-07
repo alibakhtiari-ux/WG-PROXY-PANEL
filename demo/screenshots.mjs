@@ -117,6 +117,21 @@ try {
   await tr.screenshot({ path: `${OUT}/user-trace.png` });
   await p.keyboard.press('Escape');
   await p.setViewportSize({ width: 1600, height: 1000 });
+  // WG-NQMO: بخشِ «کیفیتِ ارتباط» تا پایانِ جدولِ دستگاه‌ها، و پنجره‌ی یک دستگاه
+  // (state از demo/run.py:nqmo_demo؛ frank-router تشخیصِ MTU و دو توصیه دارد)
+  await p.evaluate(() => secGo('nqmo'));
+  await p.waitForTimeout(2500);
+  const nq = await p.evaluate(() => {
+    const a = document.getElementById('nqmo-admin').getBoundingClientRect();
+    const c = document.getElementById('nqmo-peers-card').getBoundingClientRect();
+    return { top: a.top + scrollY - 12, bottom: c.bottom + scrollY + 12 };
+  });
+  await clip(p, 'nqmo-quality.png', nq.top, nq.bottom);
+  await p.locator('#nqmo-peers a', { hasText: 'frank-router' }).first().click();
+  await p.waitForTimeout(1500);
+  await p.locator('#modal-bg .box').screenshot({ path: `${OUT}/nqmo-peer.png` });
+  await p.keyboard.press('Escape');
+  await p.waitForTimeout(600);
   // مرکزِ رویداد و جست‌وجوی سراسری
   await p.evaluate(() => window.scrollTo(0, 0));
   await p.click('#bell-btn');

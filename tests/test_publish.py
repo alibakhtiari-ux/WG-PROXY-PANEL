@@ -205,6 +205,110 @@ class PublishToolingTests(unittest.TestCase):
             self.assertIn('"%s"' % key, src,
                           "کلیدِ پیکربندیِ README در کد نیست: %s" % key)
 
+    # عنوانِ بخشِ ربات در هر زبان: تا عنوانِ ### ِ بعدی
+    BOT_HEADS = {"README.md": "### Advanced Telegram bot",
+                 "README.fa.md": "### رباتِ تلگرامِ پیشرفته",
+                 "README.ru.md": "### Продвинутый Telegram-бот",
+                 "README.zh-CN.md": "### 高级 Telegram 机器人"}
+
+    def test_bot_section_matches_the_code_in_every_language(self):
+        """خانواده‌ی «فهرستِ قابلیت‌های ربات که از کد عقب می‌ماند یا چیزی می‌گوید که
+        ربات ندارد» (تا 1.4.0: «تغییرِ نام» که ربات ندارد، «فایلِ کانفیگِ پروکسی» که لینک
+        است، و نبودنِ نشتِ DNS، ECMP، صفحه‌های WARP، گزارشِ تصویری و botwatch). هر ادعای
+        بخش به لنگری در کد بسته است، و چهار زبان همان شناسه‌ها و همان تعدادِ بند را دارند."""
+        import collections
+        src = _read(REPO, "wgpanel/app.py")
+        bot = src[src.index("class TelegramBot"):src.index("BOT = TelegramBot()")]
+        # نمودار: ۲۴ ساعت / ۷ روز / ۳۰ روز / ۶ ماه
+        self.assertEqual(re.findall(r'\("(\w+)", "bot\.range\.', bot), ["24h", "7d", "30d", "6m"])
+        # وضعیتِ بکاپ همراه با SHA-256
+        self.assertIn('L.append(self._rtl("sha256:"))', bot)
+        # گزارشِ تصویری: سه نمودار (WAN ِ ۷ روز، ۵ کاربرِ اول، روندِ تستِ سرعت) و off/daily/weekly
+        rep = src[src.index("def build_report_photos"):src.index("def send_periodic_report")]
+        self.assertEqual(rep.count("photos.append("), 3)
+        self.assertIn("reverse=True)[:5]", rep)
+        self.assertRegex(src, r'"mode": .*"off"')
+        # /botwatch فقط برای مالک؛ کاربرانِ ربات از خودِ ربات
+        self.assertIn('own = cmds + [("botwatch", "bot.cmd.botwatch")]', bot)
+        self.assertIn('if cmd in ("/lang", "/language"):', bot)
+        # رازها فقط در چتِ خصوصی: هر راهِ کانفیگ، کلید، لینک و رمز گاردِ گروه دارد
+        for fn in ("def _send_wg_conf", "def _px_conf"):
+            i = bot.index(fn)
+            self.assertIn("self._refuse_in_group(chat)", bot[i:bot.index("\n    def ", i + 1)], fn)
+        self.assertGreaterEqual(bot.count("self._refuse_in_group(chat)"), 9)
+        spans = lambda s: collections.Counter(re.findall(r"`([^`\n]+)`", s))
+        secs = {}
+        for pub, src_ in self.READMES.items():
+            body = _read(PUB, src_)
+            i = body.index(self.BOT_HEADS[pub] + "\n")
+            secs[pub] = body[i:body.index("\n### ", i + 1)]
+        en = secs["README.md"]
+        for phrase in ("renew", "rotate its key", "QR code", "DNS and IPv6 leak",
+                       "ECMP guard", "endpoint ranking", "speed tests", "private chat"):
+            self.assertIn(phrase, en)
+        self.assertNotIn("rename", en.lower())
+        for pub, s in secs.items():
+            self.assertEqual(spans(s), spans(en), "%s: شناسه‌های بخشِ ربات با انگلیسی نمی‌خوانند" % pub)
+            self.assertEqual(len(re.findall(r"^- ", s, re.M)), len(re.findall(r"^- ", en, re.M)), pub)
+            self.assertEqual(s.count("(#wg-nqmo)"), 1, pub)
+
+    @staticmethod
+    def _gallery(body):
+        m = re.search(r"^## (Screenshots|تصاویر|Снимки экрана|截图)$", body, re.M)
+        assert m, "عنوانِ گالری نیست"
+        return body[m.end():body.index("> [!NOTE]", m.end())]
+
+    def test_gallery_is_grouped_and_shows_every_screenshot(self):
+        """خانواده‌ی «تصویری که ساخته می‌شود ولی در گالری نیست» و «گالریِ یک‌جدولی که یک
+        ردیفِ نامتقارن (۶۸/۳۲ ِ WG-NQMO) عرضِ ستون‌های همه‌ی ردیف‌ها را به‌هم می‌زند»: هر
+        گروه جدولِ خودش است با یک سرتیتر، دو گروهِ نخست به بخشِ خودشان لینک می‌دهند، هر
+        تصویرِ docs/screenshots در هر چهار README هست، و ترتیبِ گالری در چهار زبان یکی است
+        (فارسی فقط نقشه‌ی فارسی و نمای انگلیسی را جایگزین می‌کند)."""
+        shots = sorted(f for f in os.listdir(os.path.join(REPO, "docs", "screenshots"))
+                       if f.endswith(".png"))
+        fa_swap = {"egress-map-fa.png": "egress-map.png", "overview.png": "rtl-fa.png"}
+        seqs = {}
+        for pub, src_ in self.READMES.items():
+            body = _read(PUB, src_)
+            for f in shots:
+                self.assertIn("docs/screenshots/" + f, body, "%s: تصویرِ بی‌ارجاع %s" % (pub, f))
+            g = self._gallery(body)
+            tables = re.findall(r"<table>\n(.*?)</table>\n", g, re.S)
+            self.assertEqual((len(tables), g.count("<table>")), (5, 5), pub)
+            heads = []
+            for t in tables:
+                rows = re.findall(r"  <tr>\n(.*?)  </tr>\n", t, re.S)
+                self.assertEqual(rows[0].count("<th"), 1, pub)
+                heads.append(rows[0])
+                for r in rows:
+                    cols = [int(x or 1) for x in re.findall(r'<t[dh](?: colspan="(\d)")?[ >]', r)]
+                    self.assertEqual(sum(cols), 2, "%s: ردیفِ ناقص" % pub)
+            self.assertIn('href="#map-and-report"', heads[0], pub)
+            self.assertIn('href="#wg-nqmo"', heads[1], pub)
+            self.assertNotIn("#map-and-report", g[g.rindex("</table>"):], "%s: خطِ ارجاعِ کهنه" % pub)
+            srcs = re.findall(r'<img src="docs/screenshots/([^"]+)"', g)
+            seqs[pub] = [fa_swap.get(s, s) if pub == "README.fa.md" else s for s in srcs]
+        self.assertEqual(len({tuple(v) for v in seqs.values()}), 1, seqs)
+        for f in ("nqmo-quality.png", "nqmo-peer.png", "egress-map.png", "user-trace.png",
+                  "event-timeline.png", "excel-dashboard.png", "excel-egress.png"):
+            self.assertIn(f, seqs["README.md"])
+
+    def test_demo_screenshots_are_compressed(self):
+        """خانواده‌ی «تصاویرِ دمو بدونِ Pillow ساخته شدند»: screenshots.py در نبودِ Pillow
+        فقط هشدار می‌دهد و PNG ِ خام (دو تا سه برابر، با پهنای ۲×) را جایگزین می‌کند.
+        هر تصویری که دمو می‌سازد باید پالتی (color type 3) و حداکثر به پهنای SHOTS باشد."""
+        import struct
+        shots = dict(re.findall(r'"([a-z0-9-]+\.png)": (\d+)', _read(REPO, "demo/screenshots.py")))
+        listed = sorted(f for f in os.listdir(os.path.join(REPO, "docs", "screenshots"))
+                        if f.endswith(".png") and not f.startswith("excel-"))
+        self.assertEqual(sorted(shots), listed)
+        for f, max_w in shots.items():
+            with open(os.path.join(REPO, "docs", "screenshots", f), "rb") as fh:
+                head = fh.read(26)
+            width, ctype = struct.unpack(">I", head[16:20])[0], head[25]
+            self.assertEqual(ctype, 3, "%s فشرده نیست (Pillow نصب بود؟)" % f)
+            self.assertLessEqual(width, int(max_w), f)
+
     @staticmethod
     def _nqmo_section(body):
         # بخشِ NQMO تا نخستین لنگرِ بعدی: «نقشه و گزارش» (از 1.4.0) یا زبان‌ها
