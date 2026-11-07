@@ -41,6 +41,12 @@ jobs:
           python3 -m py_compile wg_panel.py
           test "$(python3 tools/build_pyz.py --id)" = "$(python3 tools/build_pyz.py --id)"
 
+      - name: build and self-test wg_nqmo.pyz
+        run: |
+          python3 tools/build_nqmo_pyz.py --out dist/wg_nqmo.pyz
+          python3 -I dist/wg_nqmo.pyz --check
+          test "$(python3 tools/build_nqmo_pyz.py --id)" = "$(python3 tools/build_nqmo_pyz.py --id)"
+
       - name: JavaScript syntax
         run: python3 tests/check_js.py
 

@@ -1,0 +1,7 @@
+{
+  "mode": "OBSERVATION_ONLY",
+  "active_probes": false,
+  "capture": {
+    "enabled": false
+  }
+}

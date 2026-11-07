@@ -25,6 +25,8 @@ BLOCKS = ("PAGE_HTML", "SHARE_HTML", "TV3D_JS")
 
 WEB = {"PAGE_HTML": "page.html", "SHARE_HTML": "share.html",
        "TV3D_JS": "tv3d.mjs"}
+# فایل‌های JS ِ مستقلِ صفحه (با <script src> بار می‌شوند، نه درون‌خطی)
+STANDALONE = ("svgstudio.js", "studio.js")
 
 
 def extract(pkg):
@@ -46,6 +48,11 @@ def extract(pkg):
             js = js.replace("__PAYLOAD__", "null").replace(
                 "__SHARE_BOOTSTRAP__", "var _T={},_FA=false;")
             out.append(("%s_%d.js" % (name, i), js))
+    for fn in STANDALONE:
+        path = pkg / "web" / fn
+        if not path.is_file():
+            raise SystemExit("check_js: %s پیدا نشد" % path)
+        out.append((fn, path.read_text(encoding="utf-8")))
     return out
 
 

@@ -1,0 +1,62 @@
+# سورس: deploy/wg-nqmo.service → /etc/systemd/system/wg-nqmo.service
+# طرح: docs/nqmo/01-TO-BE-ARCHITECTURE.md §۶ ؛ گارد: NqmoDeployUnitTests در tests/test_nqmo.py
+[Unit]
+Description=موتورِ کیفیتِ شبکه WG-NQMO (فقط مشاهده)
+After=network-online.target
+# عمداً بدونِ Requires/BindsTo/PartOf به wg-panel یا wg-quick: موتور ناظر است و
+# نه افتادنش باید چیزی را بیندازد، نه چیزی باید منتظرش بماند.
+# StartLimit* جایش [Unit] است؛ در [Service] بی‌صدا نادیده گرفته می‌شود.
+StartLimitIntervalSec=600
+StartLimitBurst=5
+
+[Service]
+Type=notify
+User=wg-nqmo
+Group=wg-nqmo
+ExecStart=/usr/bin/python3 -I /opt/wg-nqmo/wg_nqmo.pyz --run
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=15
+WatchdogSec=90
+TimeoutStopSec=15
+CPUQuota=20%
+MemoryHigh=128M
+MemoryMax=160M
+TasksMax=32
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+OOMScoreAdjust=600
+# بدونِ هیچ capability. گامِ D4 فقط با drop-in ِ جدا CAP_NET_RAW و AF_PACKET می‌دهد؛
+# CAP_NET_ADMIN هرگز، چون خواندنِ کلیدِ خصوصی و PSK با `wg show` همان را می‌خواهد.
+CapabilityBoundingSet=
+AmbientCapabilities=
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictAddressFamilies=AF_UNIX AF_NETLINK AF_INET
+SystemCallFilter=@system-service
+SystemCallArchitectures=native
+UMask=0077
+StateDirectory=wg-nqmo
+StateDirectoryMode=0750
+RuntimeDirectory=wg-nqmo
+RuntimeDirectoryMode=0750
+ConfigurationDirectory=wg-nqmo
+
+[Install]
+WantedBy=multi-user.target

@@ -4,7 +4,7 @@
 
 **用于监控和管理 WireGuard 与 Squid 代理的 Web 面板，以单个文件部署。**<br>
 仅使用 Python 标准库——无需 pip 包，无需构建，支持四种语言。<br>
-已为 [WG-NQMO](#wg-nqmo) 引擎做好准备：从服务器一侧诊断每个客户端的连接质量（引擎尚未发布）。
+随附 [WG-NQMO](#wg-nqmo) 引擎：从服务器一侧诊断每个客户端的连接质量（可选，默认关闭）。
 
 [![verify](https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/actions/workflows/verify.yml/badge.svg)](https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/actions/workflows/verify.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -27,10 +27,15 @@ WireGuard 接口的 Web 面板：每个客户端的实时流量、添加和停�
 它最初是为一台既没有 Docker 也没有 pip 的服务器开发的，因此部署面板只需复制
 一个文件。
 
+有些问题用表格回答不了，于是面板把答案画出来。在**地图与报告**页面里，你能看到一张
+实时地图，显示流量从服务器的哪里出去；一份逐步回答*该用户为何断开？*的追踪；以及一条
+时间线，记录过去一天里隧道都经历了什么。同样的数据也可以下载为 Excel 工作簿。详见
+[地图与报告](#map-and-report)。
+
 面板还为 **WG-NQMO** 做好了准备。这是一个独立的引擎，用来判断客户端的缓慢或断线来自哪里：
 对方自己的网络、服务器、某条出口隧道、MTU，还是你设置的限速。它从服务器一侧给出答案，并附上
-证据和明确的置信度，客户端设备上不需要安装任何东西。该引擎尚未发布，因此这项支持默认关闭，
-面板没有它也能完整运行。详见[连接质量（WG-NQMO）](#wg-nqmo)。
+证据和明确的置信度，客户端设备上不需要安装任何东西。该引擎是在本仓库中的一个独立服务，并且
+是可选的：这项支持默认关闭，面板没有它也能完整运行。详见[连接质量（WG-NQMO）](#wg-nqmo)。
 
 <p align="center">
   <img src="docs/screenshots/overview.png" width="900"
@@ -44,6 +49,7 @@ WireGuard 接口的 Web 面板：每个客户端的实时流量、添加和停�
 - [功能](#features)
 - [图表引擎](#chart-engine)
 - [连接质量（WG-NQMO）](#wg-nqmo)
+- [地图与报告（SvgStudio 和 Excel）](#map-and-report)
 - [语言](#languages)
 - [系统要求](#requirements)
 - [使用 Docker 快速开始](#quick-start-with-docker)
@@ -101,18 +107,35 @@ WireGuard 接口的 Web 面板：每个客户端的实时流量、添加和停�
       <p align="center"><b>Telegram 机器人生成的图表</b><br><sub>机器人用纯 Python 自行绘制 PNG</sub></p>
     </td>
   </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/event-center.png"><img src="docs/screenshots/event-center.png" alt="事件中心：过去 24 小时的管理员操作、WARP、连接质量和隧道事件"></a>
+      <p align="center"><b>事件中心</b><br><sub>过去 24 小时汇成一个列表：管理员操作、WARP、连接质量和隧道健康状况，重复项会合并</sub></p>
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/command-palette.png"><img src="docs/screenshots/command-palette.png" alt="搜索与命令：与输入文字匹配的客户端、隧道和接口"></a>
+      <p align="center"><b>搜索与命令</b><br><sub>按 <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>K</kbd> 查找客户端、隧道、接口、页面区块或命令</sub></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top" align="center">
+      <a href="docs/screenshots/mobile-cards.png"><img src="docs/screenshots/mobile-cards.png" width="260" alt="手机上的面板：客户端表格以卡片形式显示，上方是状态筛选"></a>
+      <p align="center"><b>手机上的面板</b><br><sub>屏幕较窄时，客户端表格会变成卡片，状态筛选位于上方</sub></p>
+    </td>
+    <td width="50%" valign="top" align="center">
+      <a href="docs/screenshots/share-mobile.png"><img src="docs/screenshots/share-mobile.png" width="260" alt="手机上的分享页面：配置、二维码、下载按钮和用量图"></a>
+      <p align="center"><b>手机上的分享页面</b><br><sub>分享链接的接收者看到的内容：配置、二维码、下载按钮以及自己的用量</sub></p>
+    </td>
+  </tr>
 </table>
 
-<p align="center">
-  <a href="docs/screenshots/share-mobile.png"><img src="docs/screenshots/share-mobile.png" width="260" alt="手机上的分享页面：配置、二维码、下载按钮和用量图"></a><br>
-  <b>手机上的分享页面</b><br><sub>分享链接的接收者看到的内容：配置、二维码、下载按钮以及自己的用量</sub>
-</p>
+<p align="center"><sub>出口路径图、用户追踪、时间线和 Excel 报告的截图见<a href="#map-and-report">地图与报告</a>。</sub></p>
 
 > [!NOTE]
 > 这些截图取自一个真实运行、但填充了**虚构数据**的面板：虚构的客户端名称、
 > 生成的密钥、示例域名 `vpn.example.com`，以及 RFC 5737 文档保留网段中的 IP
-> 地址。其中不包含任何真实的服务器、用户或密钥。所有截图都可以用
-> `python3 demo/screenshots.py` 重新生成。
+> 地址。其中不包含任何真实的服务器、用户或密钥。除两张 Excel 截图外，所有截图都
+> 可以用 `python3 demo/screenshots.py` 重新生成；那两张是在 Microsoft Excel 中截取的。
 
 <a id="features"></a>
 
@@ -141,6 +164,20 @@ WireGuard 接口的 Web 面板：每个客户端的实时流量、添加和停�
 - 每个分享页面都有用量图表，让客户端能看到自己的用量
 
 它如何工作、能做什么：[图表引擎](#chart-engine)。
+
+### 地图与报告：流量去了哪里，用户为何断开
+
+- **实时出口路径图**：服务器的所有出口路径，从用户经 WireGuard 入口、路由决策
+  （`ip rule`、ECMP）和隧道到物理上行，还包括 SNI 分流器、AI 出口池、WARP 链和断网
+  保护。颜色表示实时健康状况，点击任意部分即可看到它的事实和依据
+- **该用户为何断开？**：把一个客户端的路径逐步画出来，最后给出结论，例如运营商 NAT
+  已过期、从未连接、离线或出口故障
+- **隧道与事件时间线**：过去 6、24 或 72 小时的甘特图，包含每条隧道的流量和中断、
+  tunnel-guard 的修复，以及 WARP、WG-NQMO 和管理员事件
+- **Excel 报告**：一个覆盖 7、30 或 90 天的 `.xlsx` 文件，最多十张工作表，出口路径图
+  用 Excel 原生形状绘制。客户端地址默认隐藏
+
+详见[地图与报告](#map-and-report)。
 
 ### 高级 Telegram 机器人
 
@@ -180,12 +217,29 @@ WireGuard 接口的 Web 面板：每个客户端的实时流量、添加和停�
 - Squid 代理用户管理——参见 [Squid 代理](#squid-proxy)
 - Cloudflare WARP 状态，以及一个可选的 SNI 分流服务，按目标主机名路由连接
   （这些功能需要本仓库中没有的辅助脚本——参见[局限](#limitations)）
-- 每个客户端的连接质量（往返时间、丢包、MTU）以及诊断和告警，通过尚未发布的独立
+- 每个客户端的连接质量（往返时间、丢包、MTU）以及诊断和告警，通过本仓库中的独立
   WG-NQMO 引擎实现；默认关闭——见[连接质量（WG-NQMO）](#wg-nqmo)
 - 只读的泄漏审计（路由；DNS 和 IPv6 通过 Telegram 机器人）
 - 备份与恢复；每个配置文件在写入前都会自动备份，且写入是原子操作
 - 记录所有操作的审计日志：谁、做了什么、结果如何
-- 电视/信息亭视图，轮播各状态页面，包括一个 3D 网络场景
+- 电视/信息亭视图，轮播各状态页面，包括出口路径图和一个 3D 网络场景
+
+**界面**
+
+- 页面顶部的区块栏带有实时计数；任何区块都可以折叠，也可以一次全部折叠
+- 按 <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>K</kbd> 打开**搜索与命令**：跳转到某个客户端、
+  隧道、接口或区块，或者执行一条命令。<kbd>/</kbd> 跳到当前区块的筛选框，<kbd>?</kbd>
+  列出所有快捷键
+- 铃铛图标后面是**事件中心**：过去 24 小时的管理员操作、WARP 和 WG-NQMO 事件以及
+  隧道健康变化，重复项会合并，还可以用*仅问题*筛选
+- 客户端表格上方有状态筛选（在线、离线、已停用、接近配额、即将到期），每一行都有配额
+  进度条和“剩余天数”标记
+- 所有确认都使用同一种对话框。不可撤回的操作（删除客户端、关闭隧道、从云端恢复备份）
+  要求先输入名称，有未保存修改的表单在关闭前会先询问
+- 启用或停用客户端后，通知里有一个**撤销**按钮，十秒内有效
+- 在手机上，客户端表格会变成卡片
+- “加载中”、“空”和“出错”状态都有*重试*按钮；用键盘操作时有清晰的焦点框，为屏幕
+  阅读器提供播报，系统要求减少动画时也会照做
 
 **访问控制**
 
@@ -199,7 +253,7 @@ WireGuard 接口的 Web 面板：每个客户端的实时流量、添加和停�
 ## 图表引擎
 
 面板里的所有图表都来自一个为本项目从零编写的小型绘图引擎：纯 Canvas 2D，
-约两千行 JavaScript，就写在 `wgpanel/app.py` 里。不用任何图表库，也不依赖 CDN，
+约两千行 JavaScript，写在 `wgpanel/web/page.html` 里。不用任何图表库，也不依赖 CDN，
 所以在无法上网的服务器上同样可用。引擎理解自己绘制的数据：它知道什么是配额、
 客户端何时被停用，以及某条隧道在过去十秒里传输了多少字节。
 
@@ -304,9 +358,9 @@ Telegram 机器人无法运行浏览器，所以面板也会在服务器端用�
 MTU，诊断问题，并可以推荐 MTU。诊断和建议都只是报告：引擎从不自行更改任何设置。
 
 > [!NOTE]
-> **该引擎不属于本仓库，也尚未发布。** 1.3.0 版只加入了面板这一侧：一组钩子，用来显示
-> 引擎报告的内容，并把面板自己的数据和管理员的命令交给引擎。没有引擎，这些钩子就没有
-> 可显示的内容。它们默认关闭，因此没有引擎的面板就像没有这些钩子一样运行。
+> **该引擎是本仓库中一个独立的服务，并且是可选的。** 1.3.0 版加入了面板这一侧：一组钩子，用来
+> 显示引擎报告的内容，并把面板自己的数据和管理员的命令交给引擎。1.4.0 版加入引擎本身，即由
+> `nqmo/` 构建的 `wg_nqmo.pyz`。钩子默认关闭，因此没有引擎的面板就像没有这些钩子一样运行。
 
 ```mermaid
 flowchart LR
@@ -339,6 +393,60 @@ flowchart LR
 
 有三个按钮作用于引擎：诊断上的 **确认**、MTU 探测和模式切换。每个按钮都要求先确认，无论
 被接受还是被拒绝，都会写入历史记录。
+
+### 安装引擎
+
+引擎是一个独立的服务：第二个单文件 `wg_nqmo.pyz`，由本仓库的 `nqmo/` 包构建，以无特权的
+系统用户 `wg-nqmo` 运行。它只需要 Python 3.10 或更新版本，别无依赖；安装在运行面板的同一台
+服务器上，Docker 镜像不包含它。构建、安装并运行自检：
+
+```bash
+python3 tools/build_nqmo_pyz.py --out dist/wg_nqmo.pyz
+sudo useradd --system --user-group --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin wg-nqmo
+sudo install -d -m750 -o root -g wg-nqmo /opt/wg-nqmo
+sudo install -m640 -o root -g wg-nqmo dist/wg_nqmo.pyz /opt/wg-nqmo/wg_nqmo.pyz
+sudo install -d -m755 -o root -g root /etc/wg-nqmo
+sudo install -m640 -o root -g wg-nqmo deploy/wg-nqmo.config.json /etc/wg-nqmo/config.json
+sudo install -m644 -o root -g root deploy/wg-nqmo.service /etc/systemd/system/wg-nqmo.service
+sudo systemctl daemon-reload
+sudo -u wg-nqmo python3 -I /opt/wg-nqmo/wg_nqmo.pyz --check
+sudo systemctl enable --now wg-nqmo
+```
+
+自检会打印 `NQMO_CHECK_OK`；没有它就不要启动服务。然后按下一节所述开启面板的钩子，并确认
+`/metrics` 报告 `wg_nqmo_up 1`。
+
+**默认仅观察，且没有主动诊断。** 随附的 `deploy/wg-nqmo.config.json` 以 **仅观察** 模式启动引擎，
+`active_probes` 关闭，报头捕获也关闭。此状态下引擎读取面板的文件和内核计数器并写出自己的状态文件。
+它不发送任何数据包、不探测任何客户端、不更改任何设置、也不发出任何告警；诊断会被计算并保存，但不显示。
+当你看清它测量了什么之后，再从面板把模式一次一级地往上调。
+
+**报头捕获**（可选）。往返时间、丢包和 MTU 证据来自线路上的 WireGuard 报头，因此需要开启捕获。安装
+drop-in `deploy/wg-nqmo-capture.conf`（只给服务 `CAP_NET_RAW`）和配置
+`deploy/wg-nqmo.capture.config.json`（开启捕获）。引擎只读取 `listen_port` 所指端口上 WireGuard
+数据包的报头；载荷是加密的，永远不会被保存。过滤器是为端口 `53953` 编译的：换用其他端口时，修改
+`tools/gen_nqmo_bpf.py` 中的 `PORT` 并重新生成（需要 `tcpdump`），否则捕获会拒绝启动。永远不要给服务
+`CAP_NET_ADMIN`：有了它，`wg show` 会暴露私钥。
+
+```bash
+sudo install -d -m755 -o root -g root /etc/systemd/system/wg-nqmo.service.d
+sudo install -m644 -o root -g root deploy/wg-nqmo-capture.conf /etc/systemd/system/wg-nqmo.service.d/capture.conf
+sudo install -m640 -o root -g wg-nqmo deploy/wg-nqmo.capture.config.json /etc/wg-nqmo/config.json
+sudo systemctl daemon-reload
+sudo systemctl restart wg-nqmo
+```
+
+**资源配额。** 单元把引擎限制在 `CPUQuota=20%`、`MemoryHigh=128M` 和 `MemoryMax=160M`，并设
+`Nice=10`，使它永远不与数据路径争抢。在繁忙的服务器上开启捕获时这个上限太紧：引擎在关闭分析窗口时会被
+watchdog 杀掉。`deploy/wg-nqmo-resources.conf` 把这三个值提高到 `200%`、`256M` 和 `320M`；把它作为
+`resources.conf` 安装在 `capture.conf` 旁边。引擎只是观察者：它停下来时别的什么都不会停，而
+`systemctl disable --now wg-nqmo` 会把它移出，没有任何需要回退的网络状态。
+
+**指标。** 引擎没有自己的端点。它测量的一切都通过面板的 `/metrics` 以 `wg_nqmo_*` 序列进入
+Prometheus，列表见[参考](#wg-nqmo-reference)。
+
+**每小时复查归档**（可选）。`deploy/wg-nqmo-review.sh` 连同其服务和定时器每小时在
+`/var/lib/wg-nqmo/review` 保存一份压缩的状态文件和一行摘要：只有计数，没有名称、密钥或地址，保留 14 天。
 
 ### 开启和关闭
 
@@ -594,13 +702,167 @@ wg_nqmo_peer_upstream_loss_lower_ratio > 0.01
 
 **未包含：** 引擎本身，以及用于它的 Telegram 机器人命令。
 
+<a id="map-and-report"></a>
+
+## 地图与报告（SvgStudio 和 Excel）
+
+**地图与报告**页面根据服务器的实时状态画出三张图：
+
+1. **实时出口路径图**：此刻流量从服务器的哪里出去
+2. **该用户为何断开？**：一个客户端的路径，一步一步画下来，最后给出结论
+3. **隧道与事件时间线**：过去一天里隧道都经历了什么
+
+同样的数据也可以下载为一个 Excel 工作簿。
+
+<p align="center">
+  <a href="docs/screenshots/egress-map.png"><img src="docs/screenshots/egress-map.png" width="900"
+     alt="实时出口路径图：用户、WireGuard 入口、路由决策、母隧道和子隧道、WARP 链、AI 出口池、断网保护以及物理上行"></a>
+</p>
+
+判断都在服务器上完成。`wgpanel/viz.py` 收集实时事实（内核对 `ip route get` 给出的路由、
+ECMP 成员、握手时长、每两秒采样一次的收发速率），把它们变成图的模型。浏览器只负责
+用 `wgpanel/web/svgstudio.js` 把模型画出来，而这段代码对 WireGuard 一无所知：里面
+没有接口名，也没有翻译。图上的每个名字都来自你自己的服务器，所以不用任何配置，
+这张图就和你的拓扑对得上。
+
+### 实时出口路径图
+
+这张图展示客户端的数据包离开服务器的所有途径：用户、WireGuard 入口、路由决策
+（`ip rule` 和 ECMP）、隧道、物理上行和互联网。如果服务器上有 SNI 分流器、AI 出口池、
+WARP 链和断网保护，它们也会出现在图上。
+
+- 隧道的角色由路由判断，而不是看名字。端点经由物理上行到达的是*母隧道*；端点要经过
+  另一条隧道才能到达的是*子隧道*，画在它的承载隧道旁边。跑在正常承载隧道上的子隧道
+  是一条链，不是路由环路。
+- 颜色表示实时健康状况：健康、故障、关闭、路由、ECMP、AI 路径、用户和外部。被守护程序
+  移出轮换的 ECMP 成员会单独标出。
+- 点击任意方框或箭头，侧边抽屉会列出背后的事实：端点、端点路由所经过的设备、最近一次
+  握手、速率和总量、ECMP 状态，以及流量特征和计算它所用的样本。
+- 可以缩放、拖动、适应窗口、恢复 1:1 或全屏，也可以把图下载为 SVG（嵌入字体或不嵌入）。
+  地图每分钟刷新一次，但在你操作之后的五分钟内，以及抽屉或全屏打开期间，它会保持不动。
+- 这张图也是电视/信息亭视图中的一页，紧排在 3D 场景之前。
+
+<p align="center">
+  <a href="docs/screenshots/egress-map-fa.png"><img src="docs/screenshots/egress-map-fa.png" width="760"
+     alt="同一张出口路径图的波斯语版本，从右向左镜像"></a><br>
+  <sub>在波斯语中，整张图会镜像过来，从右向左阅读。</sub>
+</p>
+
+### 该用户为何断开？
+
+输入客户端名称或从列表中选择，面板会画出一张从设备到互联网的时序图：握手、入口、
+作用于该客户端自身地址的每一个路由决策（默认路由、ECMP 组、AI 路径）、途经的隧道
+以及出口。每一步都附有依据。第一个出问题的步骤就是**结论**，检查顺序和人工排查时的
+顺序一致：
+
+| 结论 | 含义 |
+|---|---|
+| 已自动停用 · 已停用 | 客户端被关掉了：原因是配额、到期或管理员操作 |
+| 从未连接 | 从来没有记录到握手：配置没送到设备上、密钥不对，或者端点不可达 |
+| 运营商 NAT | 收不到任何数据，但服务器仍在发送很小的保活包：用户运营商的 NAT 映射已过期。服务器没有问题，用户重启应用或换个网络即可 |
+| 离线 | 握手很久以前，也没有流量：设备关机了或应用已退出。这很正常 |
+| 出口故障 | 设备能连到服务器，但路径上的某条隧道出了故障。没有隧道权限的角色只能看到结论，看不到隧道细节 |
+| 无路由 | 没有任何路由决策作用于这个客户端的地址 |
+| 正常 | 每一步都正常 |
+
+<p align="center">
+  <a href="docs/screenshots/user-trace.png"><img src="docs/screenshots/user-trace.png" width="900"
+     alt="一次用户追踪，结论是运营商 NAT，侧边抽屉中打开了流量特征"></a>
+</p>
+
+**流量特征**由同样的两秒样本算出。每种特征只有一个固定含义，这样两种看起来相似的
+故障就不会被混为一谈：
+
+| 特征 | 数字说明了什么 |
+|---|---|
+| 运营商 NAT 已过期 | 接收停滞，发送是一股稳定的细流（大约每 5 秒 148 字节），握手很久以前 |
+| 大量发送无接收 | 发出去很多，却什么也没回来：路由环路的典型表现 |
+| 端点失效 | 握手很久以前，服务器仍在重试（针对隧道） |
+| 仅握手 | 握手较新，但收到的只有握手应答 |
+| 从未连接 · 离线 · 已连接，空闲 · 双向流量 · 已停用 · 隧道未启动 | 就是名字所说的意思 |
+
+用*上一步*和*下一步*逐步查看这张图，或者直接点击任意一条消息。这张卡片故意没有下载
+按钮，因为追踪展示的是某一个人未经隐藏的数据。
+
+### 隧道与事件时间线
+
+一张覆盖过去 6、24 或 72 小时的甘特图。每条隧道占一条泳道：有流量的时段显示为按小时
+划分的色条，没有流量的地方是灰色，中断的地方是红色。事件落在它所涉及的隧道的泳道上，
+其他事件各有自己的泳道：
+
+- 面板自身监控发现的隧道和接口变化（断开、恢复、发现并修复的环路）
+- **tunnel-guard** 的操作，从 systemd 日志读取（`journalctl -t tunnel-guard`）：状态
+  变化、修复、已验证的修复、失败的修复以及路由固定。只保留真正的操作，不保留每轮检查
+  的例行输出。没有这个守护脚本时，这条泳道就是空的
+- WARP 事件（端点轮换、出口切换）
+- WG-NQMO 事件，适用于拥有 `nqmo.view` 的角色
+- 审计日志中其他管理员操作，适用于拥有 `audit.view` 的角色
+
+面板的监控和守护程序各自独立地盯着同一批隧道，两者都会形成红色的中断区间。用
+*上一事件*和*下一事件*在事件之间跳转，或者点击某个事件查看详情。
+
+<p align="center">
+  <a href="docs/screenshots/event-timeline.png"><img src="docs/screenshots/event-timeline.png" width="900"
+     alt="24 小时甘特图：每条隧道一条泳道，带流量色条和一次中断，另有 tunnel-guard、网络质量、AI 路径和审计事件的泳道"></a>
+</p>
+
+### Excel 报告
+
+**下载 Excel** 按钮会生成一个覆盖过去 7、30 或 90 天的 `.xlsx` 文件。文件只用标准库
+写成（`wgpanel/xlsx.py`），并且只包含下载者有权查看的工作表：
+
+| 工作表 | 内容 | 所需权限 |
+|---|---|---|
+| 概览 | 关键数字（客户端数、当前在线、本月用量、健康隧道、轮换中的 ECMP 成员、SNI 分流器）、发现的问题，以及指向每张工作表的链接 | — |
+| 用户 | 每个客户端：状态、最近握手、端点、本月 / 所选范围 / 累计流量、配额及使用比例、到期日、限速、备注和流量特征 | `wg.view` |
+| 每日 | 每天的流量和活跃客户端数，以及用量最多的用户和他们所占的份额 | `wg.view` |
+| 隧道 | 每条隧道：角色、承载隧道、端点路由所经过的设备、ECMP 状态、健康状况、特征、速率和总量 | `tun.view` |
+| 出口 | 用 **Excel 原生形状**画出的出口路径图，外加图中节点的表格 | `tun.view` |
+| 事件 | 与时间线相同的事件 | `tun.view` |
+| 审计 | 管理员操作：谁、做了什么、结果如何 | `audit.view` |
+| 测速 | 所选范围内的每一次测速 | `sys.view` |
+| 系统 | 服务器负载：CPU、内存和磁盘 | `sys.view` |
+| 术语表 | 每种状态、特征和结论的含义 | — |
+
+- 波斯语版本的工作表从右向左排列。数字以数字形式保存，可以直接排序、筛选和求和。
+- **客户端的端点地址默认是隐藏的。** 取消勾选*隐藏用户 IP*即可得到完整地址。每次下载都会
+  记入审计日志，连同时间范围以及是否隐藏了地址。
+- 任何文本都按文本写入，绝不会变成公式，所以名为 `=HYPERLINK(…)` 的客户端仍然只是一个
+  名字。日期是真正的 Excel 日期，缺失的值留空，而不是变成零。
+- 已在 Mac 版 Microsoft Excel 中测试，打开时不会提示需要修复。
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/excel-dashboard.png"><img src="docs/screenshots/excel-dashboard.png" alt="Excel 报告的概览工作表，按 Microsoft Excel 中的显示效果呈现"></a>
+      <p align="center"><b>概览工作表</b><br><sub>关键数字、发现的问题以及指向每张工作表的链接</sub></p>
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/excel-egress.png"><img src="docs/screenshots/excel-egress.png" alt="出口工作表：由可编辑的 Excel 原生形状构成的路径图，下方是节点表格"></a>
+      <p align="center"><b>出口工作表</b><br><sub>同一张图，由可以移动和编辑的 Excel 原生形状构成</sub></p>
+    </td>
+  </tr>
+</table>
+
+### 权限与 API
+
+| 地址 | 权限 | 返回内容 |
+|---|---|---|
+| `GET /api/viz/egress` | `tun.view` | 出口路径图的模型 |
+| `GET /api/viz/trace?iface=…&name=…` | `wg.view` | 某个客户端的追踪（不存在该客户端时返回 `404`） |
+| `GET /api/viz/timeline?hours=1…168` | `tun.view` | 时间线的模型 |
+| `GET /api/report.xlsx?days=1…183&mask=0\|1` | `wg.view` | 工作簿；`mask` 默认为 `1` |
+
+拥有 `tun.view` 或 `wg.view` 的角色都能看到这个页面，而每张卡片只在具备相应权限时出现。
+模型是普通的 JSON，因此同一个 `svgstudio.js` 可以在任何地方把它们画出来。
+
 <a id="languages"></a>
 
 ## 语言
 
 面板、审计日志、API 错误信息、Telegram 机器人和 Telegram 告警均提供**英语、
-波斯语、俄语和中文**。翻译直接保存在 `wgpanel/app.py` 中（约两千个键），因此面板
-仍然以单个文件部署。
+波斯语、俄语和中文**。翻译保存在 `wgpanel/i18n/catalog.json` 中（约三千个键），并被
+打包进 `wg_panel.pyz`，因此面板仍然以单个文件部署。
 
 | 位置 | 语言的选择方式 |
 |---|---|
@@ -1016,6 +1278,9 @@ scrape_configs:
   `/usr/local/sbin/awg-ecmp-from-file.sh`、`wgwarp` 接口），缺少这些时保持
   未启用状态。`deploy/cleanup-dead-iface-rules.sh` 中也写有该拓扑的接口名称；
   运行前请先阅读。
+- **地图与报告的部分内容同样依赖这些脚本。** ECMP 组、SNI 分流器、AI 出口池和 WARP
+  链只有在实际存在时才会出现在地图上；时间线中的 *tunnel-guard* 泳道读取的是一个
+  本仓库中没有的守护脚本，没有它，这条泳道就是空的。
 - **波斯语是后备语言。** 如果浏览器请求的语言不在四种语言之列，就会显示波斯语；
   添加一次 `?lang=en`，选择就会保存在 Cookie 中。在设置机器人所有者之前，告警
   使用波斯语。
@@ -1128,8 +1393,9 @@ sudo rm -rf /opt/wg-panel      # config, traffic history and client keys — bac
 
 ## 开发
 
-`wgpanel/app.py` 超过 30,000 行，整个 Web 界面（HTML、CSS 和 JavaScript）都以
-Python 字符串的形式包含在其中。运行测试：
+面板就是 `wgpanel/` 这个包：服务器在 `wgpanel/app.py` 中（约 19,000 行），Web 界面是
+`wgpanel/web/` 中的普通文件，翻译在 `wgpanel/i18n/catalog.json` 中。`tools/build_pyz.py`
+把它们打包成你要部署的那一个文件。运行测试：
 
 ```bash
 python3 -m unittest discover -s tests -v
@@ -1150,15 +1416,18 @@ Docker 构建上下文；测试数据使用 RFC 5737 文档地址。本仓库中
 （skip），因为它们检查的是未在此发布的部署工具。
 
 > [!IMPORTANT]
-> Python 看不到 JavaScript 字符串内部的错误——即使 JavaScript 有错，
-> `py_compile` 依然通过，结果是浏览器中出现空白页。`tests/check_js.py`（CI 也会
+> Python 看不到 `wgpanel/web/` 中 JavaScript 的错误——即使 JavaScript 有错，
+> Python 测试依然通过，结果是浏览器中出现空白页。`tests/check_js.py`（CI 也会
 > 运行）可以发现语法错误；但修改界面后，仍请打开面板并检查浏览器控制台。
 
 **演示模式。** `python3 demo/run.py` 会在 `http://127.0.0.1:8787` 启动面板
 （用户 `admin`，密码 `demo`），使用虚构的客户端、六个月的流量历史和模拟的
 系统工具。它不需要 WireGuard，也不需要 root，并且不会在临时目录之外写入任何
 内容。`python3 demo/screenshots.py` 会重新生成 `docs/screenshots/` 中的所有
-图片；它需要 Node.js 和 Playwright，若已安装 Pillow 还会压缩图片。
+图片；它需要 Node.js 和 Playwright（使用 Playwright 自带的 Chromium，没有时改用
+Google Chrome），若已安装 Pillow 还会压缩图片。加上 `--reports DIR` 还会保存演示数据的
+英文和波斯语 Excel 工作簿；`excel-dashboard.png` 和 `excel-egress.png` 就是用这两个文件
+在 Microsoft Excel 中截取的（*Copy as Picture*）。
 
 <a id="repository-layout"></a>
 
@@ -1166,7 +1435,11 @@ Docker 构建上下文；测试数据使用 RFC 5737 文档地址。本仓库中
 
 | 路径 | 内容 |
 |---|---|
-| `wgpanel/app.py` | 面板源码（主体在 `app.py` 中） |
+| `wgpanel/app.py` | 面板的服务器端：API、权限、后台线程 |
+| `wgpanel/web/` | Web 界面：`page.html`、`share.html`、SvgStudio 引擎（`svgstudio.js`）、3D 场景、字体以及随附的 `svg-pan-zoom` |
+| `wgpanel/viz.py` | 地图与报告背后的模型：出口路径图、用户追踪、时间线 |
+| `wgpanel/report.py` · `wgpanel/xlsx.py` | Excel 报告，以及只用标准库写 `.xlsx` 的模块 |
+| `wgpanel/i18n/catalog.json` | 全部翻译，四种语言 |
 | `wgpanel/__main__.py` | 入口（`python3 -m wgpanel`） |
 | `wgpanel/_check.py` | 归档自检（`wg_panel.pyz --check`） |
 | `tools/build_pyz.py` | `dist/wg_panel.pyz` 的可复现构建 |
@@ -1178,7 +1451,7 @@ Docker 构建上下文；测试数据使用 RFC 5737 文档地址。本仓库中
 | `docs/screenshots/` | README 中使用的截图 |
 | `demo/` | 演示模式与截图生成器 |
 | `CHANGELOG.md` | 各版本的变更 |
-| `fonts/` | Vazirmatn 字体子集的源文件（已内嵌在 `wgpanel/app.py` 中） |
+| `fonts/` | Vazirmatn 字体子集的源文件（子集本身位于 `wgpanel/web/fonts/`） |
 | `qr.js` · `three.*.min.js.gz` | 随附的二维码库和 three.js |
 | `.github/` | CI、发布工作流、issue 和 pull request 模板 |
 | `SECURITY.md` · `CONTRIBUTING.md` | 漏洞报告与贡献指南 |
@@ -1229,3 +1502,4 @@ bc1qjnmmqs5c57shld3ka90vcle4scxhszevehj4y3
 
 - [three.js](https://threejs.org) — MIT（[three.LICENSE.txt](three.LICENSE.txt)）
 - [Vazirmatn](https://github.com/rastikerdar/vazirmatn) — SIL Open Font License 1.1
+- [svg-pan-zoom](https://github.com/ariutta/svg-pan-zoom) 3.6.1 — BSD 2-Clause（[svg-pan-zoom.LICENSE.txt](wgpanel/web/vendor/svg-pan-zoom.LICENSE.txt)）

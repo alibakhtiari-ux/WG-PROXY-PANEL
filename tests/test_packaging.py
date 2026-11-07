@@ -182,7 +182,10 @@ class PackagingTests(unittest.TestCase):
         "wgpanel/i18n/catalog.json", "wgpanel/web/page.html",
         "wgpanel/web/share.html", "wgpanel/web/tv3d.mjs",
         "wgpanel/web/fonts/vazirmatn-400.woff2",
-        "wgpanel/web/fonts/vazirmatn-700.woff2")
+        "wgpanel/web/fonts/vazirmatn-700.woff2",
+        "wgpanel/web/svgstudio.js", "wgpanel/web/svgstudio.css", "wgpanel/web/studio.js",
+        "wgpanel/web/vendor/svg-pan-zoom-3.6.1.min.js",
+        "wgpanel/viz.py", "wgpanel/report.py", "wgpanel/xlsx.py")
 
     def test_archive_carries_the_package_data(self):
         with zipfile.ZipFile(io.BytesIO(B.build_bytes(PKG))) as z:

@@ -7,6 +7,7 @@
 // وزیرمتن را درونِ خودش دارد.
 import { createRequire } from 'node:module';
 import { execSync } from 'node:child_process';
+import { writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 const require = createRequire(import.meta.url);
@@ -58,7 +59,8 @@ async function graphBox(p) {
   });
 }
 
-const browser = await chromium.launch();
+// Chromium ِ خودِ Playwright اگر نصب است؛ وگرنه Chrome ِ نصب‌شده‌ی سیستم
+const browser = await chromium.launch().catch(() => chromium.launch({ channel: 'chrome' }));
 try {
   let p = await page(browser);
   await login(p, 'en');
@@ -85,9 +87,71 @@ try {
   await p.screenshot({ path: `${OUT}/config-qr.png` });
   await p.context().close();
 
+  // SvgStudio: نقشه‌ی مسیرِ خروج، ردگیریِ کاربر و خطِ زمانی — توپولوژی از demo/run.py:topology
+  p = await page(browser);
+  await login(p, 'en');
+  await p.evaluate(() => secGo('viz'));
+  await p.waitForTimeout(4000);
+  await p.locator('#viz-eg-card').screenshot({ path: `${OUT}/egress-map.png` });
+  await p.locator('#viz-tl-card').scrollIntoViewIfNeeded();
+  await p.waitForTimeout(2500);
+  await p.locator('#viz-tl-card').screenshot({ path: `${OUT}/event-timeline.png` });
+  // ردگیری پهن‌تر گرفته می‌شود تا نمودار و کشوی امضا کنارِ هم جا شوند
+  await p.setViewportSize({ width: 2300, height: 1000 });
+  await p.fill('#viz-tr-q', 'dave-android');
+  await p.click('#viz-tr-btn');
+  await p.waitForTimeout(3000);
+  await p.locator('#viz-tr [data-x="s:sig"]').first().click();   // امضای عیب‌یابی در کشو
+  await p.waitForTimeout(1200);
+  const tr = p.locator('#viz-tr-card');
+  await tr.scrollIntoViewIfNeeded();
+  await tr.locator('[data-k="fit"]').first().click();   // Fit کشو را نمی‌بیند: نمودار را از زیرش بیرون بکش
+  await p.waitForTimeout(800);
+  const tb = await tr.boundingBox();
+  await p.mouse.move(tb.x + 354, tb.y + 522);
+  await p.mouse.down();
+  await p.mouse.move(tb.x + 184, tb.y + 522, { steps: 8 });
+  await p.mouse.move(tb.x + 14, tb.y + 522, { steps: 8 });
+  await p.mouse.up();
+  await p.waitForTimeout(800);
+  await tr.screenshot({ path: `${OUT}/user-trace.png` });
+  await p.keyboard.press('Escape');
+  await p.setViewportSize({ width: 1600, height: 1000 });
+  // مرکزِ رویداد و جست‌وجوی سراسری
+  await p.evaluate(() => window.scrollTo(0, 0));
+  await p.click('#bell-btn');
+  await p.waitForTimeout(1500);
+  await p.screenshot({ path: `${OUT}/event-center.png` });
+  await p.keyboard.press('Escape');
+  await p.waitForTimeout(600);
+  await p.keyboard.press('ControlOrMeta+k');
+  await p.waitForTimeout(800);
+  await p.keyboard.type('wg');   // چند گروه با هم: بخش، کاربر، تونل، اینترفیس
+  await p.waitForTimeout(800);
+  await p.screenshot({ path: `${OUT}/command-palette.png` });
+  // کارپوشه‌ی Excel از همان endpoint ِ دکمه؛ پس از مرکزِ رویداد، چون هر دانلود ممیزی می‌شود؛ تصویرش جدا از Excel ِ واقعی گرفته می‌شود
+  for (const lang of ['en', 'fa']) {
+    const xl = await p.evaluate(async l => Array.from(new Uint8Array(await (await fetch(
+      '/api/report.xlsx?days=30&lang=' + l)).arrayBuffer())), lang);
+    writeFileSync(`${OUT}/report-${lang}.xlsx`, Buffer.from(xl));
+  }
+  await p.context().close();
+
   p = await page(browser);
   await login(p, 'fa');
   await p.screenshot({ path: `${OUT}/rtl-fa.png` });
+  await p.evaluate(() => secGo('viz'));
+  await p.waitForTimeout(4000);
+  await p.locator('#viz-eg-card').screenshot({ path: `${OUT}/egress-map-fa.png` });
+  await p.context().close();
+
+  // کارتِ کاربر روی گوشی (زیرِ ۶۴۰ پیکسل جدول کارت می‌شود)
+  p = await page(browser, { viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 3, isMobile: true, hasTouch: true, locale: 'en-US' });
+  await login(p, 'en');
+  await p.evaluate(() => secGo('wg'));
+  await p.waitForTimeout(1500);
+  await p.screenshot({ path: `${OUT}/mobile-cards.png` });
   await p.context().close();
 
   // تمِ روشن با دکمه‌ی خودِ پنل؛ انتخاب در localStorage ِ همین context می‌ماند

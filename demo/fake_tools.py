@@ -51,6 +51,9 @@ def _confs():
 
 def _counter(pub, p, now):
     """(rx, tx, handshake) ِ یک peer در لحظه‌ی now — پیوسته و صعودی."""
+    if "nat" in p:   # NAT ِ اپراتور منقضی: rx یخ‌زده، tx فقط keepalive (۱۴۸ بایت در ۵ ثانیه، هموار)
+        rx = int(p.get("base", 10 ** 9))
+        return rx, int(rx * p.get("up", 0.12) + 148 / 5.0 * (now - p["nat"])), int(p["hs"])
     h = int(hashlib.md5(pub.encode()).hexdigest()[:8], 16)
     rate = p.get("rate", 0)
     t0 = p.get("t0", now)
@@ -166,6 +169,10 @@ def ip(args):
         return 0
     if args[:2] == ["route", "show"] and "default" in args:
         print("default via 203.0.113.1 dev eth0 proto static")
+        return 0
+    if args[:2] == ["route", "show"] and "dev" in args and len(args) > 4:
+        # مسیرِ subnet ِ اینترفیسِ کاربر هست؛ وگرنه نگهبانِ مسیر هر دور «بازش می‌گرداند»
+        print("%s proto kernel scope link" % args[2])
         return 0
     return 0
 

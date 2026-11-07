@@ -4,7 +4,7 @@
 
 **A web panel for monitoring and managing WireGuard and a Squid proxy, deployed as a single file.**<br>
 Pure Python standard library — no pip packages, no build step, four languages.<br>
-Ready for the [WG-NQMO](#wg-nqmo) engine: server-side diagnosis of each client's connection quality (the engine is not published yet).
+Ships with the [WG-NQMO](#wg-nqmo) engine: server-side diagnosis of each client's connection quality (optional, off by default).
 
 [![verify](https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/actions/workflows/verify.yml/badge.svg)](https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/actions/workflows/verify.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -28,12 +28,18 @@ an advanced Telegram bot, and Prometheus metrics.
 It was built for a server with no Docker and no pip, so deploying the panel
 means copying one file.
 
+Some questions a table can't answer, so the panel draws them instead. Under
+**Map & report** you get a live map of where traffic leaves the server, a
+step-by-step answer to *why is this user disconnected?*, and a timeline of what
+happened to the tunnels over the last day. The same facts can be downloaded as
+an Excel workbook. See [Map & report](#map-and-report).
+
 The panel is also ready for **WG-NQMO**, a separate engine that tells you where a
 client's slowness or dropouts come from: their own network, the server, an outbound
 tunnel, the MTU, or the speed limit you set. It answers from the server side, with the
 evidence and a stated confidence, and nothing is installed on the client. The engine is
-not published yet, so this support is off by default and the panel works fully without
-it. See [Connection quality (WG-NQMO)](#wg-nqmo).
+in this repository as its own service and is optional: this support is off by default
+and the panel works fully without it. See [Connection quality (WG-NQMO)](#wg-nqmo).
 
 <p align="center">
   <img src="docs/screenshots/overview.png" width="900"
@@ -47,6 +53,7 @@ it. See [Connection quality (WG-NQMO)](#wg-nqmo).
 - [Features](#features)
 - [The chart engine](#chart-engine)
 - [Connection quality (WG-NQMO)](#wg-nqmo)
+- [Map & report (SvgStudio and Excel)](#map-and-report)
 - [Languages](#languages)
 - [Requirements](#requirements)
 - [Quick start with Docker](#quick-start-with-docker)
@@ -102,19 +109,37 @@ it. See [Connection quality (WG-NQMO)](#wg-nqmo).
       <p align="center"><b>Chart from the Telegram bot</b><br><sub>The bot draws the PNG itself, in pure Python</sub></p>
     </td>
   </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/event-center.png"><img src="docs/screenshots/event-center.png" alt="The event center: the last 24 hours of admin actions, WARP, connection quality and tunnel events"></a>
+      <p align="center"><b>Event center</b><br><sub>The last 24 hours in one list: admin actions, WARP, connection quality and tunnel health, with repeats merged</sub></p>
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/command-palette.png"><img src="docs/screenshots/command-palette.png" alt="Search and commands: clients, tunnels and interfaces that match the typed text"></a>
+      <p align="center"><b>Search and commands</b><br><sub><kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>K</kbd> finds a client, tunnel, interface, section or command</sub></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top" align="center">
+      <a href="docs/screenshots/mobile-cards.png"><img src="docs/screenshots/mobile-cards.png" width="260" alt="The panel on a phone: the client table shown as cards, with the status filter chips"></a>
+      <p align="center"><b>The panel on a phone</b><br><sub>On a narrow screen the client table becomes cards, with the status filters above them</sub></p>
+    </td>
+    <td width="50%" valign="top" align="center">
+      <a href="docs/screenshots/share-mobile.png"><img src="docs/screenshots/share-mobile.png" width="260" alt="The share page on a phone: config, QR code, download button and a usage chart"></a>
+      <p align="center"><b>Share page on a phone</b><br><sub>What the recipient of a share link sees: config, QR code, download button and their own usage</sub></p>
+    </td>
+  </tr>
 </table>
 
-<p align="center">
-  <a href="docs/screenshots/share-mobile.png"><img src="docs/screenshots/share-mobile.png" width="260" alt="The share page on a phone: config, QR code, download button and a usage chart"></a><br>
-  <b>Share page on a phone</b><br><sub>What the recipient of a share link sees: config, QR code, download button and their own usage</sub>
-</p>
+<p align="center"><sub>The egress map, the user trace, the timeline and the Excel report are pictured in <a href="#map-and-report">Map &amp; report</a>.</sub></p>
 
 > [!NOTE]
 > The screenshots were taken from a real running panel filled with **synthetic
 > data**: made-up client names, generated keys, the example domain
 > `vpn.example.com`, and IP addresses from the RFC 5737 documentation ranges.
 > No real server, user or key appears in them. `python3 demo/screenshots.py`
-> regenerates all of them.
+> regenerates all of them except the two Excel images, which are taken from
+> Microsoft Excel itself.
 
 ## Features
 
@@ -146,6 +171,25 @@ it. See [Connection quality (WG-NQMO)](#wg-nqmo).
 - A usage chart on every share page, so the client can see their own usage
 
 How it works, and everything it can do: [The chart engine](#chart-engine).
+
+### Map & report: where traffic goes, and why a user is down
+
+- **Live egress map**: every path out of the server, from the users through
+  the WireGuard ingress, the route decision (`ip rule`, ECMP) and the tunnels
+  to the physical uplink, along with the SNI splitter, the AI egress pool, a
+  WARP chain and the kill switch. The colours show live health, and clicking
+  any part shows its facts and evidence
+- **Why is this user disconnected?**: one client's path drawn step by step,
+  ending in a verdict such as carrier NAT expired, never connected, offline or
+  egress failing
+- **Tunnel and event timeline**: a Gantt chart of the last 6, 24 or 72 hours
+  with each tunnel's traffic and outages, tunnel-guard repairs, and WARP,
+  WG-NQMO and admin events
+- **Excel report**: one `.xlsx` file for 7, 30 or 90 days, with up to ten
+  sheets and the egress map drawn as native Excel shapes. Client addresses are
+  masked by default
+
+See [Map & report](#map-and-report) for the details.
 
 ### Advanced Telegram bot
 
@@ -193,14 +237,37 @@ complete second way to manage the server — no SSH, no browser:
   connections by destination hostname (these need helper scripts that are not
   in this repository — see [Limitations](#limitations))
 - Per-client connection quality (round trip, packet loss, MTU) with diagnoses and
-  alerts, through the separate WG-NQMO engine, which is not published yet; off by
+  alerts, through the separate WG-NQMO engine in this repository; off by
   default — see [Connection quality (WG-NQMO)](#wg-nqmo)
 - Read-only leak audits (routing; DNS and IPv6 from the Telegram bot)
 - Backup and restore; every config file is backed up automatically before it
   is written, and writes are atomic
 - An audit log of every action, with who, what and the result
-- A TV / kiosk view that rotates through status pages, including a 3D network
-  scene
+- A TV / kiosk view that rotates through status pages, including the egress
+  map and a 3D network scene
+
+**Interface**
+
+- A section bar at the top with live counts; fold any section, or all of them
+  at once
+- **Search and commands** with <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>K</kbd>: jump
+  to a client, tunnel, interface or section, or run a command. <kbd>/</kbd>
+  jumps to the section's filter box and <kbd>?</kbd> lists the shortcuts
+- An **event center** behind the bell: the last 24 hours of admin actions,
+  WARP and WG-NQMO events and tunnel health changes, with repeats merged and a
+  *Problems only* filter
+- Status filters above the client table (online, offline, disabled, near
+  quota, expiring soon), and a quota bar and a days-left badge on each row
+- Every confirmation uses the same dialog. Irreversible actions (deleting a
+  client, bringing a tunnel down, restoring a backup from the cloud) ask you
+  to type the name first, and a form with unsaved changes asks before it
+  closes
+- An **Undo** button in the notification after you enable or disable a
+  client, for ten seconds
+- On a phone the client table becomes cards
+- Loading, empty and error states with a *Retry* button; a visible focus ring
+  for keyboard users, screen-reader announcements, and less motion when the
+  system asks for it
 
 **Access**
 
@@ -217,7 +284,7 @@ complete second way to manage the server — no SSH, no browser:
 
 Every chart in the panel comes from a small drawing engine written from
 scratch for this project: plain Canvas 2D in about two thousand lines of
-JavaScript inside `wgpanel/app.py`. It uses no chart library and no CDN, so it
+JavaScript in `wgpanel/web/page.html`. It uses no chart library and no CDN, so it
 works on a server with no internet access, and it knows the data it draws.
 It knows what a quota is, when a client was disabled, and how many bytes a
 tunnel moved in the last ten seconds.
@@ -339,11 +406,11 @@ wrong and can recommend an MTU. Diagnoses and recommendations are reports only:
 the engine never changes a setting on its own.
 
 > [!NOTE]
-> **The engine is not part of this repository and is not published yet.** Release
-> 1.3.0 adds only the panel's side of it: hooks that show what the engine reports
-> and pass it the panel's own data and the administrator's commands. Without the
-> engine they have nothing to show. They are off by default, so a panel without
-> the engine behaves as if they were not there.
+> **The engine is a separate service in this repository, and it is optional.** Release
+> 1.3.0 added the panel's side of it: hooks that show what the engine reports and pass
+> it the panel's own data and the administrator's commands. Release 1.4.0 adds the
+> engine itself, `wg_nqmo.pyz`, built from `nqmo/`. The hooks are off by default, so a
+> panel without the engine behaves as if they were not there.
 
 ```mermaid
 flowchart LR
@@ -380,6 +447,72 @@ number the engine did not report is shown as “—”, never as 0.
 Three buttons act on the engine: **Acknowledge** on a diagnosis, the MTU probe, and
 the mode change. Each one asks for confirmation and, accepted or refused, is
 written to the history.
+
+### Installing the engine
+
+The engine is its own service: a second single file, `wg_nqmo.pyz`, built from the
+`nqmo/` package in this repository, that runs as the unprivileged system user `wg-nqmo`.
+It needs Python 3.10 or newer and nothing else, and it goes on the server that runs the
+panel; the Docker image does not include it. Build it, install it and run its self-test:
+
+```bash
+python3 tools/build_nqmo_pyz.py --out dist/wg_nqmo.pyz
+sudo useradd --system --user-group --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin wg-nqmo
+sudo install -d -m750 -o root -g wg-nqmo /opt/wg-nqmo
+sudo install -m640 -o root -g wg-nqmo dist/wg_nqmo.pyz /opt/wg-nqmo/wg_nqmo.pyz
+sudo install -d -m755 -o root -g root /etc/wg-nqmo
+sudo install -m640 -o root -g wg-nqmo deploy/wg-nqmo.config.json /etc/wg-nqmo/config.json
+sudo install -m644 -o root -g root deploy/wg-nqmo.service /etc/systemd/system/wg-nqmo.service
+sudo systemctl daemon-reload
+sudo -u wg-nqmo python3 -I /opt/wg-nqmo/wg_nqmo.pyz --check
+sudo systemctl enable --now wg-nqmo
+```
+
+The self-test prints `NQMO_CHECK_OK`; do not start the service without it. Then turn the
+panel's hooks on, as described in the next section, and check that `/metrics` reports
+`wg_nqmo_up 1`.
+
+**Observation only, with no active diagnosis, by default.** The shipped
+`deploy/wg-nqmo.config.json` starts the engine in **Observation only** with
+`active_probes` off and header capture off. In this state the engine reads the panel's
+file and the kernel counters and writes its state file. It sends no packet, probes no
+client, changes no setting and raises no alert; diagnoses are worked out and stored but
+not shown. Move the mode up from the panel, one step at a time, once you have seen what
+it measures.
+
+**Header capture** (optional). Round trip, packet loss and MTU evidence come from the
+WireGuard headers on the wire, so they need the capture to be on. Install the drop-in
+`deploy/wg-nqmo-capture.conf`, which gives the service only `CAP_NET_RAW`, and the
+configuration `deploy/wg-nqmo.capture.config.json`, which turns capture on. The engine
+reads only the headers of WireGuard packets on the port in `listen_port`; the payload is
+encrypted and is never stored. The filters are compiled for port `53953`: for another
+port, change `PORT` in `tools/gen_nqmo_bpf.py` and regenerate (needs `tcpdump`), or the
+capture refuses to start. Never give the service `CAP_NET_ADMIN`: with it, `wg show`
+would expose private keys.
+
+```bash
+sudo install -d -m755 -o root -g root /etc/systemd/system/wg-nqmo.service.d
+sudo install -m644 -o root -g root deploy/wg-nqmo-capture.conf /etc/systemd/system/wg-nqmo.service.d/capture.conf
+sudo install -m640 -o root -g wg-nqmo deploy/wg-nqmo.capture.config.json /etc/wg-nqmo/config.json
+sudo systemctl daemon-reload
+sudo systemctl restart wg-nqmo
+```
+
+**Resource quota.** The unit caps the engine at `CPUQuota=20%`, `MemoryHigh=128M` and
+`MemoryMax=160M`, with `Nice=10`, so it never competes with the data path. With capture on
+a busy server that cap is too tight: the watchdog kills the engine while it closes an
+analysis window. `deploy/wg-nqmo-resources.conf` raises the three values to `200%`,
+`256M` and `320M`; install it as `resources.conf` next to `capture.conf`. The engine is a
+watcher: if it stops, nothing else stops, and `systemctl disable --now wg-nqmo` takes it
+out of the picture with no network state to undo.
+
+**Metrics.** The engine has no endpoint of its own. Everything it measures reaches
+Prometheus through the panel's `/metrics` as the `wg_nqmo_*` series, listed under
+[Reference](#wg-nqmo-reference).
+
+**Hourly review archive** (optional). `deploy/wg-nqmo-review.sh` with its service and
+timer keeps, every hour, a compressed copy of the state file and a one-line summary in
+`/var/lib/wg-nqmo/review`: counts only, no names, keys or addresses, for 14 days.
 
 ### Turning it on and off
 
@@ -651,12 +784,189 @@ wg_nqmo_peer_upstream_loss_lower_ratio > 0.01
 
 **Not included:** the engine itself, and a Telegram bot command for it.
 
+<a id="map-and-report"></a>
+
+## Map & report (SvgStudio and Excel)
+
+The **Map & report** section draws three pictures from the server's live state:
+
+1. **Live egress map**: where traffic leaves this server right now
+2. **Why is this user disconnected?**: one client's path, step by step, ending in a verdict
+3. **Tunnel and event timeline**: what happened to the tunnels over the last day
+
+The same facts can also be downloaded as an Excel workbook.
+
+<p align="center">
+  <a href="docs/screenshots/egress-map.png"><img src="docs/screenshots/egress-map.png" width="900"
+     alt="The live egress path map: users, the WireGuard ingress, the route decision, mother and nested tunnels, the WARP chain, the AI egress pool, the kill switch and the physical uplink"></a>
+</p>
+
+The server does the thinking. `wgpanel/viz.py` gathers live facts (the routes
+the kernel reports for `ip route get`, ECMP membership, handshake ages, rx/tx
+sampled every two seconds) and turns them into a diagram model. The browser
+only draws that model, using `wgpanel/web/svgstudio.js`, which knows nothing
+about WireGuard: it has no interface names and no translations in it. Every
+name on the map comes from your own server, so the map fits your topology
+without any setup.
+
+### Live egress map
+
+The map shows every way a client's packet can leave the server: users, the
+WireGuard ingress, the route decision (`ip rule` and ECMP), the tunnels, the
+physical uplink and the internet. Where they exist, it also shows the SNI
+splitter, the AI egress pool, a WARP chain and the kill switch.
+
+- A tunnel's role is worked out from routing, not from its name. If its
+  endpoint is reached through the physical uplink, it is a *mother* tunnel; if
+  the endpoint is reached through another tunnel, it is *nested* and is drawn
+  next to its carrier. A nested tunnel over a working carrier is a chain, not
+  a routing loop.
+- The colours show live health: healthy, failing, off, routing, ECMP, AI path,
+  user and external. An ECMP member that the guard has taken out of rotation
+  is marked as such.
+- Click any box or arrow to open a side drawer with the facts behind it: the
+  endpoint, the device the endpoint is routed through, the last handshake,
+  rates and totals, the ECMP state, and the traffic signature along with the
+  samples it was computed from.
+- You can zoom, pan, fit, return to 1:1 or go full screen, and download the
+  diagram as SVG, with or without the font embedded. The map refreshes every
+  minute, but it holds still for five minutes after you touch it, and for as
+  long as a drawer or full screen is open.
+- The map is also one of the TV / kiosk slides, shown just before the 3D scene.
+
+<p align="center">
+  <a href="docs/screenshots/egress-map-fa.png"><img src="docs/screenshots/egress-map-fa.png" width="760"
+     alt="The same egress map in Persian, mirrored right to left"></a><br>
+  <sub>In Persian the whole map is mirrored and reads from right to left.</sub>
+</p>
+
+### Why is this user disconnected?
+
+Type a client's name, or pick one from the list, and the panel draws a
+sequence diagram from the device to the internet: the handshake, the ingress,
+each route decision that applies to that client's own address (default route,
+ECMP group, AI path), the tunnels on the way, and the exit. Every step shows
+its evidence. The first step that fails becomes the **verdict**, and the
+checks run in the order a person would follow:
+
+| Verdict | Meaning |
+|---|---|
+| Auto-disabled · Disabled | The client is switched off, by a quota, an expiry date or an admin |
+| Never connected | No handshake has ever been recorded: the config never reached the device, the key is wrong, or the endpoint is unreachable |
+| Carrier NAT | Nothing is being received, yet the server still sends small keepalives: the mapping in the user's carrier NAT has expired. The server is fine; the user should restart the app or switch networks |
+| Offline | The handshake is old and there is no traffic: the device is off or the app is closed. Nothing is wrong |
+| Egress failing | The device reaches the server, but a tunnel on its path is failing. Roles without tunnel access see the verdict without the tunnel details |
+| No route | No route decision applies to this client's address |
+| Healthy | Every step works |
+
+<p align="center">
+  <a href="docs/screenshots/user-trace.png"><img src="docs/screenshots/user-trace.png" width="900"
+     alt="A user trace ending in the Carrier NAT verdict, with the traffic signature open in the side drawer"></a>
+</p>
+
+The **traffic signature** comes from the two-second samples. Each signature has
+one fixed meaning, so two failures that look alike are not mixed up:
+
+| Signature | What the numbers show |
+|---|---|
+| Carrier NAT expired | rx frozen, tx a steady trickle (about 148 bytes every 5 seconds), old handshake |
+| Heavy tx, no rx | A lot is sent and nothing comes back: the pattern of a routing loop |
+| Dead endpoint | The handshake is old while the server keeps trying (tunnels) |
+| Handshake only | Recent handshake, but the only bytes received are the handshake reply |
+| Never connected · Offline · Connected, idle · Two-way traffic · Disabled · Tunnel down | What the name says |
+
+Walk through the diagram with *Previous step* and *Next step*, or click any
+message. There is no download button on this card, on purpose: the trace shows
+one person's data unmasked.
+
+### Tunnel and event timeline
+
+A Gantt chart of the last 6, 24 or 72 hours. Each tunnel has its own lane,
+with an hourly bar wherever it carried traffic, grey where it carried none,
+and red where it was down. An event sits on the lane of the tunnel it is
+about; everything else gets a lane of its own:
+
+- tunnel and interface changes noticed by the panel's own monitor (down, up,
+  a loop found and fixed)
+- **tunnel-guard** actions, read from the systemd journal
+  (`journalctl -t tunnel-guard`): state changes, repairs, verified repairs,
+  failed repairs and route pins. Only actions are kept, not the routine output
+  of every check. Without the guard script this lane stays empty
+- WARP events (endpoint rotated, egress switched)
+- WG-NQMO incidents, for roles with `nqmo.view`
+- other admin actions from the audit log, for roles with `audit.view`
+
+The panel's monitor and the guard watch the same tunnels separately, and both
+feed the red outage spans. Step from one event to the next with *Previous
+event* and *Next event*, or click an event to see its details.
+
+<p align="center">
+  <a href="docs/screenshots/event-timeline.png"><img src="docs/screenshots/event-timeline.png" width="900"
+     alt="A 24-hour Gantt chart: one lane per tunnel with traffic bars and an outage, and lanes for tunnel-guard, network quality, AI path and audit events"></a>
+</p>
+
+### Excel report
+
+The **Download Excel** button builds one `.xlsx` file for the last 7, 30 or 90
+days. The file is written with the standard library alone (`wgpanel/xlsx.py`),
+and it holds only the sheets that the person downloading it is allowed to see:
+
+| Sheet | Contents | Needs |
+|---|---|---|
+| Dashboard | Key figures (clients, online now, this month, healthy tunnels, ECMP members in rotation, SNI splitter), findings, and a link to every sheet | — |
+| Users | Every client: state, last handshake, endpoint, traffic this month, in the range and in total, quota and how much of it is used, expiry, speed limit, note and traffic signature | `wg.view` |
+| Daily | Traffic per day with the number of active clients, and the top users with their share | `wg.view` |
+| Tunnels | Every tunnel: role, carrier, the device its endpoint is routed through, ECMP state, health, signature, rates and totals | `tun.view` |
+| Egress | The egress map drawn as **native Excel shapes**, plus a table of its nodes | `tun.view` |
+| Events | The same events as the timeline | `tun.view` |
+| Audit | Admin actions: who, what and the result | `audit.view` |
+| Speed tests | Every speed test in the range | `sys.view` |
+| System | Server load: CPU, memory and disk | `sys.view` |
+| Glossary | What each state, signature and verdict means | — |
+
+- In Persian the sheets run right to left. Numbers are stored as numbers, so
+  you can sort, filter and add them up.
+- **Client endpoint addresses are masked by default.** Untick *Mask user IPs*
+  to get them in full. Every download is recorded in the audit log, together
+  with the range and whether it was masked.
+- Text always goes in as text, never as a formula, so a client called
+  `=HYPERLINK(…)` stays just a name. Dates are real Excel dates, and a missing
+  value is left blank rather than turned into zero.
+- Tested in Microsoft Excel for Mac, which opens the file without asking to
+  repair it.
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/excel-dashboard.png"><img src="docs/screenshots/excel-dashboard.png" alt="The Dashboard sheet of the Excel report, as rendered by Microsoft Excel"></a>
+      <p align="center"><b>Dashboard sheet</b><br><sub>Key figures, findings and a link to every sheet</sub></p>
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/excel-egress.png"><img src="docs/screenshots/excel-egress.png" alt="The Egress sheet: the egress map as native, editable Excel shapes above the table of its nodes"></a>
+      <p align="center"><b>Egress sheet</b><br><sub>The same map as native Excel shapes you can move and edit</sub></p>
+    </td>
+  </tr>
+</table>
+
+### Permissions and API
+
+| Endpoint | Permission | Returns |
+|---|---|---|
+| `GET /api/viz/egress` | `tun.view` | The egress map model |
+| `GET /api/viz/trace?iface=…&name=…` | `wg.view` | The trace of one client (`404` if there is no such client) |
+| `GET /api/viz/timeline?hours=1…168` | `tun.view` | The timeline model |
+| `GET /api/report.xlsx?days=1…183&mask=0\|1` | `wg.view` | The workbook; `mask` defaults to `1` |
+
+The section appears for any role with `tun.view` or `wg.view`, and each card
+appears only with the permission it needs. The models are plain JSON, so the
+same `svgstudio.js` can draw them anywhere.
+
 ## Languages
 
 The panel, the audit log, API errors, the Telegram bot and the Telegram alerts
 are all available in **English, Persian, Russian and Chinese**. The
-translations live inside `wgpanel/app.py` itself (about two thousand keys), so the
-panel still deploys as a single file.
+translations live in `wgpanel/i18n/catalog.json` (about three thousand keys),
+which is built into `wg_panel.pyz`, so the panel still deploys as a single file.
 
 | Where | How the language is chosen |
 |---|---|
@@ -1081,6 +1391,10 @@ If that matters on your server, here is what goes out and how to stop it:
   `/usr/local/sbin/awg-ecmp-from-file.sh`, the `wgwarp` interface), and stay
   inactive without them. `deploy/cleanup-dead-iface-rules.sh` also names that
   topology's interfaces; read it before running it.
+- **Parts of Map & report need those helpers too.** The ECMP group, the SNI
+  splitter, the AI egress pool and the WARP chain appear on the egress map only
+  where they exist, and the *tunnel-guard* lane of the timeline reads a guard
+  script that is not in this repository; without it that lane is simply empty.
 - **Persian is the fallback language.** A browser that asks for none of the
   four languages gets Persian; add `?lang=en` once and the choice is kept in a
   cookie. Alerts are in Persian until a bot owner is set.
@@ -1194,8 +1508,10 @@ With Docker, run `docker compose down` in `docker/`; the data is in
 
 ## Development
 
-`wgpanel/app.py` has more than 30,000 lines, including the whole web interface
-(HTML, CSS and JavaScript) inside Python strings. Run the tests with:
+The panel is the `wgpanel/` package: the server in `wgpanel/app.py` (about
+19,000 lines), the web interface as real files in `wgpanel/web/`, and the
+translations in `wgpanel/i18n/catalog.json`. `tools/build_pyz.py` packs them
+into the one file you deploy. Run the tests with:
 
 ```bash
 python3 -m unittest discover -s tests -v
@@ -1218,8 +1534,8 @@ documentation addresses. Some tests are skipped in this repository because
 they check deployment tooling that is not published here.
 
 > [!IMPORTANT]
-> Python cannot see errors inside the JavaScript strings — `py_compile`
-> passes on broken JavaScript, and the result is a blank page in the browser.
+> Python cannot see errors in the JavaScript of `wgpanel/web/` — the Python
+> tests pass on broken JavaScript, and the result is a blank page in the browser.
 > `tests/check_js.py` (also run by CI) catches syntax errors; after changing
 > the interface, still open the panel and check the browser console.
 
@@ -1228,13 +1544,21 @@ they check deployment tooling that is not published here.
 six months of traffic history and fake system tools. It needs no WireGuard and
 no root, and it writes nothing outside a temporary folder.
 `python3 demo/screenshots.py` rebuilds every image in `docs/screenshots/`; it
-needs Node.js and Playwright, and compresses the images if Pillow is installed.
+needs Node.js and Playwright (it uses Playwright's Chromium, or Google Chrome
+if that is missing), and compresses the images if Pillow is installed.
+`--reports DIR` also saves the English and Persian Excel workbooks of the demo;
+`excel-dashboard.png` and `excel-egress.png` were taken from those files in
+Microsoft Excel (*Copy as Picture*).
 
 ## Repository layout
 
 | Path | Contents |
 |---|---|
-| `wgpanel/app.py` | The panel (source; `app.py` is the bulk of it) |
+| `wgpanel/app.py` | The panel's server: API, permissions, background threads |
+| `wgpanel/web/` | The web interface: `page.html`, `share.html`, the SvgStudio engine (`svgstudio.js`), the 3D scene, fonts, and the vendored `svg-pan-zoom` |
+| `wgpanel/viz.py` | The models behind Map & report: egress map, user trace, timeline |
+| `wgpanel/report.py` · `wgpanel/xlsx.py` | The Excel report and a standard-library `.xlsx` writer |
+| `wgpanel/i18n/catalog.json` | Every translation, in four languages |
 | `wgpanel/__main__.py` | The entry point (`python3 -m wgpanel`) |
 | `wgpanel/_check.py` | The archive self-test (`wg_panel.pyz --check`) |
 | `tools/build_pyz.py` | Reproducible build of `dist/wg_panel.pyz` |
@@ -1246,7 +1570,7 @@ needs Node.js and Playwright, and compresses the images if Pillow is installed.
 | `docs/screenshots/` | The screenshots used in the READMEs |
 | `demo/` | Demo mode and the screenshot generator |
 | `CHANGELOG.md` | Changes in each version |
-| `fonts/` | Source of the Vazirmatn font subset (it is embedded in `wgpanel/app.py`) |
+| `fonts/` | Source of the Vazirmatn font subset (the subset itself is in `wgpanel/web/fonts/`) |
 | `qr.js` · `three.*.min.js.gz` | Bundled QR code and three.js libraries |
 | `.github/` | CI, release workflow, issue and pull request templates |
 | `SECURITY.md` · `CONTRIBUTING.md` | Vulnerability reporting and contribution guide |
@@ -1293,3 +1617,4 @@ Bundled third-party components keep their own licenses:
 
 - [three.js](https://threejs.org) — MIT ([three.LICENSE.txt](three.LICENSE.txt))
 - [Vazirmatn](https://github.com/rastikerdar/vazirmatn) — SIL Open Font License 1.1
+- [svg-pan-zoom](https://github.com/ariutta/svg-pan-zoom) 3.6.1 — BSD 2-Clause ([svg-pan-zoom.LICENSE.txt](wgpanel/web/vendor/svg-pan-zoom.LICENSE.txt))

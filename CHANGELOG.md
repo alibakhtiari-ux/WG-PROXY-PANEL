@@ -5,11 +5,63 @@ All notable changes to WG-PROXY-PANEL are listed here. The format follows
 [Semantic Versioning](https://semver.org/).
 
 Each release on GitHub attaches `wg_panel.pyz` (the panel), `wg_panel.py` (its launcher),
-`wg-panel.service`, the bundled `qr.js` and three.js files, and a `SHA256SUMS` file. The
-release notes also give the **build id**: the first 12 characters of the SHA-256 of
-`wg_panel.pyz`, the same value a Docker install prints as its version.
+`wg-panel.service`, the bundled `qr.js` and three.js files, and a `SHA256SUMS` file. From
+1.4.0 it also attaches `wg_nqmo.pyz` (the WG-NQMO engine) with `deploy/wg-nqmo.service`.
+The release notes also give the **build id**: the first 12 characters of the SHA-256 of
+`wg_panel.pyz`, the same value a Docker install prints as its version, and the engine's
+build id, the same measure of `wg_nqmo.pyz`.
 
 ## [Unreleased]
+
+## [1.4.0] — 2026-11-07
+
+### Added
+
+- The WG-NQMO engine itself. The `nqmo/` package is built into a second single file,
+  `wg_nqmo.pyz`, by `tools/build_nqmo_pyz.py` (reproducible; its build id is the first 12
+  characters of `sha256(wg_nqmo.pyz)`, printed by `--id`). It runs as its own systemd
+  service, `deploy/wg-nqmo.service`, under the unprivileged user `wg-nqmo` with no
+  capability at all. The optional drop-in `deploy/wg-nqmo-capture.conf` grants only
+  `CAP_NET_RAW`, for reading WireGuard headers, and `deploy/wg-nqmo-resources.conf` raises
+  the CPU and memory caps for busy servers. Two configurations ship with it: observation
+  only without capture, `deploy/wg-nqmo.config.json`, and observation only with capture,
+  `deploy/wg-nqmo.capture.config.json`. `wg_nqmo.pyz --check` is its self-test, like the
+  panel's; it needs neither root nor Linux.
+- Observation only is the default mode and active probes are off: the engine sends
+  nothing, changes nothing and raises no alert until the mode is moved up from the panel,
+  one step at a time. The capture filters are compiled for WireGuard port 53953; another
+  port needs `tools/gen_nqmo_bpf.py` run again.
+- `deploy/wg-nqmo-review.sh` with its service and timer: an optional hourly archive of the
+  engine's state file and a one-line summary with no names, keys or addresses.
+- The engine's tests (`tests/test_nqmo.py`, `tests/test_nqmo_diag.py`,
+  `tests/test_nqmo_panel.py`), the generator of its capture filters
+  (`tools/gen_nqmo_bpf.py`) and its design documents (`docs/nqmo/`).
+- README, all four languages: *Installing the engine* under *Connection quality
+  (WG-NQMO)*: install, the observation-only default, header capture, the resource quota
+  and where the metrics come from. The opening no longer says the engine is unpublished.
+- CI builds and self-tests `wg_nqmo.pyz` as well, and checks that the build is
+  reproducible.
+- **Map & report**, a new section of the panel drawn with the SvgStudio engine
+  (`wgpanel/web/svgstudio.js`) from models built on the server (`wgpanel/viz.py`): a live
+  map of every egress path (users, ingress, route decision, mother and nested tunnels,
+  ECMP, the SNI splitter, the AI egress pool, a WARP chain, the kill switch, the uplink),
+  a step-by-step *Why is this user disconnected?* trace that ends in a verdict, and a 6, 24
+  or 72-hour timeline of tunnel traffic, outages, tunnel-guard repairs and WARP, WG-NQMO and
+  admin events. Every part opens a drawer with its evidence. The map is also a TV slide.
+  New routes: `/api/viz/egress` and `/api/viz/timeline` (`tun.view`), `/api/viz/trace`
+  (`wg.view`).
+- An Excel report, `/api/report.xlsx` (`wg.view`), written with the standard library
+  (`wgpanel/xlsx.py`, `wgpanel/report.py`): up to ten sheets for 7, 30 or 90 days, each
+  shown only to roles allowed to see it, with the egress map drawn as native Excel shapes.
+  Client endpoints are masked unless *Mask user IPs* is unticked, and every download is
+  written to the audit log.
+- A faster interface: a section bar with live counts, search and commands
+  (<kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>K</kbd>), an event center for the last 24 hours, status
+  filters and quota and expiry badges on the client table, one dialog for every
+  confirmation (irreversible actions need the name typed in), *Undo* after enabling or
+  disabling a client, cards on phones, and loading, empty and error states.
+- `svg-pan-zoom` 3.6.1 (BSD 2-Clause) is vendored in `wgpanel/web/vendor/` for zooming and
+  panning the diagrams; nothing is loaded from a CDN.
 
 ### Changed
 
@@ -23,6 +75,29 @@ release notes also give the **build id**: the first 12 characters of the SHA-256
 - README (Persian): the whole document now renders right to left on GitHub, including
   tables, lists, headings and collapsible sections, and code stays readable inside
   Persian sentences.
+- README, all four languages: a new *Map & report* section (the three views, every verdict
+  and traffic signature, the Excel sheets, permissions and API), an *Interface* group under
+  the features, and new screenshots taken from the demo with synthetic data: the egress
+  map in English and Persian, a user trace, the timeline, the event center, search and
+  commands, the panel on a phone, and two sheets of the Excel report as Microsoft Excel
+  shows them. Stale facts about `wgpanel/app.py` (its size, and the interface and
+  translations living inside it) were corrected.
+- The demo (`demo/run.py`) now has a full egress topology, a client whose carrier NAT has
+  expired, tunnel-guard events and system gauges, so every screenshot shows realistic and
+  consistent data. `demo/screenshots.py --reports DIR` also saves the demo's Excel
+  workbooks.
+
+### Fixed
+
+- The event center showed actions without a target, such as downloading a backup or a
+  report, as "Download backup — *". The `*` is no longer shown.
+- On the egress map, the details of the *Users* box listed the number of clients under
+  *Total traffic*; the row is now labelled *Users*.
+- WG-NQMO commands on Linux: when the engine closed the connection without replying (the
+  panel is not running as root), the panel reported `UNREACHABLE`, which points at a
+  stopped engine. Linux delivers that close as a reset rather than an end of stream, and
+  the panel treated every socket error the same way. It now reports `NO_REPLY`, as the
+  README describes, and keeps `UNREACHABLE` for a socket it could not connect to.
 
 ## [1.3.0] — 2026-11-01
 
@@ -387,7 +462,8 @@ release notes also give the **build id**: the first 12 characters of the SHA-256
 
 First public release.
 
-[Unreleased]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/compare/v1.2.3...v1.3.0
 [1.2.3]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/compare/v1.2.2...v1.2.3
 [1.2.2]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/compare/v1.2.1...v1.2.2

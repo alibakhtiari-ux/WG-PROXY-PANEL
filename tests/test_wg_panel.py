@@ -7127,6 +7127,60 @@ class IntentionalChainTests(unittest.TestCase):
         self.assertTrue(loop)
         self.assertFalse(chain)
 
+    def _route_table(self, table):
+        """ماکِ `ip route get` با نگاشتِ host → dev (برای زنجیره‌ی مادر/فرعی)."""
+        def run(cmd, timeout=20):
+            if cmd[:3] == ["ip", "route", "get"]:
+                dev = table.get(cmd[3])
+                return (0, "%s via 10.0.0.1 dev %s src 10.0.0.2" % (cmd[3], dev), "") \
+                    if dev else (2, "", "RTNETLINK answers: Network is unreachable")
+            return (0, "", "")
+        self.m.run = run
+
+    def _endpoints(self, eps):
+        self.m.read_tunnel_endpoint = lambda iface: eps.get(iface, "")
+
+    def test_subsidiary_over_a_physically_routed_mother_is_a_chain(self):
+        """§29.157 — خانواده‌ی «تونلِ فرعی روی مادر»: قاعده‌ی معماری می‌گوید endpointِ
+        wg21/wg22/wgpl* عمداً از awg می‌رود. تا ۴ نوامبر ۲۰۲۶ دوازده تونل در پنل،
+        ربات و متای WG-NQMO «loop» خورده بودند و موتور ۱۲ تشخیصِ کاذب داشت."""
+        m = self.m
+        self._route_table({"110.172.145.138": "awg3", "185.1.1.1": "eth0"})
+        self._endpoints({"awg3": "185.1.1.1:51820"})
+        dev, loop, chain = m.endpoint_route_state("wg21", "110.172.145.138:443")
+        self.assertEqual((dev, loop, chain), ("awg3", False, True))
+        self._route_table({"79.127.186.163": "awg1", "185.2.2.2": "eth0"})
+        self._endpoints({"awg1": "185.2.2.2:41641"})
+        self.assertEqual(m.endpoint_route_state("wgpl7", "79.127.186.163:51820")[1:],
+                         (False, True))
+
+    def test_mother_over_mother_and_chain_over_chain_stay_real_loops(self):
+        """تونل‌درتونلِ §۲۹٫۱۳۰ (awg3 از داخلِ awg1) باید loop بماند؛ همین‌طور
+        فرعی‌ای که مادرش خودش از تونل می‌رود، و فرعی روی فرعی، و مادرِ بی‌endpoint."""
+        m = self.m
+        # مادر روی مادر
+        self._route_table({"185.3.3.3": "awg1", "185.2.2.2": "eth0"})
+        self._endpoints({"awg1": "185.2.2.2:41641"})
+        self.assertEqual(m.endpoint_route_state("awg3", "185.3.3.3:51820")[1:], (True, False))
+        # فرعی روی مادری که خودش از تونلِ دیگری می‌رود (زنجیره روی زنجیره)
+        self._route_table({"110.172.145.138": "awg3", "185.3.3.3": "awg1"})
+        self._endpoints({"awg3": "185.3.3.3:51820"})
+        self.assertEqual(m.endpoint_route_state("wg21", "110.172.145.138:443")[1:], (True, False))
+        # فرعی روی فرعی (wg22 از داخلِ wg21)
+        self._route_table({"110.172.145.139": "wg21"})
+        self._endpoints({"wg21": "110.172.145.138:443"})
+        self.assertEqual(m.endpoint_route_state("wg22", "110.172.145.139:443")[1:], (True, False))
+        # مادرِ بی‌endpoint (کانفیگ خوانا نیست) ⇒ محتاط: loop
+        self._route_table({"110.172.145.138": "awg3"})
+        self._endpoints({})
+        self.assertEqual(m.endpoint_route_state("wg21", "110.172.145.138:443")[1:], (True, False))
+        # و نامِ wgwarp همچنان فقط با ثبتِ گارد
+        self._route_table({"162.159.192.1": "awg1", "185.2.2.2": "eth0"})
+        self._endpoints({"awg1": "185.2.2.2:41641"})
+        self._set_egress("wg22")
+        self.assertEqual(m.endpoint_route_state(m.WARP_IFACE, "162.159.192.1:2408")[1:],
+                         (True, False))
+
     def test_missing_state_file_falls_back_to_loop(self):
         """بدونِ warp-guard.state هیچ زنجیره‌ای «ثبت‌شده» نیست."""
         m = self.m
@@ -12920,6 +12974,162 @@ class ProductUxI18nTests(unittest.TestCase):
         m.SHAPER._build("wgtest", {"10.0.0.5": 5})
         with open(m.ACTION_LOG, encoding="utf-8") as f:
             self.assertIn("upload limits on wgtest are NOT enforced", f.read())
+
+
+class UxLayerFamilyTests(unittest.TestCase):
+    """گاردهای خانوادگیِ لایه‌ی تجربه‌ی کاربری (۷ نوامبر ۲۰۲۶).
+
+    هرکدام کلِ یک خانواده را می‌گیرد، نه همان نمونه‌ای که پیدا شد. رفتارِ
+    توابعِ خالص در tests/js/ux-layer.test.mjs آزموده می‌شود؛ این‌جا قراردادهای
+    ساختاری‌اند که node بی‌DOM نمی‌بیند.
+    """
+
+    @staticmethod
+    def _code_only(src):
+        """کامنت‌های HTML و JS را برمی‌دارد تا متنِ توضیحی گارد را نلرزاند.
+
+        `//` فقط وقتی کامنت است که اولِ خط یا پس از فاصله بیاید؛ `http://` ِ
+        درونِ رشته دست نمی‌خورد.
+        """
+        src = re.sub(r"<!--.*?-->", "", src, flags=re.S)
+        src = re.sub(r"/\*.*?\*/", "", src, flags=re.S)
+        return "\n".join(re.sub(r"(^|\s)//.*$", r"\1", l) for l in src.splitlines())
+
+    def test_no_native_blocking_dialog_survives_in_any_web_container(self):
+        """confirm/prompt/alert ِ بومی روی مک چپ‌چین، بی‌ترجمه و بی‌سطحِ خطرند.
+
+        جایگزین: askConfirm / askPrompt / askDialog. گارد روی هر سه ظرف است،
+        چون صفحه‌ی اشتراک و ماژولِ سه‌بعدی هم فراخوانی می‌توانند داشته باشند.
+        """
+        pat = re.compile(r"(?<![\w.$])(?:window\.)?(confirm|prompt|alert)\s*\(")
+        for name in _WEB:
+            with self.subTest(container=name):
+                hits = [m.group(0) for m in pat.finditer(self._code_only(_web_source(name)))]
+                self.assertEqual(hits, [], "دیالوگِ بومی در %s: %r" % (name, hits))
+
+    def test_every_section_heading_is_navigable_and_every_jump_target_exists(self):
+        """هر سرتیترِ بخش data-sec ِ یکتا دارد و هر secGo/secFold/navBadge به یکی می‌خورد.
+
+        سرتیترِ بی‌کلید در نوارِ ناوبری نمی‌آید و جمع نمی‌شود؛ کلیدِ پرشِ
+        بی‌مقصد (پس از تغییرِ نامِ یک بخش) بی‌صدا هیچ کاری نمی‌کند.
+        """
+        page = _web_source("PAGE_HTML")
+        markup = [l for l in page.splitlines()
+                  if re.match(r"\s*<h2\b", l)]          # h2 ِ درونِ رشته‌ی JS با ' آغاز می‌شود
+        self.assertGreaterEqual(len(markup), 10, "سرتیترها پیدا نشدند — گارد کور است")
+        keys = []
+        for l in markup:
+            m = re.search(r'data-sec="([a-z]+)"', l)
+            self.assertIsNotNone(m, "سرتیترِ بی‌data-sec: " + l.strip()[:80])
+            keys.append(m.group(1))
+        self.assertEqual(len(keys), len(set(keys)), "data-sec ِ تکراری: %r" % keys)
+        code = self._code_only(page)
+        used = set(re.findall(r"\b(?:secGo|secFold|navBadge)\('([a-z]+)'", code))
+        self.assertTrue(used, "هیچ فراخوانیِ پرش پیدا نشد — گارد کور است")
+        self.assertEqual(used - set(keys), set(), "پرش به بخشِ ناموجود")
+
+    def test_stale_banner_is_never_raised_for_an_auth_failure(self):
+        """هر markStale(true) در catchی است که پیش از آن 'auth' را جدا کرده.
+
+        تا ۷ نوامبر ۲۰۲۶ بنرِ قرمزِ «داده کهنه است» پشتِ فرمِ ورود هم روشن
+        می‌شد: نبودنِ نشست با قطعیِ سرور یکی گرفته می‌شد.
+        """
+        page = self._code_only(_web_source("PAGE_HTML"))
+        sites = [m.start() for m in re.finditer(r"markStale\(true\)", page)]
+        self.assertTrue(sites, "markStale(true) پیدا نشد — گارد کور است")
+        for pos in sites:
+            c = page.rfind("catch(", 0, pos)
+            self.assertNotEqual(c, -1, "markStale(true) بیرون از catch")
+            self.assertIn("'auth'", page[c:pos],
+                          "markStale(true) بدونِ جداکردنِ 'auth' در همان catch")
+
+    def test_new_ux_styles_and_share_page_take_colors_only_from_tokens(self):
+        """رنگِ ثابتِ تمِ تیره در تمِ روشن ناخوانا می‌شود.
+
+        بلوکِ CSSِ لایه‌ی تازه و کلِ صفحه‌ی اشتراک: رنگِ لیترال فقط در تعریفِ
+        توکن‌ها (`--name: …;`). JSِ صفحه‌ی اشتراک رنگِ بوم را هم از توکن می‌خواند.
+        """
+        color = re.compile(r"#[0-9a-fA-F]{3,8}\b|rgba?\(")
+        page = _web_source("PAGE_HTML")
+        a = page.index("لایه‌ی تجربه‌ی کاربری (۷ نوامبر ۲۰۲۶) =====")
+        blk = page[a:page.index("</style>", a)]
+        share = _web_source("SHARE_HTML")
+        for label, text in (("page.html/ux", blk), ("share.html", share)):
+            body = re.sub(r"--[\w-]+\s*:[^;]*;", "", self._code_only(text))
+            with self.subTest(where=label):
+                self.assertEqual(color.findall(body), [], "رنگِ لیترال بیرون از توکن")
+        self.assertIn("prefers-color-scheme: light", share)
+
+    def test_modal_local_message_box_is_written_only_by_its_own_modal(self):
+        """«e-msg» مالِ مودالِ ویرایشِ کاربر است.
+
+        sharePeer از دیالوگِ جدا باز می‌شود و خطایش را آن‌جا می‌نوشت: مودال
+        بسته بود، پس خطای ساختِ لینک بی‌صدا گم می‌شد (یا روی null می‌شکست).
+        """
+        page = self._code_only(_web_source("PAGE_HTML"))
+        owners = set()
+        for m in re.finditer(r"el\('e-msg'\)", page):
+            fn = re.findall(r"^(?:async\s+)?function\s+(\w+)\s*\(", page[:m.start()], re.M)
+            owners.add(fn[-1] if fn else "?")
+        self.assertTrue(owners, "هیچ نوشتنی در e-msg پیدا نشد — گارد کور است")
+        self.assertEqual(owners - {"saveMeta", "togglePsk"}, set(),
+                         "e-msg بیرون از مودالِ ویرایش نوشته شده")
+
+    def test_dynamic_ux_catalog_keys_exist_for_every_group_and_source(self):
+        """کلیدِ ساخته‌شده با الحاق را گاردِ کلیدِ لیترال نمی‌بیند."""
+        page = _web_source("PAGE_HTML")
+        with open(os.path.join(HERE, "..", "wgpanel", "i18n", "catalog.json"),
+                  encoding="utf-8") as fh:
+            cat = json.load(fh)
+        groups = re.search(r"^const CK_GROUPS = \[([^\]]*)\]", page, re.M)
+        self.assertIsNotNone(groups)
+        need = ["ui.ux.cmdk.g." + g for g in re.findall(r"'(\w+)'", groups.group(1))]
+        need += ["ui.ux.ev.src." + s for s in set(re.findall(r"\bsrc: '(\w+)'", page))]
+        self.assertGreaterEqual(len(need), 10)
+        self.assertEqual([k for k in need if k not in cat], [])
+
+    def test_every_dialog_has_an_accessible_name(self):
+        """صفحه‌خوان بدونِ نام فقط «dialog» می‌گوید؛ aria-labelledby باید به id ِ موجود بخورد."""
+        page = _web_source("PAGE_HTML")
+        tags = re.findall(r'<[a-z]+\b[^>]*role="(?:alert)?dialog"[^>]*>', page, re.S)
+        self.assertGreaterEqual(len(tags), 4)
+        for t in tags:
+            with self.subTest(tag=t[:60]):
+                lb = re.search(r'aria-labelledby="([\w-]+)"', t)
+                if lb:
+                    self.assertIn('id="%s"' % lb.group(1), page)
+                else:
+                    self.assertRegex(t, r'aria-label="[^"]+"')
+
+
+class SharePageThemeTests(unittest.TestCase):
+    """صفحه‌ی اشتراکِ رندرشده — به خروجی نگاه می‌کند، نه به سورس."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="wgpanel-share-")
+        self.m = load_module(self.tmp)
+        with open(os.path.join(self.tmp, "wgtest.conf"), "w", encoding="utf-8") as f:
+            f.write(FIXTURE_CONF)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_rendered_share_page_has_light_scheme_quota_bar_and_locale_dates(self):
+        m = self.m
+        m.add_peer("wgtest", "phone", use_psk=False)
+        tok, err = m.create_share("wgtest", "phone", 30, False, "admin")
+        self.assertIsNone(err)
+        res = m.resolve_share(tok)
+        for lang in ("fa", "en"):
+            with self.subTest(lang=lang):
+                html = m.render_share_page(res, None, lang)
+                self.assertIn("prefers-color-scheme: light", html)
+                self.assertIn('id="u-qbar"', html)
+                self.assertIn('role="progressbar"', html)
+                # تاریخ با زبانِ صفحه قالب می‌خورد، نه پیش‌فرضِ مرورگر
+                self.assertIn("toLocaleString(loc)", html)
+                self.assertIn('lang="%s"' % lang, html)
+                self.assertNotIn("⟦", html)
 
 
 if __name__ == "__main__":

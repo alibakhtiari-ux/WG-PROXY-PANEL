@@ -188,9 +188,9 @@ class PublishToolingTests(unittest.TestCase):
         self.assertIn("**18 commands**", body)
         evs = re.findall(r'\("([a-z0-9_]+)", "', src[
             src.index("ALERT_EVENTS = ("):src.index("ALERT_EVENT_KEYS")])
-        # «nqmo» شمرده نمی‌شود: موتورش (nqmo/) منتشر نمی‌شود، و با پرچمِ خاموش
-        # (پیش‌فرض) رابط تیکش را هم نشان نمی‌دهد. README فقط هشدارهایی را می‌شمارد
-        # که یک نصبِ عمومی واقعاً دارد. اگر موتور روزی منتشر شد، این استثنا برود.
+        # «nqmo» شمرده نمی‌شود: موتور از 1.4.0 منتشر می‌شود ولی اختیاری است و با پرچمِ
+        # خاموش (پیش‌فرض) رابط تیکش را هم نشان نمی‌دهد. README هشدارهایی را می‌شمارد
+        # که نصبِ پیش‌فرض واقعاً دارد؛ هشدارِ موتور در بخشِ WG-NQMO جداگانه توضیح داده شده.
         self.assertIn("nqmo", evs)
         n_ev = len([k for k in evs if k != "nqmo"])
         self.assertEqual(n_ev, 11, "تعدادِ انواعِ هشدار عوض شد — README را هم")
@@ -207,9 +207,11 @@ class PublishToolingTests(unittest.TestCase):
 
     @staticmethod
     def _nqmo_section(body):
+        # بخشِ NQMO تا نخستین لنگرِ بعدی: «نقشه و گزارش» (از 1.4.0) یا زبان‌ها
         i = body.index('<a id="wg-nqmo"></a>')
-        j = body.find('<a id="languages"></a>', i)
-        return body[i:j if j > 0 else body.index("## Languages", i)]
+        ends = [j for j in (body.find('<a id="map-and-report"></a>', i), body.find('<a id="languages"></a>', i),
+                            body.find("## Languages", i)) if j > 0]
+        return body[i:min(ends)]
 
     def test_wg_nqmo_section_sits_with_the_features(self):
         """خانواده‌ی «بخشی که به انتهای README رفت و کسی نمی‌بیندش»: بخشِ WG-NQMO
@@ -225,28 +227,106 @@ class PublishToolingTests(unittest.TestCase):
             self.assertGreaterEqual(body[:chart].count("(#wg-nqmo)"), 2, pub)   # فهرست + امکانات
 
     def test_readme_opening_introduces_wg_nqmo_honestly(self):
-        """خانواده‌ی «بالای صفحه قابلیتی را می‌فروشد که نصبِ عمومی ندارد»: هر چهار زبان
-        WG-NQMO را در سرآیند و مقدمه، پیش از نخستین تصویر، معرفی می‌کنند و هر دو جا
-        می‌گویند موتور منتشر نشده است. اگر موتور روزی منتشر شد، خطِ filelist همین تست
-        را قرمز می‌کند تا این جمله‌ها کهنه نمانند."""
-        self.assertNotRegex(_read(PUB, "filelist.txt"), r"(?m)^nqmo/")
-        facts = {"README.md": ("not published yet", "off by default", "works fully without it"),
-                 "README.fa.md": ("هنوز منتشر نشده", "پیش‌فرض خاموش", "بدونِ آن کامل کار می‌کند"),
-                 "README.ru.md": ("пока не опубликован", "по умолчанию выключена",
-                                  "полностью работает без него"),
-                 "README.zh-CN.md": ("尚未发布", "默认关闭", "没有它也能完整运行")}
+        """خانواده‌ی «بالای صفحه قابلیتی را می‌فروشد که نصبِ عمومی ندارد»: تا 1.3.0 هر
+        چهار زبان می‌گفتند موتور منتشر نشده؛ از 1.4.0 موتور در فهرستِ سفید است و همان
+        جمله‌ها باید بگویند «در همین مخزن، اختیاری، پیش‌فرض خاموش، پنل بدونِ آن کامل».
+        اگر روزی nqmo/ از فهرست بیرون برود، همین تست قرمز می‌شود تا README دروغ نگوید؛
+        و واژه‌ی کهنه‌ی «منتشر نشده» در هیچ زبانی نباید بماند."""
+        self.assertRegex(_read(PUB, "filelist.txt"), r"(?m)^nqmo/")
+        facts = {"README.md": ("in this repository", "off by default", "works fully without it",
+                               "not published yet"),
+                 "README.fa.md": ("در همین مخزن", "پیش‌فرض خاموش", "بدونِ آن کامل کار می‌کند",
+                                  "هنوز منتشر نشده"),
+                 "README.ru.md": ("в этом репозитории", "по умолчанию выключена",
+                                  "полностью работает без него", "пока не опубликован"),
+                 "README.zh-CN.md": ("本仓库中", "默认关闭", "没有它也能完整运行", "尚未发布")}
         flat = lambda s: re.sub(r"\s+", " ", s)
         for pub, src_ in self.READMES.items():
             body = _read(PUB, src_)
             end = body.index("</div>")
             hero, opening = body[:end], flat(body[end:body.index('<p align="center">')])
-            unpublished, off, works = facts[pub]
+            here, off, works, stale = facts[pub]
             self.assertIn("(#wg-nqmo)", hero, pub)
-            self.assertIn(unpublished, flat(hero), pub)
+            self.assertIn(off, flat(hero), pub)
             self.assertIn("**WG-NQMO**", opening, pub)
             self.assertIn("(#wg-nqmo)", opening, pub)
-            for fact in (unpublished, off, works):
+            for fact in (here, off, works):
                 self.assertIn(fact, opening, pub)
+            self.assertNotIn(stale, flat(body), "%s: واژه‌ی «منتشر نشده» کهنه است" % pub)
+
+    # فایل‌های موتورِ WG-NQMO که از 1.4.0 منتشر می‌شوند — همان فهرستی که
+    # NqmoDeployUnitTests در tests/test_nqmo.py هم می‌پاید.
+    ENGINE_FILES = ("nqmo/", "tools/build_nqmo_pyz.py", "tools/gen_nqmo_bpf.py",
+                    "deploy/wg-nqmo.service", "deploy/wg-nqmo-capture.conf",
+                    "deploy/wg-nqmo-resources.conf", "deploy/wg-nqmo.config.json",
+                    "deploy/wg-nqmo.capture.config.json", "deploy/wg-nqmo-review.sh",
+                    "deploy/wg-nqmo-review.service", "deploy/wg-nqmo-review.timer")
+
+    @staticmethod
+    def _neutralize(text, sh):
+        """همان جایگزینی‌های گامِ ۴پ ِ make-public.sh، خوانده از خودِ اسکریپت —
+        نه کپی‌شده — تا تست با اسکریپت هم‌گام بماند."""
+        block = sh[sh.index("myserver_files=$(grep"):sh.index("گاردِ myserver: صفر")]
+        subs = re.findall(r"s#([^#]+)#([^#]*)#g", block)
+        assert len(subs) >= 6, subs
+        for a, b in subs:
+            text = text.replace(a, b)
+        return text
+
+    def test_engine_files_are_listed_and_leave_no_private_identifier(self):
+        """خانواده‌ی «موتور منتشر شد ولی نامِ استقرار با خودش رفت»: هر فایلِ موتور
+        (پکیج، دو ابزار، یونیت و drop-in ها و کانفیگ‌ها، تست‌ها، سندِ طراحی) در فهرستِ
+        سفید است، و متنش **پس از** همان دگرگونیِ اسکریپت هیچ الگوی
+        private-identifiers.txt و هیچ «myserver» ای ندارد. کامنت هم نشت است (۲۸ سپتامبر)،
+        پس کلِ متن سنجیده می‌شود نه فقط کد."""
+        keep, drop = _entries(_read(PUB, "filelist.txt"))
+        for e in self.ENGINE_FILES:
+            self.assertIn(e, keep, "فایلِ موتور در فهرستِ سفید نیست: %s" % e)
+        self.assertIn("docs/", keep)
+        self.assertNotIn("docs/nqmo", drop, "طراحیِ موتور دیگر حذف نمی‌شود")
+        self.assertIn("docs/nqmo/00-PHASE0-AUDIT.md", drop,
+                      "ممیزیِ فاز ۰ نقشه‌ی توپولوژی است و خصوصی می‌مانَد")
+        for t in ("tests/test_nqmo.py", "tests/test_nqmo_diag.py", "tests/test_nqmo_panel.py"):
+            self.assertNotIn(t, drop, "تستِ موتور همراهِ موتور منتشر می‌شود: %s" % t)
+        sh = _read(PUB, "make-public.sh")
+        pats = [re.compile(ln.split("#", 1)[0].strip()) for ln in
+                _read(PUB, "private-identifiers.txt").split("\n")
+                if ln.split("#", 1)[0].strip()]
+        files = []
+        for e in list(self.ENGINE_FILES) + ["docs/nqmo/", "tests/test_nqmo.py",
+                                            "tests/test_nqmo_diag.py", "tests/test_nqmo_panel.py"]:
+            full = os.path.join(REPO, e)
+            if os.path.isdir(full):
+                for root, dirs, names in os.walk(full):
+                    dirs[:] = [d for d in dirs if d != "__pycache__"]
+                    files += [os.path.join(root, n) for n in sorted(names)]
+            else:
+                files.append(full)
+        files = [f for f in files if not f.endswith("00-PHASE0-AUDIT.md")]
+        self.assertGreater(len(files), 40, "فهرستِ فایل‌های موتور مشکوکانه کوتاه است")
+        for f in files:
+            with open(f, "rb") as fh:
+                raw = fh.read()
+            try:
+                text = raw.decode("utf-8")
+            except UnicodeDecodeError:
+                continue                        # باینری — اسکنِ اسکریپت هم -I دارد
+            out = self._neutralize(text, sh)
+            rel = os.path.relpath(f, REPO)
+            for p in pats:
+                self.assertIsNone(p.search(out), "%s: پس از خنثی‌سازی شناسه‌ی خصوصی دارد: %s"
+                                  % (rel, p.pattern))
+            self.assertNotIn("myserver", out.lower(), "%s: «myserver» پس از خنثی‌سازی ماند" % rel)
+
+    def test_generator_builds_and_self_tests_the_engine_before_committing(self):
+        """آرشیوِ دوم هم باید از درختِ عمومی ساخته و خودآزمایی شود — پیش از --dry-run
+        و پیش از کامیت — و شناسه‌اش در پیامِ کامیتِ شاخه‌ی عمومی ثبت شود."""
+        sh = _read(PUB, "make-public.sh")
+        i_build = sh.find('"$WT/tools/build_nqmo_pyz.py" --out')
+        self.assertGreater(i_build, 0, "ژنراتور wg_nqmo.pyz را نمی‌سازد")
+        self.assertIn("NQMO_CHECK_OK", sh[i_build:i_build + 600])
+        self.assertLess(i_build, sh.index('if [ "$DRY" -eq 1 ]'), "گاردِ موتور باید پیش از خروجِ --dry-run باشد")
+        self.assertIn("Engine build:  ${NQMOID}", sh)
 
     def test_wg_nqmo_vocabularies_are_complete_and_match_the_code(self):
         """هر واژگانِ بسته‌ی بخشِ WG-NQMO با کد و کاتالوگ: نوعِ تازه‌ی تشخیص یا دلیلِ
@@ -362,6 +442,55 @@ class PublishToolingTests(unittest.TestCase):
                     self.assertRegex(item, strong, "فهرستِ لاتین‌آغاز: %s" % item[:60])
         # کسره‌ی جدا پس از واژه‌ی لاتین در رندر به‌هم می‌ریزد
         self.assertNotRegex(prose, r"\S ِ")
+
+    @staticmethod
+    def _map_section(body):
+        i = body.index('<a id="map-and-report"></a>')
+        ends = [j for j in (body.find('<a id="languages"></a>', i), body.find("## Languages", i)) if j > 0]
+        return body[i:min(ends)]
+
+    def test_map_and_report_section_matches_the_code_in_every_language(self):
+        """خانواده‌ی «سندی که از کد جلو یا عقب افتاد» برای بخشِ نقشه و گزارش (1.4.0):
+        هر چهار زبان همان شناسه‌ها را می‌گویند، جدولِ API همان مجوزی را دارد که کد
+        می‌خواهد، بازه‌ها همان‌اند که کد می‌پذیرد، و هر برچسبِ رابط (عنوانِ بخش، نتیجه‌ها،
+        امضاها، شیت‌ها) در همان زبان در کاتالوگ هست — README ای که نامِ یک امضا را از
+        خودش بسازد («Routing loop» به‌جای «Heavy tx, no rx») قرمز می‌شود."""
+        import collections
+        import json
+        src = _read(REPO, "wgpanel/app.py")
+        cat = json.loads(_read(REPO, "wgpanel/i18n/catalog.json"))
+        spans = lambda s: collections.Counter(re.findall(r"`([^`\n]+)`", s))
+        # کسره‌ی جدا (فارسی) و ویرگول/پرسشِ تمام‌عرض (چینی) فقط نگارشی‌اند
+        norm = lambda s: re.sub(r"\s+", " ", re.sub(r" ِ", "", s).replace("，", ",").replace("？", "?"))
+        secs = {pub: self._map_section(_read(PUB, src_)) for pub, src_ in self.READMES.items()}
+        en = secs["README.md"]
+        for pub, s in secs.items():
+            self.assertEqual(spans(s), spans(en), "%s: شناسه‌های بخشِ نقشه و گزارش با انگلیسی نمی‌خوانند" % pub)
+            toc = re.findall(r"^- \[[^\]]+\]\(#([^)]+)\)$", _read(PUB, self.READMES[pub]), re.M)
+            self.assertEqual(toc[toc.index("wg-nqmo") + 1], "map-and-report", pub)
+            for shot in re.findall(r'src="(docs/screenshots/[^"]+)"', s):
+                self.assertTrue(os.path.isfile(os.path.join(REPO, shot)), shot)
+        # جدولِ API: مجوزِ هر مسیر همان است که جدولِ مجوزهای کد می‌گوید
+        perm = dict(re.findall(r'"(/api/[^"]+)": "([a-z.]+)"', src))
+        rows = re.findall(r"^\| `GET (/api/[^?`]+)[^`]*` \| `([a-z.]+)` \|", en, re.M)
+        self.assertEqual(len(rows), 4)
+        for path, need in rows:
+            self.assertEqual(perm.get(path), need, path)
+        self.assertIn("REPORT_DAYS = (1, 183)", src)
+        self.assertIn("max(1, min(168, int(h)))", src)
+        self.assertIn('(p.get("mask") or ["1"])[0] != "0"', src)
+        # برچسب‌های رابط، هر زبان با ستونِ خودش در کاتالوگ
+        keys = ["ui.viz.title", "ui.viz.xl.btn", "ui.viz.xl.mask"]
+        keys += ["viz.v.%s.t" % k for k in ("auto", "disabled", "never", "nat", "offline", "egress", "noroute", "ok")]
+        keys += ["viz.sig.%s.t" % k for k in ("nat_expired", "loop", "dead_ep", "no_forward", "never",
+                                               "offline", "idle", "ok", "disabled", "down")]
+        keys += ["xl.s.%s" % k for k in ("home", "users", "daily", "tunnels", "egress", "events",
+                                          "audit", "speed", "sys", "gloss")]
+        col = {"README.fa.md": 0, "README.md": 1, "README.ru.md": 2, "README.zh-CN.md": 3}
+        for pub, s in secs.items():
+            for k in keys:
+                label = norm(cat[k][col[pub]]).strip()
+                self.assertTrue(label in norm(s), "%s: برچسبِ رابط %s («%s») در README نیست" % (pub, k, label))
 
     def test_wg_nqmo_section_matches_the_code_in_every_language(self):
         """خانواده‌ی «سندی که از کد جلو یا عقب افتاد» برای بخشِ WG-NQMO: هر

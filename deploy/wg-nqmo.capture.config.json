@@ -1,0 +1,9 @@
+{
+  "mode": "OBSERVATION_ONLY",
+  "active_probes": false,
+  "capture": {
+    "enabled": true,
+    "ring_blocks": 64,
+    "s4_cpu_pct_max": 30.0
+  }
+}

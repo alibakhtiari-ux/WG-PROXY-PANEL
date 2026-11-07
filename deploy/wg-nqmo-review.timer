@@ -1,0 +1,13 @@
+# سورس: deploy/wg-nqmo-review.timer → /etc/systemd/system/wg-nqmo-review.timer
+[Unit]
+Description=اجرای wg-nqmo-review هر ساعت
+
+[Timer]
+OnBootSec=90s
+OnUnitActiveSec=1h
+AccuracySec=1min
+Persistent=true
+Unit=wg-nqmo-review.service
+
+[Install]
+WantedBy=timers.target
