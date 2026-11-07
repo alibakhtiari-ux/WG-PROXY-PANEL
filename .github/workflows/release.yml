@@ -8,6 +8,12 @@
 # wg_panel.py (its 20-line launcher; install both side by side), wg-panel.service, the
 # bundled qr.js and three.js files, and SHA256SUMS — everything the panel
 # serves from its own directory, so a server can install it with one download.
+# The optional WG-NQMO engine (from 1.4.0) adds wg_nqmo.pyz and wg-nqmo.service
+# with their own list, SHA256SUMS.nqmo.
+#
+# This workflow is the only way a release is made: push the tag and nothing
+# else. A release created by hand first makes this run fail ("a release with
+# the same tag name already exists"), and its assets are not the ones built here.
 name: release
 
 on:
@@ -31,6 +37,7 @@ jobs:
         run: |
           python3 -m unittest discover -s tests
           python3 tools/build_pyz.py --out dist/wg_panel.pyz && python3 dist/wg_panel.pyz --check
+          python3 tools/build_nqmo_pyz.py --out dist/wg_nqmo.pyz && python3 -I dist/wg_nqmo.pyz --check
           python3 tests/check_js.py
 
       - name: release notes
@@ -45,11 +52,18 @@ jobs:
           # هم‌خوان نگه می‌دارد.
           # پنل = wg_panel.pyz (در مرحله‌ی tests ساخته شد و در dist/ است)؛
           # wg_panel.py لانچرِ آن است و هر دو باید کنارِ هم نصب شوند.
+          # SHA256SUMS فقط همان فایل‌هایی را فهرست می‌کند که دستورِ نصبِ README
+          # دانلود می‌کند: `sha256sum -c` برای هر فایلِ فهرست‌شده‌ی دانلودنشده
+          # «No such file» می‌دهد و نصب می‌ایستد (1.4.0 و 1.4.1 که دستی ساخته
+          # شدند موتور را در همین فایل داشتند). موتورِ WG-NQMO اختیاری است و
+          # فهرستِ خودش را دارد. tests/test_deploy.py هر دو را می‌پاید.
           ASSETS="wg_panel.pyz wg_panel.py wg-panel.service qr.js three.module.min.js.gz three.core.min.js.gz three.LICENSE.txt"
+          NQMO_ASSETS="wg_nqmo.pyz wg-nqmo.service"
           mkdir -p dist
           cp wg_panel.py wg-panel.service qr.js three.module.min.js.gz three.core.min.js.gz three.LICENSE.txt dist/
-          (cd dist && sha256sum $ASSETS > SHA256SUMS)
-          cat dist/SHA256SUMS
+          cp deploy/wg-nqmo.service dist/
+          (cd dist && sha256sum $ASSETS > SHA256SUMS && sha256sum $NQMO_ASSETS > SHA256SUMS.nqmo)
+          cat dist/SHA256SUMS dist/SHA256SUMS.nqmo
 
       - name: publish
         env:

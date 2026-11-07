@@ -292,6 +292,41 @@ class ReleaseAssetTests(unittest.TestCase):
                     self.assertRegex(
                         text, r'(?:-fLO|-O) "\$base/%s"' % re.escape(fn))
 
+    def test_every_checksum_list_matches_what_is_downloaded_with_it(self):
+        """خانواده‌ی «sha256sum -c که روی نصبِ درست شکست می‌خورد»، که دو بار رخ داده:
+        در 1.2.x فایلی دانلود و سرو می‌شد که در SHA256SUMS نبود، و در 1.4.0 و 1.4.1
+        (ریلیزِ دستی) SHA256SUMS دو فایلِ موتور را هم فهرست کرد که README دانلودشان
+        نمی‌کند. پس هر بلوکِ دانلودِ README دقیقاً ASSETS به‌اضافه‌ی SHA256SUMS را
+        می‌گیرد و بلافاصله همان را می‌سنجد، موتور فهرستِ جدای خودش را دارد، و هر
+        فایلِ هر دو فهرست ساخته یا به dist/ کپی می‌شود تا منتشر شود."""
+        wf = _read(".github", "workflows", "release.yml")
+        assets = re.search(r'(?m)^\s*ASSETS="([^"]+)"', wf).group(1).split()
+        nqmo = re.search(r'(?m)^\s*NQMO_ASSETS="([^"]+)"', wf).group(1).split()
+        self.assertEqual(nqmo, ["wg_nqmo.pyz", "wg-nqmo.service"])
+        self.assertFalse(set(assets) & set(nqmo), "یک فایل در دو فهرست")
+        self.assertIn("sha256sum $ASSETS > SHA256SUMS ", wf)
+        self.assertIn("sha256sum $NQMO_ASSETS > SHA256SUMS.nqmo", wf)
+        # هر دو آرشیو در گامِ tests ساخته و خودآزمایی می‌شوند؛ بقیه کپی می‌شوند
+        self.assertIn("tools/build_pyz.py --out dist/wg_panel.pyz", wf)
+        self.assertIn("tools/build_nqmo_pyz.py --out dist/wg_nqmo.pyz && "
+                      "python3 -I dist/wg_nqmo.pyz --check", wf)
+        self.assertRegex(wf, r"(?m)^\s*cp deploy/wg-nqmo\.service dist/$")
+        self.assertTrue(os.path.isfile(os.path.join(ROOT, "deploy", "wg-nqmo.service")))
+        self.assertIn('gh release create "$GITHUB_REF_NAME" dist/*', wf)
+        for name in READMES:
+            text = _readme(name)
+            lines = text.split("\n")
+            starts = [i for i, ln in enumerate(lines) if ln.startswith('curl -fLO "$base/')]
+            self.assertGreaterEqual(len(starts), 1, name)
+            for i in starts:
+                j = i                       # فرمان تا خطی که به «\» ختم نشود
+                while lines[j].endswith("\\"):
+                    j += 1
+                got = re.findall(r'"\$base/([^"]+)"', "\n".join(lines[i:j + 1]))
+                with self.subTest(readme=name, line=i + 1):
+                    self.assertEqual(sorted(got), sorted(assets + ["SHA256SUMS"]))
+                    self.assertEqual(lines[j + 1], "sha256sum -c SHA256SUMS")
+
 
 class ShellVarBeforeNonAsciiTests(unittest.TestCase):
     """گاردِ خانوادگی: «$name» که بلافاصله پیش از یک بایتِ غیرِاسکی (حرفِ
