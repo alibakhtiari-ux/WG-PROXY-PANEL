@@ -14,8 +14,33 @@ build id, the same measure of `wg_nqmo.pyz`.
 
 ## [Unreleased]
 
+## [1.5.0] — 2026-11-07
+
+### Added
+
+- WG-NQMO in the Telegram bot: `/quality` and a menu button show the engine mode, the
+  age of its data, coverage, global diagnoses and the clients worst first; tapping a
+  client (or `/quality <name>`) shows its quality, round trip, upstream loss, MTU status,
+  open diagnoses and recommendations, with the panel's own wording in all four
+  languages. Read-only and gated by `nqmo.view`; prefixes, ASNs and raw evidence never
+  reach the bot. The command and the button exist only while the engine is turned on.
+
+- Excel export in the Telegram bot: `/excel` and a menu button build one `.xlsx` file
+  for the last 1, 3, 7 or 30 days or a typed range (Gregorian or Solar Hijri). Three
+  kinds: all WireGuard clients, the whole server (only the sheets the user's role may
+  see), or one WireGuard or proxy user, reached by name search or from that user's
+  page in the bot. The user workbook has a dashboard, daily and hourly traffic with
+  charts, the user's path as native Excel shapes with its evidence, connection
+  quality, share links, proxy sources and destinations, and the admin actions on that
+  user. The server workbook gains proxy-user, daily proxy traffic and connection
+  quality sheets. Passwords and share tokens never reach the file.
+
 ### Fixed
 
+- `/quality` listed only the first 20 clients in name order, so a client could be
+  missing from the list while the engine had data for it. The list is now paged and
+  puts clients with measurements first. In observation-only mode a client's page says
+  why there is no grade instead of showing a dash.
 - Releases 1.4.0 and 1.4.1: `SHA256SUMS` also listed the two engine files, which the
   install steps in the README do not download, so `sha256sum -c SHA256SUMS` stopped with
   "No such file". Both releases now carry a `SHA256SUMS` for the panel files only and a
@@ -496,7 +521,8 @@ build id, the same measure of `wg_nqmo.pyz`.
 
 First public release.
 
-[Unreleased]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/compare/v1.4.1...HEAD
+[Unreleased]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/compare/v1.4.1...v1.5.0
 [1.4.1]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/alibakhtiari-ux/WG-PROXY-PANEL/compare/v1.2.3...v1.3.0

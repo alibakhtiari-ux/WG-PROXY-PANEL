@@ -7590,6 +7590,7 @@ NQMO_COLLECTORS = ("C1_meta", "C2_kernel", "C3_capture")
 NQMO_PEER_QUALITY = {"INSUFFICIENT": -1, "OK": 0, "LOW": 1, "MEDIUM": 2, "HIGH": 3}
 NQMO_MTU_STATUS = {"UNDETERMINED": 0, "CANDIDATE_FOR_TESTING": 1, "ESTIMATED": 2,
                    "VERIFIED": 3}
+NQMO_REC_SOURCES = ("CONFIG", "KERNEL")   # recommend.py: current_source
 NQMO_RTT_MIN_SAMPLES = 5         # rules.PARAMS["rtt_min_samples"]
 NQMO_LOSS_N_MIN = 1000           # rules.PARAMS["loss_n_min"]
 NQMO_WINDOW = 300
@@ -11719,6 +11720,7 @@ class TelegramBot(threading.Thread):
         super().__init__(daemon=True)
         self.offset = 0
         self.convo = {}   # tg_id -> وضعیتِ گفت‌وگوی چندمرحله‌ای
+        self._xl_lock = threading.Lock()   # خروجیِ Excel: هم‌زمان فقط یک ساخت
         self._edit = None  # (chat, message_id) هنگام پردازشِ callback؛ تک‌نخی
         self._chat_type = None  # نوعِ چتِ درخواستِ جاری (private/group/…)
         # زبانِ کاربرِ همین به‌روزرسانی. مثلِ _edit روی نمونه می‌نشیند چون
@@ -11832,13 +11834,13 @@ class TelegramBot(threading.Thread):
                       {"chat_id": chat, "caption": caption, "parse_mode": "HTML"},
                       photo=("chart.png", png), iface=alert_cfg()["iface"])
 
-    def send_doc(self, chat, filename, content, caption=""):
+    def send_doc(self, chat, filename, content, caption="", ctype="text/plain"):
         return tg_api(self._token(), "sendDocument",
                       {"chat_id": chat, "caption": caption, "parse_mode": "HTML"},
                       photo=(filename, content.encode("utf-8")
                              if isinstance(content, str) else content),
                       iface=alert_cfg()["iface"],
-                      _field="document", _ctype="text/plain")
+                      _field="document", _ctype=ctype)
 
     def answer_cb(self, cb_id, text=""):
         tg_api(self._token(), "answerCallbackQuery",
@@ -12011,6 +12013,20 @@ class TelegramBot(threading.Thread):
                 self._warp_page(chat, frm)
             else:
                 self.send(chat, self.T('bot.backup_page.1'))
+        elif cmd in ("/excel", "/xlsx"):
+            # «/excel» ⇒ منو · «/excel 14» ⇒ همه‌ی کاربرانِ وایرگارد، ۱۴ روز · «/excel نام» ⇒ جست‌وجو
+            arg = text.split(None, 1)[1].strip() if len(text.split(None, 1)) > 1 else ""
+            if not arg:
+                self._xl_action(frm, chat, perms, "page", "")
+            elif re.fullmatch(r"\d{1,4}", arg):   # \d ِ یونیکد: ارقامِ فارسی هم
+                self._xl_action(frm, chat, perms, "d", "a:" + arg)
+            else:
+                self._xl_action(frm, chat, perms, "f", arg)
+        elif cmd == "/quality":
+            # نامِ دستگاه دست‌نخورده (حساس به حروف)؛ فقط فرمان کوچک شده است
+            words = text.split()
+            self._nqmo_action(chat, perms, "p" if len(words) > 1 else "page",
+                              words[1] if len(words) > 1 else "")
         else:
             self._main_menu(chat, frm)
 
@@ -12022,6 +12038,8 @@ class TelegramBot(threading.Thread):
             rows.append([{"text": self.T('bot.main_menu.6'), "callback_data": "wg:list"}])
         if "proxy.view" in p:
             rows.append([{"text": self.T('bot.main_menu.7'), "callback_data": "px:list"}])
+        if "wg.view" in p or "proxy.view" in p:
+            rows.append([{"text": self.T('bot.xl.menu'), "callback_data": "xl:page"}])
         if "tun.view" in p:
             rows.append([{"text": self.T('bot.tun_list.2'), "callback_data": "tun:list"}])
         if "sys.view" in p:
@@ -12033,6 +12051,8 @@ class TelegramBot(threading.Thread):
             rows.append([{"text": self.T('bot.main_menu.10'), "callback_data": "ec:page"}])
         if "warp.manage" in p:
             rows.append([{"text": self.T('bot.main_menu.11'), "callback_data": "wp:page"}])
+        if "nqmo.view" in p and nqmo_enabled():
+            rows.append([{"text": self.T('bot.nqmo.menu'), "callback_data": "nq:page"}])
         if "wg.add" in p:
             rows.append([{"text": self.T('bot.main_menu.12'),
                           "callback_data": "wg:add"}])
@@ -12089,6 +12109,10 @@ class TelegramBot(threading.Thread):
             self._leak_audit(chat)
         elif area == "wp" and "warp.manage" in p:
             self._warp_action(frm, chat, act, arg)
+        elif area == "nq" and "nqmo.view" in p:
+            self._nqmo_action(chat, p, act, arg)
+        elif area == "xl" and ("wg.view" in p or "proxy.view" in p):
+            self._xl_action(frm, chat, p, act, arg)
         elif area == "bu" and "bot.manage" in p:
             self._bu_action(frm, chat, act, arg)
         elif area == "bw":            # پایشِ کاربرانِ ربات (فقط مالک؛ چکِ داخلی)
@@ -12169,6 +12193,7 @@ class TelegramBot(threading.Thread):
                 return [{"text": "%s (%s)%s" % (u["name"], u["iface"], tag),
                          "callback_data": "wg:show:%s|%s" % (u["iface"], u["name"])}]
             rows, page, pages = self._paged(users, page, mk, "wg:list")
+            rows.insert(-1, [{"text": self.T('bot.xl.menu'), "callback_data": "xl:page"}])
             self.send(chat, self._rtl(self.T('bot.wg_action.2', p0=_fa_num(len(users)), p1=_fa_num(page + 1), p2=_fa_num(pages))), rows)
         elif act == "show":
             iface, _, name = arg.partition("|")
@@ -12247,7 +12272,9 @@ class TelegramBot(threading.Thread):
             self._kv(self.T('bot.wg_show.5'), self._fa_date(exp) if exp else self.T('bot.wg_add_create.14')),
             self._kv(self.T('bot.wg_show.6'), _ago_srv(u.get("handshake", 0)))])
         a = "%s|%s" % (iface, name)
-        rows = [[{"text": self.T('bot.speed_page.3'), "callback_data": "wg:graph:" + a}]]
+        rows = [[{"text": self.T('bot.speed_page.3'), "callback_data": "wg:graph:" + a},
+                 {"text": self.T('bot.xl.user_btn'),
+                  "callback_data": "xl:r:" + self._xl_token("wg", (iface, name))}]]
         if "wg.conf" in p:
             rows.append([{"text": self.T('bot.wg_show.7'), "callback_data": "wg:conf:" + a}])
         if "wg.edit" in p:
@@ -12444,7 +12471,9 @@ class TelegramBot(threading.Thread):
                      if u.get("expires") else self.T('bot.wg_add_create.14')),
             self._kv(self.T('bot.px_show.10'), fmt_bytes_srv(month))])
         rows = [[{"text": self.T('bot.speed_page.3'), "callback_data": "px:graph:%s" % username},
-                 {"text": self.T('bot.px_show.11'), "callback_data": "px:dst:%s" % username}]]
+                 {"text": self.T('bot.px_show.11'), "callback_data": "px:dst:%s" % username}],
+                [{"text": self.T('bot.xl.user_btn'),
+                  "callback_data": "xl:r:" + self._xl_token("px", username)}]]
         if "proxy.conf" in p:
             rows.append([{"text": self.T('bot.wg_show.7'), "callback_data": "px:conf:%s" % username}])
         if "proxy.edit" in p:
@@ -13628,6 +13657,12 @@ class TelegramBot(threading.Thread):
         elif st["flow"] == "find":
             self.convo.pop(frm, None)
             self._find(chat, text.strip(), p)
+        elif st["flow"] == "xl_days":
+            self.convo.pop(frm, None)
+            self._xl_action(frm, chat, p, "d", "%s:%s" % (st.get("k") or "a", text.strip()))
+        elif st["flow"] == "xl_find":
+            self.convo.pop(frm, None)
+            self._xl_action(frm, chat, p, "f", text.strip())
         elif st["flow"] == "input":
             self._input_step(frm, chat, st, text.strip(), p)
         elif st["flow"] == "bu_add":
@@ -14286,6 +14321,369 @@ class TelegramBot(threading.Thread):
         rows.append(self._back_row())
         self.send(chat, self._rtl(self.T('bot.live_list.2', p0=_fa_num(len(users)))), rows)
 
+# ---------------------------------------- رباتِ تلگرام: کیفیتِ ارتباط (WG-NQMO، P9)
+    # ---- WG-NQMO: کیفیتِ ارتباط (P9) ------------------------------------
+    # فقط خواندنی و همان اسنادِ /api/nqmo/status و /api/nqmo/peer (بدونِ
+    # nqmo.detail: نه prefix، نه ASN، نه شاهدِ کامل). برچسب‌ها همان ui.nqmo.* ِ
+    # پنل‌اند تا ربات و پنل یک واژه بگویند. ack، probe و تغییرِ حالت عمداً اینجا نیستند.
+    NQMO_PAGE_MAX = 20
+
+    def _nq_n(self, v):
+        """مقدارِ کمّی به ارقامِ زبانِ همین چت."""
+        s = str(v)
+        return _fa_num(s) if self._lang in LANG_FA_DIGITS else s
+
+    def _nq_t(self, prefix, v, html=True):
+        """برچسبِ پنل برای مقدارِ واژگانِ موتور. کلیدِ پویا فقط از اینجا ساخته می‌شود تا
+        گاردِ واژگان (tests/test_bot_quality.py) پیشوندش را ببیند."""
+        if not v:
+            return "—"
+        s = self.T(prefix + v)
+        return esc_html(s) if html else s
+
+    def _nq_rec(self, r, val):
+        """متنِ یک توصیه. منبع برچسب می‌گیرد (نه «CONFIG» ِ خام)، و بی‌پیشنهاد به‌جای
+        «پیشنهاد: بدونِ پیشنهاد» وضعیتِ MTU را می‌گوید (تعیین‌نشده / تأییدشده)."""
+        srcv = r.get("current_source")
+        src = (self._nq_t('ui.nqmo.src.', srcv, html=False) if srcv in NQMO_REC_SOURCES
+               else str(srcv or "—")[:32])
+        if r.get("suggested_value") is not None:
+            return esc_html(self.T('ui.nqmo.rec.v', p0=val(r.get("current_value")), p1=src,
+                                   p2=val(r.get("suggested_value"))))
+        status = r.get("status")
+        why = (self._nq_t('ui.nqmo.mtu.', status, html=False) if status in NQMO_MTU_STATUS
+               else self.T('ui.nqmo.rec.nosug'))
+        return esc_html(self.T('bot.nqmo.rec.cur', p0=val(r.get("current_value")), p1=src, p2=why))
+
+    def _nq_back(self):
+        return [[{"text": self.T('bot.nqmo.menu'), "callback_data": "nq:page"}],
+                self._back_row()]
+
+    def _nqmo_action(self, chat, p, act, arg):
+        if "nqmo.view" not in p:
+            self.send(chat, self.T('bot.backup_page.1'), [self._back_row()])
+            return
+        if not nqmo_enabled():
+            self.send(chat, self._rtl(self._nq_t('ui.nqmo.why.', "disabled")),
+                      [self._back_row()])
+            return
+        known = nqmo_panel_peers()
+        if act == "p":
+            iface, _, name = arg.partition("|") if "|" in arg else (None, "", arg)
+            lab = nqmo_pick_peer(known, name, iface)
+            if lab is None:
+                self.send(chat, self._rtl(esc_html(self.T('bot.nqmo.no_peer'))) + "\n"
+                          + self._code_line(name[:64]), self._nq_back())
+                return
+            self._nqmo_peer_page(chat, lab, known)
+        else:
+            self._nqmo_page(chat, known, int(arg) if arg.isdigit() else 0)
+
+    def _nqmo_page(self, chat, known, page=0):
+        doc = nqmo_status_doc(nqmo_state(), False, known)
+        L = [self._titlebar(esc_html(self.T('ui.nqmo.title'))), ""]
+        if not doc["available"]:
+            L.append(self._rtl(self._nq_t('ui.nqmo.why.', doc["why"])))
+            self.send(chat, "\n".join(L), [self._back_row()])
+            return
+        L.append(self._kv(esc_html(self.T('ui.nqmo.mode')), self._nq_t('ui.nqmo.md.', doc["mode"])))
+        L.append(self._kv(esc_html(self.T('ui.nqmo.age')),
+                          esc_html(_ago_srv(doc["generated_at"], self._lang))))
+        cov = doc["coverage"]
+        if cov["peers_active"] is not None and cov["peers_total"] is not None:
+            L.append(self._kv(esc_html(self.T('ui.nqmo.coverage')), esc_html(self.T(
+                'ui.nqmo.coverage.v', p0=self._nq_n(int(cov["peers_active"])),
+                p1=self._nq_n(int(cov["peers_total"]))))))
+        if doc["global"]:
+            L += ["", self._head(esc_html(self.T('ui.nqmo.diags')))]
+            for d in doc["global"][:10]:
+                L.append(self._rtl("• %s — %s · %s" % (
+                    self._nq_t('ui.nqmo.cls.', d["class"]),
+                    self._nq_t('ui.nqmo.lv.', d["confidence"]),
+                    esc_html(d["subject"]) if d.get("subject")
+                    else self._nq_t('ui.nqmo.scope.', d["scope"]))))
+        # بدترین‌ها اول: تشخیصِ باز، بعد کیفیت، بعد «داده دارد»، بعد نام. بدونِ
+        # کلیدِ داده، وقتی موتور هنوز کیفیتی نداده (همه None) ترتیب الفبایی می‌شد و
+        # دستگاهِ فعال پشتِ دستگاه‌های خاموش گم می‌شد (abnavid، ۷ نوامبر).
+        rows = sorted(doc["peers"], key=lambda r: (
+            -r["open"], -NQMO_PEER_QUALITY.get(r.get("quality") or "", -2),
+            0 if (r.get("rtt_n") or r.get("loss_n")) else 1, r["name"], r["iface"]))
+        L.append("")
+        if not rows:
+            L.append(self._rtl(esc_html(self.T('bot.nqmo.none'))))
+        else:
+            L.append(self._rtl(esc_html(self.T('bot.nqmo.pick'))))
+        kb = []
+        size = self.NQMO_PAGE_MAX
+        pages = max(1, (len(rows) + size - 1) // size)
+        page = max(0, min(page, pages - 1))
+        for r in rows[page * size:(page + 1) * size]:
+            data = "nq:p:%s|%s" % (r["iface"], r["name"])
+            if len(data.encode("utf-8")) > 64:      # سقفِ callback_data ِ تلگرام
+                continue
+            if r.get("quality"):
+                label = self._nq_t('ui.nqmo.q.', r["quality"], html=False)
+            elif r.get("rtt_ms_med") is not None:   # کیفیت هنوز نیست ولی RTT هست
+                label = self._nq_n("%s ms" % r["rtt_ms_med"])
+            else:
+                label = "—"
+            if r["open"]:
+                label += " · " + self.T('bot.nqmo.open', p0=self._nq_n(r["open"]))
+            kb.append([{"text": "%s (%s) — %s" % (r["name"], r["iface"], label),
+                        "callback_data": data}])
+        if pages > 1:
+            nav = []
+            if page > 0:
+                nav.append({"text": self.T('bot.paged.1'), "callback_data": "nq:page:%d" % (page - 1)})
+            nav.append({"text": "%s/%s" % (self._nq_n(page + 1), self._nq_n(pages)), "callback_data": "x"})
+            if page < pages - 1:
+                nav.append({"text": self.T('bot.paged.2'), "callback_data": "nq:page:%d" % (page + 1)})
+            kb.append(nav)
+        kb.append(self._back_row())
+        self.send(chat, "\n".join(L), kb)
+
+    def _nqmo_peer_page(self, chat, lab, known):
+        st = nqmo_state()
+        doc = nqmo_peer_doc(st, lab, False, known)
+        L = [self._titlebar(esc_html(self.T('ui.nqmo.title'))),
+             self._code_line("%s (%s)" % (lab[1], lab[0])), ""]
+        if not doc["available"]:
+            L.append(self._rtl(self._nq_t('ui.nqmo.why.', doc["why"])))
+            self.send(chat, "\n".join(L), self._nq_back())
+            return
+        m = doc["summary"]
+        if m is None:
+            L.append(self._rtl(esc_html(self.T('ui.nqmo.nosummary'))))
+        else:
+            n = self._nq_n
+            if m["quality"] is None and st.get("mode") == "OBSERVATION_ONLY":
+                # موتور در حالتِ فقط‌مشاهده عمداً رتبه نمی‌دهد (analysis.peer_summary)؛
+                # «—» ِ خالی خوانده می‌شد «خراب است» (ABAB، ۷ نوامبر)
+                q = esc_html(self.T('bot.nqmo.q_obs'))
+            else:
+                q = self._nq_t('ui.nqmo.q.', m["quality"])
+            L.append(self._kv(esc_html(self.T('ui.nqmo.th.quality')), q))
+            # زیرِ ۱۰ms یک رقمِ اعشار: ۴٫۵ گرد به «۴» می‌شد و کمینه از میانه بزرگ‌تر به نظر می‌رسید
+            ms = lambda v: n("%.1f" % v if v < 10 else "%.0f" % v)   # noqa: E731
+            if m["rtt_ms_med"] is None:
+                rtt = self.T('ui.nqmo.rtt.few', p0=n(m["rtt_n"]))
+            else:
+                rtt = self.T('ui.nqmo.rtt.v', p0=ms(m["rtt_ms_med"]),
+                             p1=ms(m["rtt_ms_min"]) if m["rtt_ms_min"] is not None else "—",
+                             p2=n(m["rtt_n"]))
+            L.append(self._kv(esc_html(self.T('ui.nqmo.th.rtt')), esc_html(rtt)))
+            if m["loss_point"] is None:
+                loss = self.T('ui.nqmo.loss.few', p0=n(m["loss_n"]))
+            else:
+                loss = self.T('ui.nqmo.loss.v', p0=n("%.2f" % (m["loss_point"] * 100)),
+                              p1=n("%.2f" % (m["loss_lb"] * 100)),
+                              p2=n("%.2f" % (m["loss_ub"] * 100)), p3=n(m["loss_n"]))
+            L.append(self._kv(esc_html(self.T('ui.nqmo.th.loss')), esc_html(loss)))
+            L.append(self._kv(esc_html(self.T('ui.nqmo.th.mtu')), self._nq_t('ui.nqmo.mtu.', m["mtu_status"])))
+        if doc["diagnoses"]:
+            L += ["", self._head(esc_html(self.T('ui.nqmo.diags')))]
+            for d in doc["diagnoses"][:10]:
+                L.append(self._rtl("• %s — %s" % (self._nq_t('ui.nqmo.cls.', d["class"]),
+                                                  self._nq_t('ui.nqmo.lv.', d["confidence"]))))
+        if doc["recommendations"]:
+            L += ["", self._head(esc_html(self.T('ui.nqmo.recs')))]
+            val = lambda v: self._nq_n(v) if type(v) in (int, float) else "—"
+            for r in doc["recommendations"]:
+                tgt = r.get("target")
+                L.append(self._rtl("• %s: %s" % (
+                    self._nq_t('ui.nqmo.tgt.', tgt if isinstance(tgt, str) and
+                               'ui.nqmo.tgt.' + tgt in I18N else ""),
+                    self._nq_rec(r, val))))
+        self.send(chat, "\n".join(L), self._nq_back())
+
+# ---------------------------------------- رباتِ تلگرام: خروجیِ Excel ِ کاربرانِ وایرگارد
+    # ---- خروجیِ Excel: کاربرانِ وایرگارد در یک بازه ---------------------
+    # همان کارپوشه‌ی /api/report.xlsx ِ پنل (report.build)، ولی فقط برگه‌های
+    # کاربران: مجوزها به wg.view بریده می‌شوند، پس تونل، ممیزی و سامانه هرگز در
+    # فایلِ ربات نمی‌آیند — فایلِ تلگرام راحت فوروارد می‌شود. endpoint همیشه
+    # پوشانده است (همان پیش‌فرضِ پنل؛ اینجا راهِ بازکردن ندارد).
+    XL_PRESETS = (1, 3, 7, 30)
+    XL_CTYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    XL_SERVER_PERMS = frozenset(("wg.view", "proxy.view", "tun.view", "audit.view", "sys.view", "nqmo.view"))
+    XL_FIND_MAX = 20
+
+    def _xl_days_label(self, d):
+        return self.T('bot.xl.month') if d == 30 else self.T('bot.xl.days', p0=self._nq_n(d))
+
+    @staticmethod
+    def _xl_token(kind, ident):
+        """شناسه‌ی کوتاه و بی‌حالتِ یک کاربر برای callback_data (سقفِ ۶۴ بایت). از نام ساخته
+        می‌شود نه از حافظه، پس دکمه پس از ری‌استارتِ پنل هم کار می‌کند."""
+        key = "%s|%s" % (kind, "|".join(ident) if kind == "wg" else ident)
+        return kind[0] + hashlib.sha256(key.encode("utf-8")).hexdigest()[:10]
+
+    def _xl_resolve(self, k, p):
+        """k ⇒ (نوع، شناسه) یا None. «a» همه‌ی کاربرانِ وایرگارد، «s» کلِ سرور، وگرنه token ِ کاربر.
+        هر نوع فقط با مجوزِ دیدنِ همان نوع."""
+        if k == "a":
+            return ("a", None) if "wg.view" in p else None
+        if k == "s":
+            return ("s", None) if "wg.view" in p else None
+        if k[:1] == "w" and "wg.view" in p:
+            for u in build_stats().get("users") or []:
+                lab = (u.get("iface") or "", u.get("name") or "")
+                if self._xl_token("wg", lab) == k:
+                    return ("wg", lab)
+        if k[:1] == "p" and "proxy.view" in p:
+            for u in META.proxy_users():
+                if self._xl_token("px", u["username"]) == k:
+                    return ("px", u["username"])
+        return None
+
+    def _xl_target_label(self, t):
+        kind, ident = t
+        if kind == "a":
+            return self.T('bot.xl.all')
+        if kind == "s":
+            return self.T('bot.xl.server')
+        if kind == "wg":
+            return "%s (%s)" % (ident[1], ident[0])
+        return "%s (%s)" % (ident, self.T('bot.xl.proxy'))
+
+    def _xl_action(self, frm, chat, p, act, arg):
+        if not ({"wg.view", "proxy.view"} & set(p)):
+            self.send(chat, self.T('bot.backup_page.1'), [self._back_row()])
+            return
+        if act == "u":                      # جست‌وجوی کاربرِ مشخص
+            self.convo[frm] = {"flow": "xl_find"}
+            self.send(chat, self._rtl(esc_html(self.T('bot.xl.find_ask'))),
+                      [[{"text": self.T('bot.dispatch_inner.1'), "callback_data": "xl:page"}]])
+            return
+        if act == "f":                      # متنِ جست‌وجو (از convo یا «/excel نام»)
+            self._xl_find(chat, p, arg)
+            return
+        k, _, rest = arg.partition(":")
+        if act == "d":                      # «xl:d:<k>:<روز>» یا متنِ بازه‌ی دلخواه
+            k, rest = (k, rest) if rest else ("a", k)
+        t = self._xl_resolve(k, p) if act in ("r", "c", "d") else None
+        if act in ("r", "c", "d") and t is None:
+            self.send(chat, self._rtl(esc_html(self.T('bot.xl.stale'))), self._xl_home_rows(p))
+            return
+        if act == "r":
+            self.send(chat, "\n".join([
+                self._titlebar(esc_html(self.T('bot.xl.title'))),
+                self._kv(esc_html(self.T('bot.xl.target')), esc_html(self._xl_target_label(t))), "",
+                self._rtl(esc_html(self.T('bot.xl.pick')))]), self._xl_rows(k))
+            return
+        if act == "c":
+            self.convo[frm] = {"flow": "xl_days", "k": k}
+            self.send(chat, "\n".join([
+                self._kv(esc_html(self.T('bot.xl.target')), esc_html(self._xl_target_label(t))),
+                self._rtl(esc_html(self.T('bot.xl.ask', p0=self._nq_n(REPORT_DAYS[1]))))]),
+                [[{"text": self.T('bot.dispatch_inner.1'), "callback_data": "xl:r:" + k}]])
+            return
+        if act == "d":
+            span, err = parse_report_span(rest)
+            if span is None:
+                self.send(chat, self._rtl(esc_html(self.T(err, p0=self._nq_n(REPORT_DAYS[0]),
+                                                           p1=self._nq_n(REPORT_DAYS[1])))),
+                          self._xl_rows(k))
+                return
+            self._xl_build(frm, chat, p, t, span)
+            return
+        self.send(chat, "\n".join([
+            self._titlebar(esc_html(self.T('bot.xl.title'))), "",
+            self._rtl(esc_html(self.T('bot.xl.kind'))),
+            self._rtl(esc_html(self.T('bot.xl.note')))]), self._xl_home_rows(p))
+
+    def _xl_home_rows(self, p):
+        rows = []
+        if "wg.view" in p:
+            rows.append([{"text": self.T('bot.xl.all'), "callback_data": "xl:r:a"}])
+        rows.append([{"text": self.T('bot.xl.user'), "callback_data": "xl:u"}])
+        if "wg.view" in p:
+            rows.append([{"text": self.T('bot.xl.server'), "callback_data": "xl:r:s"}])
+        rows.append(self._back_row())
+        return rows
+
+    def _xl_rows(self, k):
+        pre = [{"text": self._xl_days_label(d), "callback_data": "xl:d:%s:%d" % (k, d)}
+               for d in self.XL_PRESETS]
+        return [pre[:2], pre[2:],
+                [{"text": self.T('bot.xl.custom'), "callback_data": "xl:c:" + k}],
+                [{"text": self.T('bot.xl.menu'), "callback_data": "xl:page"}],
+                self._back_row()]
+
+    def _xl_find(self, chat, p, q):
+        ql = (q or "").strip().lower()
+        hits = []
+        if ql:
+            if "wg.view" in p:
+                hits += [("wg", (u.get("iface") or "", u.get("name") or ""))
+                         for u in build_stats().get("users") or [] if ql in (u.get("name") or "").lower()]
+            if "proxy.view" in p:
+                hits += [("px", u["username"]) for u in META.proxy_users() if ql in u["username"].lower()]
+        # نامِ دقیق اول، بعد کوتاه‌تر
+        name = lambda t: t[1][1] if t[0] == "wg" else t[1]          # noqa: E731
+        hits.sort(key=lambda t: (name(t).lower() != ql, len(name(t)), name(t).lower()))
+        if not hits:
+            self.send(chat, self._rtl(esc_html(self.T('bot.xl.find_none'))) + "\n" + self._code_line(q[:64]),
+                      [[{"text": self.T('bot.xl.user'), "callback_data": "xl:u"}], self._back_row()])
+            return
+        rows = [[{"text": self._xl_target_label(t), "callback_data": "xl:r:" + self._xl_token(*t)}]
+                for t in hits[:self.XL_FIND_MAX]]
+        rows.append([{"text": self.T('bot.xl.menu'), "callback_data": "xl:page"}])
+        txt = self._rtl(esc_html(self.T('bot.xl.find_pick', p0=self._nq_n(len(hits)))))
+        if len(hits) > self.XL_FIND_MAX:
+            txt += "\n" + self._rtl(esc_html(self.T('bot.xl.find_more', p0=self._nq_n(self.XL_FIND_MAX))))
+        self.send(chat, txt, rows)
+
+    def _xl_build(self, frm, chat, p, t, span):
+        """ساختِ کارپوشه کند است (آمار + پایگاه + زیپ)، پس در نخِ پس‌زمینه؛ نتیجه
+        با sendDocument و پیامِ تازه، بی‌لمسِ self._edit. هم‌زمان فقط یک ساخت."""
+        if not self._xl_lock.acquire(blocking=False):
+            self.send(chat, self._rtl(esc_html(self.T('bot.xl.busy'))))
+            return
+        # هرچه به زبانِ این چت وابسته است همین‌جا، پیش از نخ: self._lang مالِ حلقه‌ی poll است
+        lang = self._lang
+        d0, d1 = span
+        days = (d1 - d0).days + 1
+        if d1 == datetime.now().date():
+            rng = self.T('bot.xl.recent', p0=self._xl_days_label(days))
+        else:
+            rng = self.T('bot.xl.span', p0=span_text(d0, lang), p1=span_text(d1, lang),
+                         p2=self._nq_n(days))
+        target = self._xl_target_label(t)
+        caption = self._rtl(esc_html(self.T('bot.xl.caption', p0=target, p1=rng)))
+        fail = self._rtl(esc_html(self.T('bot.xl.fail')))
+        empty = self._rtl(esc_html(self.T('bot.xl.stale')))
+        self.send(chat, self._rtl(esc_html(self.T('bot.xl.wait', p0=target, p1=rng))))
+        kind, ident = t
+        stamp = "%s_%s" % (d0.strftime("%Y%m%d"), d1.strftime("%Y%m%d"))
+
+        def work():
+            try:
+                if kind == "a":
+                    data, _ = report_xlsx(set(p) & {"wg.view"}, None, True, lang, span)
+                    fn, tgt = "wg-users-%s.xlsx" % stamp, "*"
+                elif kind == "s":
+                    data, _ = report_xlsx(set(p) & self.XL_SERVER_PERMS, None, True, lang, span)
+                    fn, tgt = "server-%s.xlsx" % stamp, "*"
+                else:
+                    got = user_report_xlsx(kind, ident, span, p, True, lang)
+                    if got is None:
+                        self._send_fresh(chat, empty)
+                        return
+                    data, fn = got
+                    tgt = "%s @ %s" % (ident[1], ident[0]) if kind == "wg" else ident
+                ok, _r = self.send_doc(chat, fn, data, caption, ctype=self.XL_CTYPE)
+                audit("bot:%s" % frm, "settings", "report.xlsx", tgt,
+                      adet("ui.audit.det.report.mask", d=days), "", bool(ok))
+                if not ok:
+                    self._send_fresh(chat, fail)
+            except Exception as e:
+                log_action("bot excel: %r" % e)
+                self._send_fresh(chat, fail)
+            finally:
+                self._xl_lock.release()
+
+        threading.Thread(target=work, daemon=True).start()
+
     def _find(self, chat, q, p):
         q = q.lower()
         rows = []
@@ -14465,7 +14863,8 @@ def bot_setcommands():
     cmds = [("start", "bot.cmd.start"), ("menu", "bot.cmd.menu"),
             ("addwg", "bot.cmd.addwg"),
             ("addpx", "bot.cmd.addpx"),
-            ("wgusers", "bot.cmd.wgusers"), ("pxusers", "bot.cmd.pxusers"),
+            ("wgusers", "bot.cmd.wgusers"), ("excel", "bot.cmd.excel"),
+            ("pxusers", "bot.cmd.pxusers"),
             ("live", "bot.cmd.live"), ("find", "bot.cmd.find"),
             ("listexp", "bot.cmd.listexp"),
             ("listquota", "bot.cmd.listquota"),
@@ -14475,6 +14874,8 @@ def bot_setcommands():
             ("warp", "bot.cmd.warp"),
             ("botusers", "bot.cmd.botusers"),
             ("cancel", "bot.cmd.cancel")]
+    if nqmo_enabled():      # موتور اختیاری است؛ بدونِ پرچم فرمانش دیده نمی‌شود
+        cmds.insert(-1, ("quality", "bot.cmd.quality"))
     own = cmds + [("botwatch", "bot.cmd.botwatch")]
     ifc = alert_cfg()["iface"]
 
@@ -15634,18 +16035,99 @@ def guard_events(t0, lang):
 REPORT_DAYS = (1, 183)      # بازه‌ی مجاز؛ جدولِ روزانه ۶ ماه نگه داشته می‌شود
 
 
-def _report_usage(days, ifaces):
-    """(range_bytes, daily) ِ کاربرانِ اینترفیس‌های ifaces در days روزِ اخیر (امروز هم).
+def _jalali_to_greg(jy, jm, jd):
+    """هجریِ شمسی ⇒ date ِ میلادی، یا None اگر چنین روزی در تقویم نیست (۱۴۰۵/۱۲/۳۰ ِ غیرکبیسه).
+
+    وارونِ _greg_to_jalali به جست‌وجو، نه با فرمولِ دوم: هر جواب با خودِ آن تابع سنجیده
+    می‌شود، پس دو جهتِ تبدیل هرگز نمی‌توانند از هم جدا شوند."""
+    if not (1 <= jm <= 12 and 1 <= jd <= 31 and 1 <= jy <= 1700):
+        return None
+    off = (jm - 1) * 31 if jm <= 6 else 186 + (jm - 7) * 30
+    try:
+        g0 = (datetime(jy + 621, 3, 21) + timedelta(days=off + jd - 1)).date()
+    except (ValueError, OverflowError):
+        return None
+    for k in (0, -1, 1, -2, 2, -3, 3):
+        g = g0 + timedelta(days=k)
+        if _greg_to_jalali(g.year, g.month, g.day) == (jy, jm, jd):
+            return g
+    return None
+
+
+_SPAN_DATE = re.compile(r"(\d{4})\s*[/\-.]\s*(\d{1,2})\s*[/\-.]\s*(\d{1,2})")
+
+
+def parse_report_span(text, today=None):
+    """ورودیِ بازه‌ی گزارش ⇒ ((d0, d1), "") یا (None, کلیدِ خطا). d0 و d1 هر دو شامل.
+
+    «14» ⇒ ۱۴ روزِ اخیر (امروز هم) · «1405/08/01 تا 1405/08/15» یا «2026-10-01 2026-10-15»
+    ⇒ همان بازه (سالِ زیرِ ۱۷۰۰ شمسی است) · یک تاریخ ⇒ همان یک روز. ارقامِ فارسی هم.
+    سقف‌ها همان REPORT_DAYS ِ پنل: طولِ بازه و فاصله‌ی شروعش از امروز هر دو ≤۱۸۳ روز
+    (ممیزی و رویدادها ۶ ماه نگه داشته می‌شوند)."""
+    today = today or datetime.now().date()
+    s = _fa_digits_en(str(text or "")).strip()
+    lo, hi = REPORT_DAYS
+    if re.fullmatch(r"\d{1,4}", s):
+        n = int(s)
+        if not lo <= n <= hi:
+            return None, "bot.xl.bad"
+        return (today - timedelta(days=n - 1), today), ""
+    found = _SPAN_DATE.findall(s)
+    if not found or len(found) > 2 or re.search(r"\d", _SPAN_DATE.sub(" ", s)):
+        return None, "bot.xl.bad"
+    ds = []
+    for y, m, d in found:
+        y, m, d = int(y), int(m), int(d)
+        if y < 1700:
+            g = _jalali_to_greg(y, m, d)
+        else:
+            try:
+                g = datetime(y, m, d).date()
+            except ValueError:
+                g = None
+        if g is None:
+            return None, "bot.xl.bad_date"
+        ds.append(g)
+    d0, d1 = min(ds), max(ds)
+    if d1 > today:
+        return None, "bot.xl.future"
+    if (d1 - d0).days + 1 > hi:
+        return None, "bot.xl.too_long"
+    if d0 < today - timedelta(days=hi - 1):
+        return None, "bot.xl.too_old"
+    return (d0, d1), ""
+
+
+def report_span(days=None, span=None):
+    """(d0, d1, ts0, ts1): بازه‌ی شامل به‌صورتِ date و مرزِ نیم‌بازِ [ts0, ts1) به ثانیه."""
+    if span is None:
+        d1 = datetime.now().date()
+        d0 = d1 - timedelta(days=max(1, int(days or 30)) - 1)
+    else:
+        d0, d1 = span
+    ts0 = datetime(d0.year, d0.month, d0.day).timestamp()
+    e = d1 + timedelta(days=1)
+    return d0, d1, ts0, datetime(e.year, e.month, e.day).timestamp()
+
+
+def span_text(d, lang):
+    """تاریخِ یک سرِ بازه برای متن: شمسی در فارسی (برچسبِ خانه‌ها خودشان date اند)."""
+    if lang == "fa":
+        return _fa_num("%04d/%02d/%02d" % _greg_to_jalali(d.year, d.month, d.day))
+    return d.isoformat()
+
+
+def _report_usage(d0, d1, ifaces):
+    """(range_bytes, daily) ِ کاربرانِ اینترفیس‌های ifaces در روزهای d0..d1 (هر دو شامل).
 
     فقط پیرهای کاربر: شمارنده‌ی خودِ اینترفیس و جمعِ تجمیعی کنار گذاشته می‌شوند،
     و تونل‌ها (که پیرهایشان هم در usage_day اند) با فیلترِ اینترفیس بیرون می‌مانند."""
     ifaces = sorted(set(ifaces))
     if not ifaces:
         return {}, []
-    since = (datetime.now() - timedelta(days=days - 1)).strftime("%Y-%m-%d")
     q = ",".join("?" * len(ifaces))
-    base = ("FROM usage_day WHERE day>=? AND pubkey NOT IN (?, ?) AND iface IN (%s)" % q)
-    args = [since, NETDEV_KEY, IFACE_AGG_KEY] + ifaces
+    base = ("FROM usage_day WHERE day>=? AND day<=? AND pubkey NOT IN (?, ?) AND iface IN (%s)" % q)
+    args = [d0.isoformat(), d1.isoformat(), NETDEV_KEY, IFACE_AGG_KEY] + ifaces
     con = MetaDB._connect()
     try:
         rng = {(i, p): (rx or 0) + (tx or 0) for i, p, rx, tx in con.execute(
@@ -15658,21 +16140,81 @@ def _report_usage(days, ifaces):
     return rng, daily
 
 
-def _report_metric(metric, days):
-    """میانگینِ روزانه‌ی یک متریکِ سامانه در days روزِ اخیر."""
-    mode = "7d" if days <= 7 else ("30d" if days <= 30 else "6m")
-    since = (datetime.now() - timedelta(days=days - 1)).strftime("%Y-%m-%d")
-    return [r for r in META.metric_series(metric, mode) if str(r.get("t")) >= since]
+def _report_metric(metric, d0, d1):
+    """میانگینِ روزانه‌ی یک متریکِ سامانه در روزهای d0..d1."""
+    con = MetaDB._connect()
+    try:
+        return [{"t": t_, "v": (s_ / c_ if c_ else 0)} for t_, s_, c_ in con.execute(
+            "SELECT day, sum, cnt FROM metric_day WHERE metric=? AND day>=? AND day<=? ORDER BY day",
+            (metric, d0.isoformat(), d1.isoformat()))]
+    finally:
+        con.close()
 
 
-def report_facts(perms, days, mask, lang):
+def _proxy_report_rows(d0, d1, ts0, ts1):
+    """(کاربرانِ پروکسی با مصرفِ بازه/ماه و شمارِ مبدأ، مصرفِ روزانه‌ی کل). رمز هرگز."""
+    month = META.proxy_month_totals(datetime.now().strftime("%Y-%m"))
+    con = MetaDB._connect()
+    try:
+        rng = {u: b or 0 for u, b in con.execute(
+            "SELECT username, SUM(bytes) FROM proxy_usage_day WHERE day>=? AND day<=? "
+            "GROUP BY username", (d0.isoformat(), d1.isoformat()))}
+        cli = {u: (n, ls) for u, n, ls in con.execute(
+            "SELECT username, COUNT(*), MAX(last_seen) FROM proxy_client "
+            "WHERE last_seen>=? AND first_seen<? GROUP BY username", (ts0, ts1))}
+        daily = [{"day": d, "bytes": b or 0, "active": n} for d, b, n in con.execute(
+            "SELECT day, SUM(bytes), COUNT(DISTINCT username) FROM proxy_usage_day "
+            "WHERE day>=? AND day<=? AND bytes>0 GROUP BY day ORDER BY day",
+            (d0.isoformat(), d1.isoformat()))]
+    finally:
+        con.close()
+    users = []
+    for u in META.proxy_users():
+        n = u["username"]
+        users.append({k: u.get(k) for k in PROXY_PUBLIC_COLS} | {
+            "month_bytes": month.get(n, 0), "range_bytes": rng.get(n, 0),
+            "clients": (cli.get(n) or (0, None))[0], "last_seen": (cli.get(n) or (0, None))[1]})
+    return users, daily
+
+
+# ستون‌های کاربرِ پروکسی که به کارپوشه می‌روند — pass_hash و pass_plain عمداً نیستند
+PROXY_PUBLIC_COLS = ("username", "rate_kbit", "quota_gb", "expires", "enabled", "auto_disabled",
+                     "note", "created", "allow_src", "protocol", "noauth")
+
+
+def _nqmo_report_rows(lang):
+    """ردیف‌های برگه‌ی کیفیتِ ارتباط (همان سندِ بی‌جزئیاتِ /api/nqmo/status)."""
+    known = nqmo_panel_peers()
+    doc = nqmo_status_doc(nqmo_state(), False, known)
+    if not doc.get("available"):
+        return {"available": False, "why": doc.get("why")}
+    st = nqmo_state()
+    fresh = _nqmo_fresh_peers(st, known)
+    peers = []
+    for r in doc["peers"]:
+        lab = (r["iface"], r["name"])
+        m = _nqmo_summary(fresh[lab]) if lab in fresh else None
+        peers.append({"iface": r["iface"], "name": r["name"], "open": r["open"],
+                      "top_class": r.get("top_class"), "top_confidence": r.get("top_confidence"),
+                      "summary": m})
+    return {"available": True, "mode": doc["mode"], "generated_at": doc["generated_at"],
+            "global": doc["global"], "peers": peers}
+
+
+def report_facts(perms, days, mask, lang, span=None):
     """واقعیت‌های کارپوشه (قالب در report.build). هر بخش فقط با مجوزِ همان بخش در رابط
-    جمع می‌شود — کتاب چیزی را نشان نمی‌دهد که همان کاربر در پنل نمی‌بیند."""
+    جمع می‌شود — کتاب چیزی را نشان نمی‌دهد که همان کاربر در پنل نمی‌بیند.
+
+    span=(d0, d1) بازه‌ی دلخواهِ شامل است؛ بی‌آن، days روزِ اخیر (امروز هم)."""
     perms = set(perms)
     now = time.time()
+    d0, d1, ts0, ts1 = report_span(days, span)
+    days = (d1 - d0).days + 1
     s = build_stats()
     f = {"now": now, "host": _host_label(), "build": BUILD_ID or "", "days": days,
-         "mask": bool(mask), "perms": perms}
+         "mask": bool(mask), "perms": perms,
+         "span": (d0.isoformat(), d1.isoformat()), "recent": d1 == datetime.now().date(),
+         "span_text": (span_text(d0, lang), span_text(d1, lang))}
     if "wg.view" in perms:
         users = []
         for u in s.get("users") or []:
@@ -15685,34 +16227,193 @@ def report_facts(perms, days, mask, lang):
         f["users"] = users
         try:
             f["range_bytes"], f["daily"] = _report_usage(
-                days, [x["iface"] for x in s.get("sections") or []])
+                d0, d1, [x["iface"] for x in s.get("sections") or []])
         except Exception as e:
             log_action("report usage: %r" % e)
     if "tun.view" in perms:
         f["tunnels"] = s.get("tunnels") or []
         f["egress"] = viz_egress_facts()
         try:
-            f["events"] = viz_events(now - days * 86400, perms, lang)
+            f["events"] = [e for e in viz_events(ts0, perms, lang) if (e.get("ts") or 0) < ts1]
         except Exception as e:
             log_action("report events: %r" % e)
     if "audit.view" in perms:
         rows = []
-        for r in META.audit_list(since_days=days, limit=2000):
+        back = (datetime.now().date() - d0).days + 1
+        for r in META.audit_list(since_days=back, limit=2000):
+            if not ts0 <= (r.get("ts") or 0) < ts1:
+                continue
             a = r.get("action") or ""
             rows.append(dict(r, action_text=_t_or("ui.audit.act." + a, a, lang),
                              detail=audit_detail_text(r.get("detail"), lang)))
         f["audit"] = rows
     if "sys.view" in perms:
-        f["speed"] = [r for r in META.speedtest_recent(2000) if (r.get("ts") or 0) >= now - days * 86400]
-        f["sys"] = {m: _report_metric(m, days) for m in ("cpu", "ram", "disk")}
+        f["speed"] = [r for r in META.speedtest_recent(2000) if ts0 <= (r.get("ts") or 0) < ts1]
+        f["sys"] = {m: _report_metric(m, d0, d1) for m in ("cpu", "ram", "disk")}
+    if "proxy.view" in perms:
+        try:
+            f["proxy_users"], f["proxy_daily"] = _proxy_report_rows(d0, d1, ts0, ts1)
+        except Exception as e:
+            log_action("report proxy: %r" % e)
+    if "nqmo.view" in perms and nqmo_enabled():
+        try:
+            f["nqmo"] = _nqmo_report_rows(lang)
+        except Exception as e:
+            log_action("report nqmo: %r" % e)
     return f
 
 
-def report_xlsx(perms, days, mask, lang):
+def report_xlsx(perms, days, mask, lang, span=None):
     """بایت‌های کارپوشه + نامِ فایل."""
     V, R, X = _pkg_module("viz"), _pkg_module("report"), _pkg_module("xlsx")
-    data = R.build(report_facts(perms, days, mask, lang), viz_ctx(lang), X, V)
+    data = R.build(report_facts(perms, days, mask, lang, span), viz_ctx(lang), X, V)
     return data, "wg-report-%s.xlsx" % datetime.now().strftime("%Y%m%d-%H%M")
+
+
+# ---- گزارشِ تک‌کاربره (وایرگارد یا پروکسی) ------------------------------
+USER_REPORT_HOURLY_DAYS = 21    # usage_hour و proxy_usage_hour همین‌قدر نگه داشته می‌شوند (prune)
+
+
+def _day_range(d0, d1):
+    d = d0
+    while d <= d1:
+        yield d
+        d += timedelta(days=1)
+
+
+def _hour_range(ts0, ts1, floor):
+    """کلیدهای «YYYY-MM-DD HH» از max(ts0, floor) تا min(ts1, اکنون)، ساعت‌به‌ساعت."""
+    a = max(ts0, floor)
+    b = min(ts1, time.time())
+    a = datetime.fromtimestamp(a).replace(minute=0, second=0, microsecond=0)
+    out = []
+    while a.timestamp() < b:
+        out.append(a.strftime("%Y-%m-%d %H"))
+        a += timedelta(hours=1)
+    return out
+
+
+def _filled(keys, got, width):
+    """ردیف برای هر کلید (روز/ساعت)، صفر جایی که پایگاه ردیفی ندارد — بازه‌ی پیوسته."""
+    return [(k,) + tuple(got.get(k, (0,) * width)) for k in keys]
+
+
+def user_report_facts(kind, ident, span, perms, mask, lang):
+    """واقعیت‌های گزارشِ یک کاربر. kind="wg" با ident=(iface, name)، kind="px" با ident=username.
+    None اگر کاربر نیست یا مجوزِ همان نوع نیست."""
+    perms = set(perms)
+    d0, d1, ts0, ts1 = report_span(span=span)
+    hfloor = time.time() - USER_REPORT_HOURLY_DAYS * 86400
+    days = [d.isoformat() for d in _day_range(d0, d1)]
+    hours = _hour_range(ts0, ts1, hfloor)
+    f = {"now": time.time(), "host": _host_label(), "build": BUILD_ID or "", "kind": kind,
+         "mask": bool(mask), "days": len(days), "span": (d0.isoformat(), d1.isoformat()),
+         "recent": d1 == datetime.now().date(),
+         "span_text": (span_text(d0, lang), span_text(d1, lang)),
+         "hourly_from": hours[0] if hours else None,
+         "hourly_cut": ts0 < hfloor, "perms": perms}
+    con = MetaDB._connect()
+    try:
+        if kind == "wg":
+            if "wg.view" not in perms:
+                return None
+            iface, name = ident
+            u = next((x for x in build_stats().get("users") or []
+                      if x.get("iface") == iface and x.get("name") == name), None)
+            if u is None:
+                return None
+            pk = u.get("public_key") or ""
+            meta = META.meta_all().get((iface, name), {})
+            f["user"] = {k: u.get(k) for k in (
+                "name", "iface", "enabled", "online", "handshake", "endpoint", "allowed_ips",
+                "public_key", "rx", "tx", "month_rx", "month_tx", "life_rx", "life_tx",
+                "quota_gb", "expires", "note", "rate_mbit", "auto_disabled", "ip")}
+            f["meta"] = {k: meta.get(k) for k in (
+                "c_dns", "c_mtu", "c_keepalive", "c_allowed", "total_gb", "enforce_action")}
+            got = {d: (rx or 0, tx or 0) for d, rx, tx in con.execute(
+                "SELECT day, rx, tx FROM usage_day WHERE iface=? AND pubkey=? AND day>=? AND day<=?",
+                (iface, pk, days[0], days[-1]))}
+            f["daily"] = _filled(days, got, 2)
+            got = {hh: (rx or 0, tx or 0) for hh, rx, tx in con.execute(
+                "SELECT hour, rx, tx FROM usage_hour WHERE iface=? AND pubkey=? AND hour>=? AND hour<=?",
+                (iface, pk, hours[0], hours[-1]))} if hours else {}
+            f["hourly"] = _filled(hours, got, 2)
+            tgt = "%s @ %s" % (name, iface)
+            f["shares"] = [{"created": c, "expires": e, "single": bool(s1), "views": v,
+                            "revoked": bool(rv), "creator": cr} for c, e, s1, v, rv, cr in con.execute(
+                "SELECT created, expires, single, views, revoked, creator FROM share "
+                "WHERE iface=? AND name=? AND created<? ORDER BY created", (iface, name, ts1))]
+            try:
+                # نمای «ردگیریِ کاربر» ِ پنل (SvgStudio) — همان مدل، endpoint ِ کاربر پوشانده
+                tf = viz_trace_facts(iface, name, "tun.view" in perms)
+                if tf is not None:
+                    if mask:
+                        tf["user"] = dict(tf["user"], endpoint=_pkg_module("report").mask_endpoint(
+                            tf["user"].get("endpoint")))
+                    f["trace"] = _pkg_module("viz").trace_model(tf, viz_ctx(lang))
+            except Exception as e:
+                log_action("user report trace: %r" % e)
+            if "nqmo.view" in perms and nqmo_enabled():
+                try:
+                    st = nqmo_state()
+                    f["nqmo"] = nqmo_peer_doc(st, (iface, name), False, nqmo_panel_peers())
+                    f["nqmo"]["mode"] = _nqmo_pick(st.get("mode"), NQMO_MODES)
+                except Exception as e:
+                    log_action("user report nqmo: %r" % e)
+            cat = "peer"
+        elif kind == "px":
+            if "proxy.view" not in perms:
+                return None
+            u = META.proxy_user_get(ident)
+            if u is None:
+                return None
+            f["user"] = {k: u.get(k) for k in PROXY_PUBLIC_COLS}
+            f["user"]["month_bytes"] = META.proxy_month_totals(
+                datetime.now().strftime("%Y-%m")).get(ident, 0)
+            got = {d: (b or 0,) for d, b in con.execute(
+                "SELECT day, bytes FROM proxy_usage_day WHERE username=? AND day>=? AND day<=?",
+                (ident, days[0], days[-1]))}
+            f["daily"] = _filled(days, got, 1)
+            got = {hh: (b or 0,) for hh, b in con.execute(
+                "SELECT hour, bytes FROM proxy_usage_hour WHERE username=? AND hour>=? AND hour<=?",
+                (ident, hours[0], hours[-1]))} if hours else {}
+            f["hourly"] = _filled(hours, got, 1)
+            f["clients"] = [c for c in META.proxy_clients(ident, 5000)
+                            if (c["last_seen"] or 0) >= ts0 and (c["first_seen"] or 0) < ts1]
+            f["dests"] = [x for x in META.proxy_dests(ident, 5000)
+                          if (x["last_seen"] or 0) >= ts0 and (x["first_seen"] or 0) < ts1]
+            tgt, cat = ident, "panel-user"
+        else:
+            return None
+    finally:
+        con.close()
+    if "audit.view" in perms:
+        # تاریخچه‌ی تغییراتِ خودِ همین کاربر — همان گیتِ برگه‌ی ممیزیِ پنل (audit.view)
+        back = (datetime.now().date() - d0).days + 1
+        rows = []
+        for r in META.audit_list(category=cat, q=tgt, since_days=back, limit=2000):
+            if r.get("target") != tgt or not ts0 <= (r.get("ts") or 0) < ts1:
+                continue
+            if kind == "px" and not str(r.get("action") or "").startswith("px."):
+                continue
+            a = r.get("action") or ""
+            rows.append(dict(r, action_text=_t_or("ui.audit.act." + a, a, lang),
+                             detail=audit_detail_text(r.get("detail"), lang)))
+        f["audit"] = rows
+    return f
+
+
+def user_report_xlsx(kind, ident, span, perms, mask, lang):
+    """(بایت‌ها، نامِ فایل) یا None."""
+    f = user_report_facts(kind, ident, span, perms, mask, lang)
+    if f is None:
+        return None
+    V, R, X = _pkg_module("viz"), _pkg_module("report"), _pkg_module("xlsx")
+    data = R.build_user(f, viz_ctx(lang), X, V)
+    who = ident[1] if kind == "wg" else ident
+    safe = re.sub(r"[^A-Za-z0-9._-]+", "_", who)[:40] or "user"
+    return data, "%s-%s-%s_%s.xlsx" % (kind, safe, f["span"][0].replace("-", ""),
+                                       f["span"][1].replace("-", ""))
 
 
 def viz_model(kind, lang, **kw):

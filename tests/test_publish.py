@@ -182,10 +182,20 @@ class PublishToolingTests(unittest.TestCase):
         self.assertIn("1 minute\n  to 24 hours", body)
         self.assertRegex(_read(REPO, "wgpanel/i18n/catalog.json"),
                          r"\(1 to 1440\)")        # ۱ تا ۱۴۴۰ دقیقه (در کاتالوگ)
-        n_cmds = len(re.findall(r'\("[a-z]+", "[^"]+"\)', src[
-            src.index("def bot_setcommands"):src.index("BOT = TelegramBot()")]))
-        self.assertEqual(n_cmds, 18, "تعدادِ دستورهای ربات عوض شد — README را هم")
-        self.assertIn("**18 commands**", body)
+        cmds = re.findall(r'\("([a-z]+)", "[^"]+"\)', src[
+            src.index("def bot_setcommands"):src.index("BOT = TelegramBot()")])
+        # «quality» شمرده نمی‌شود، به همان دلیلِ هشدارِ «nqmo» در پایین: فقط با پرچمِ موتور
+        # ثبت می‌شود. README آن را در بخشِ WG-NQMO ِ هر چهار زبان معرفی می‌کند.
+        self.assertIn("quality", cmds)
+        self.assertIn('if nqmo_enabled():      # موتور اختیاری است', src)
+        n_cmds = len([c for c in cmds if c != "quality"])
+        self.assertEqual(n_cmds, 19, "تعدادِ دستورهای ربات عوض شد — README را هم")
+        self.assertIn("**19 commands**", body)
+        for pub in ("README.public.md", "README.public.fa.md", "README.public.ru.md",
+                    "README.public.zh-CN.md"):
+            doc = _read(PUB, pub)
+            i = doc.index("(WG-NQMO)") if "(WG-NQMO)" in doc else doc.index("（WG-NQMO）")
+            self.assertIn("`/quality`", doc[i:], pub)
         evs = re.findall(r'\("([a-z0-9_]+)", "', src[
             src.index("ALERT_EVENTS = ("):src.index("ALERT_EVENT_KEYS")])
         # «nqmo» شمرده نمی‌شود: موتور از 1.4.0 منتشر می‌شود ولی اختیاری است و با پرچمِ
