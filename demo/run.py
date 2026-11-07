@@ -187,6 +187,25 @@ def patch(m):
         return out
     m.read_proc_net_dev = read_proc_net_dev
 
+    # گیج‌های سرور هم ساختگی: روی macOS ‏/proc نیست (گیجِ CPU و RAM «—» می‌ماند) و
+    # statvfs ِ «/» دیسکِ واقعیِ ماشینِ اجراکننده را نشان می‌داد.
+    t0 = wan["t0"]
+
+    def _read_cpu_times():          # ۴ هسته، ~۱۲ تا ۳۰٪ با موجِ آرام
+        now = time.time()
+        total = (now - t0) * 400.0
+        return int(total), int(total * 0.79 + 900 * math.sin(now / 37.0))
+
+    def _read_self_cpu_jiffies():   # پنل ~۱٫۵٪ ِ یک هسته
+        return int((time.time() - t0) * 1.5)
+
+    m._read_cpu_times, m._read_self_cpu_jiffies = _read_cpu_times, _read_self_cpu_jiffies
+    m.read_mem_pct = lambda: (34.6, 16 * 1024 * 1024, int(16 * 1024 * 1024 * 0.654))
+    m.read_disk_pct = lambda path="/": (41.3, 240 * 10 ** 9, int(240 * 10 ** 9 * 0.413))
+    m.read_self_rss_mb = lambda: 47.8
+
+    topology(m)
+
     # فقط روی لوکال‌هاست — دمو هرگز نباید از بیرون دیده شود
     server = m.TLSThreadingHTTPServer
 
@@ -194,6 +213,139 @@ def patch(m):
         def __init__(self, addr, handler):
             super().__init__(("127.0.0.1", addr[1]), handler)
     m.TLSThreadingHTTPServer = LocalOnly
+
+
+# ── توپولوژیِ خروجِ ساختگی برای سه نمای SvgStudio و کارپوشه‌ی Excel ───────
+# ابزارهای ساختگی فقط یک تونل (wg1) دارند و ip/ECMP/WARP ِ واقعی در دمو نیست،
+# پس «واقعیت‌ها» (ورودیِ viz.py) این‌جا ساخته می‌شوند — مدل‌ها، امضاها، حکمِ
+# ردگیری و رندرر همان کدِ پنل‌اند. نام‌ها عمومی و آدرس‌ها RFC 5737 اند.
+# (iface، روی کدام دستگاه، سلامت، rx B/s، tx B/s، فعال)
+DEMO_TUNNELS = [
+    ("wg1", "eth0", "healthy", 2.4e6, 3.1e5, True),     # مادرِ A
+    ("wg2", "eth0", "healthy", 1.9e6, 2.6e5, True),     # مادرِ B
+    ("wgs1", "wg1", "healthy", 1.3e6, 1.7e5, True),     # فرعی روی A، عضوِ ECMP
+    ("wgs2", "wg2", "healthy", 1.1e6, 1.4e5, True),     # فرعی روی B، عضوِ ECMP
+    ("wgai1", "wg1", "healthy", 4.2e5, 6.0e4, True),    # استخرِ AI
+    ("wgai2", "wg2", "healthy", 1.5e3, 9.0e2, True),    # استخرِ AI — سوخته: تونل سالم، فقط پروب از آن می‌گذرد
+    ("warp0", "wgs1", "chain", 2.1e5, 3.5e4, True),     # زنجیره‌ی WARP روی wgs1
+    ("wg3", "eth0", "off", 0, 0, False),                # یدک، خاموش
+]
+NAT_USER = "dave-android"      # امضای «rx یخ‌زده، tx ِ ریزِ پیوسته» — NAT ِ اپراتور
+
+
+def topology(m):
+    def tunnels(now):
+        out = []
+        for k, (i, dev, h, rx, tx, on) in enumerate(DEMO_TUNNELS):
+            hist = [{"rx_rate": rx * (0.8 + 0.4 * ((j * 7 + k) % 5) / 4),
+                     "tx_rate": tx * (0.8 + 0.4 * ((j * 3 + k) % 5) / 4)} for j in range(30)]
+            out.append({"iface": i, "active": on, "enabled": True, "kind": "wireguard",
+                        # wg1 همان تونلِ wg1.conf ِ ابزارهای ساختگی است (همان endpoint)
+                        "endpoint": "198.51.100.200:51820" if k == 0 else "203.0.113.%d:51820" % (20 + k),
+                        "loop_dev": dev,
+                        "handshake": now - (25 + 9 * k) if on else 0,
+                        "rx": int(rx * 86400 * 3), "tx": int(tx * 86400 * 3),
+                        "rx_rate": rx, "tx_rate": tx, "health": h, "keepalive": "25",
+                        "hist": hist})
+        return out
+
+    orig_egress, orig_trace = m.viz_egress_facts, m.viz_trace_facts
+
+    def viz_egress_facts(stats=None):
+        f = dict(orig_egress(stats))
+        now = time.time()
+        f["wan"] = "eth0"
+        f["ingress"] = [dict(x, ks=True) for x in f.get("ingress") or []]
+        f["ks"] = {"rules": 8, "ifaces": [x["iface"] for x in f["ingress"]]}
+        f["tunnels"] = tunnels(now)
+        f["default"] = [{"probe": "192.0.2.53", "dev": "wg1"}, {"probe": "198.51.100.53", "dev": "wg2"}]
+        f["ecmp"] = {"enabled": True, "groups": [{"name": "main", "tunnels": ["wgs1", "wgs2"],
+                                                  "member": {"wgs1": "in", "wgs2": "in"},
+                                                  "probe": "198.51.100.77"}]}
+        f["sni"] = {"enabled": True, "active": True, "healthy": True, "hb_age": 3, "tproxy": True,
+                    "unit_active": True, "quic_active": True}
+        f["ai"] = {"main": "wgai1", "pool": [{"dev": "wgai1", "up": True, "burned": False},
+                                             {"dev": "wgai2", "up": True, "burned": True}]}
+        f["warp"] = {"iface": "warp0", "up": True, "handshake": now - 40, "egress": "wgs1",
+                     "guard_alive": True, "healthy": True}
+        return f
+
+    def viz_trace_facts(iface, name, can_tun):
+        f = orig_trace(iface, name, can_tun)
+        if f is None:
+            return None
+        now = time.time()
+        f["wan"] = "eth0"
+        f["ingress"] = dict(f["ingress"], ks=True)
+        f["decisions"] = [{"kind": "default", "probe": "192.0.2.53", "dev": "wg1"},
+                          {"kind": "ecmp", "probe": "198.51.100.77", "dev": "wgs1", "group": "main"},
+                          {"kind": "ai", "probe": "SNI · 443", "dev": "wgai1"}]
+        f["tunnels"] = {t["iface"]: t for t in tunnels(now)} if can_tun else {}
+        if name == NAT_USER:   # handshake و شمارنده‌ها از wg ِ ساختگی؛ فقط ۳۰ نمونه‌ی تاریخچه پر می‌شود
+            f["hist"] = [{"rx_rate": 0, "tx_rate": 28 + (j % 4) * 3} for j in range(30)]
+        return f
+
+    def guard_events(t0, lang):
+        now = time.time()
+        rows = [(9.2, "wg2", "heal", "warn", "port-blackhole heal: listen-port 41822 -> 50317 (endpoint 203.0.113.21:51820 unchanged)"),
+                (9.15, "wg2", "verified", "ok", "heal verified (handshake age=4s)"),
+                (5.0, "wgs2", "down", "bad", "STATE up->down (handshake age=212s stale=1)"),
+                (4.92, "wgs2", "heal", "warn", "node heal: 203.0.113.23:51820 -> 203.0.113.41:51820 (data passes)"),
+                (4.9, "wgs2", "up", "ok", "STATE down->up (outage 360s)"),
+                (1.4, "", "pin", "info", "pin 203.0.113.20/32 via 192.0.2.1 dev eth0 (mother-tunnel endpoint via eth0)")]
+        return [{"ts": now - h * 3600, "src": "guard", "subject": s, "action": "guard." + k,
+                 "title": m.t("viz.gd." + k, lang), "actor": "tunnel-guard", "detail": d, "sev": sev}
+                for h, s, k, sev, d in rows if now - h * 3600 >= t0]
+
+    orig_events = m.viz_events
+
+    def viz_events(t0, perms, lang):
+        now = time.time()
+        ev = orig_events(t0, perms, lang)
+        extra = [(7.5, "warp", "", "rotate", "info", "warp-guard", "203.0.113.90:2408 -> 203.0.113.91:2408"),
+                 (3.1, "warp", "", "egress", "warn", "warp-guard", "wgs2 -> wgs1"),
+                 (12.4, "nqmo", "", "open", "warn", "bob-desktop", "WARNING 0.82"),
+                 (11.9, "nqmo", "", "close", "ok", "bob-desktop", "WARNING 0.82"),
+                 (2.2, "nqmo", "", "open", "bad", "office-nas", "CRITICAL 0.91"),
+                 (1.8, "nqmo", "", "close", "ok", "office-nas", "CRITICAL 0.91")]
+        for h, src, subj, a, sev, actor, det in extra:
+            ts = now - h * 3600
+            if ts < t0:
+                continue
+            title = {"warp": lambda: m._t_or("ui.warpev." + a, a, lang),
+                     "nqmo": lambda: "%s · %s" % (m._t_or("ui.nqmo.cls.PACKET_LOSS", "PACKET_LOSS", lang), a)}[src]()
+            ev.append({"ts": ts, "src": src, "subject": subj, "action": a, "title": title,
+                       "actor": actor, "detail": det, "sev": sev})
+        return ev
+
+    orig_timeline = m.viz_timeline_facts
+
+    def viz_timeline_facts(hours, perms, lang):
+        f = orig_timeline(hours, perms, lang)
+        t1 = f["t1"]
+        first = int(f["t0"] // 3600) * 3600
+        tun = []
+        for i, _dev, h, rx, tx, on in DEMO_TUNNELS:
+            hrs = []
+            for t in range(first, int(t1) + 1, 3600):
+                down = i == "wgs2" and t1 - 5.1 * 3600 <= t < t1 - 4.8 * 3600
+                load_ = 0.35 + 0.65 * (0.5 + 0.5 * math.sin((t / 3600 - 15) / 24 * 2 * math.pi))
+                hrs.append({"t": t, "bytes": 0 if (not on or down or rx == 0) else int((rx + tx) * 3600 * load_)})
+            tun.append({"iface": i, "health": h, "hours": hrs})
+        f["tunnels"] = tun
+        return f
+
+    orig_report = m.report_facts
+
+    def report_facts(perms, days, mask, lang):   # شیتِ Tunnels و کارتِ داشبورد همان تونل‌های نقشه
+        f = orig_report(perms, days, mask, lang)
+        if "tunnels" in f:
+            f["tunnels"] = tunnels(time.time())
+        return f
+
+    m.viz_egress_facts, m.viz_trace_facts = viz_egress_facts, viz_trace_facts
+    m.report_facts = report_facts
+    m.guard_events, m.viz_events, m.viz_timeline_facts = guard_events, viz_events, viz_timeline_facts
 
 
 def seed(m, state_dir):
@@ -215,6 +367,8 @@ def seed(m, state_dir):
         if name in OFFLINE:
             p.update(rate=0, hs=int(now - rnd.choice((900, 5 * 3600,
                                                       2 * 86400, 9 * 86400))))
+        elif name == NAT_USER:   # همان امضایی که ردگیریِ کاربر نشان می‌دهد
+            p.update(rate=0, hs=int(now - 1460), nat=now - 1460)
         else:
             p["rate"] = rnd.choice((40e3, 90e3, 180e3, 650e3, 1.4e6, 2.8e6))
         live[blocks[name]["public_key"]] = p
@@ -310,6 +464,12 @@ def seed(m, state_dir):
         (47, "sys:monitor", "tunnel", "tun.monitor.up", "wg1", "handshake"),
         (30, "admin", "peer", "peer.share.new", "bob-desktop @ wg0", ""),
         (10, "admin", "settings", "bk.download", "*", ""),
+        # ۲۴ ساعتِ اخیر — مرکزِ رویداد، خطِ زمانی و برگه‌ی «رویدادها» ی Excel
+        (5.0, "sys:monitor", "tunnel", "tun.monitor.down", "wgs2", "handshake"),
+        (4.9, "sys:monitor", "tunnel", "tun.monitor.up", "wgs2", "handshake"),
+        (3.5, "admin", "peer", "peer.edit", "carol-ipad @ wg0", ""),
+        (2.6, "admin", "settings", "report.xlsx", "*", det("ui.audit.det.report.mask", d=30)),
+        (0.7, "admin", "peer", "peer.add", "grace-pixel @ wg0", ""),
     ]
     for hours, actor, cat, action, target, detail in events:
         m.META.add_audit(actor, cat, action, target, detail,

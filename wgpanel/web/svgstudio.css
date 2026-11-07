@@ -1,0 +1,94 @@
+/* SvgStudio — CSS ِ قابِ نمودار و رندرکننده‌ها. همه‌ی رنگ‌ها از توکن‌های پنل (--panel/--border/--fg/--muted/--blue/
+   --green/--amber/--red/--panel2/--bg) با جایگزینِ هگز؛ میزبان می‌تواند --ss-* را جدا تعریف کند.
+   تم: تیره پیش‌فرضِ این پنل است (:root)، روشن با :root[data-theme="light"]. جهت: پنلِ جزئیات در لبه‌ی inline-end
+   (راست‌چین ⇒ چپ، چپ‌چین ⇒ راست). */
+.dgs{--_card:var(--ss-card,var(--panel,#161b22));--_ln:var(--ss-line,var(--border,#30363d));--_pb:var(--ss-pane,var(--panel2,#1c2129));--_bg:var(--ss-bg,var(--bg,#0d1117));
+  --_ac:var(--ss-accent,var(--blue,#58a6ff));--_tx:var(--ss-text,var(--fg,#e6edf3));--_mu:var(--ss-muted,var(--muted,#8b949e));--_ti:var(--ss-title,var(--fg,#e6edf3))}
+.dgs{position:relative;display:flex;flex-direction:column;background:var(--_card);border:1px solid var(--_ln);border-radius:14px;margin:12px 0;overflow:hidden;outline:none}
+.dgs:focus-visible{box-shadow:0 0 0 3px var(--_ac)}
+.dgs .btn{font:inherit;font-size:13px;border:1px solid var(--_ln);background:var(--_card);color:var(--_tx);border-radius:9px;padding:4px 10px;min-width:36px;min-height:32px;cursor:pointer}
+.dgs .btn:hover{border-color:var(--_ac);color:var(--_ac)}.dgs .btn.pri{background:var(--_ac);border-color:var(--_ac);color:var(--on-solid,#fff)}
+.dgs-bar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--_ln);background:var(--_pb);font-size:13px}
+.dgs-bar .pct{min-width:56px;text-align:center;color:var(--_mu);font-variant-numeric:tabular-nums}
+.dgs-bar .sp{flex:1}.dgs-bar .hint{color:var(--_mu);font-size:12.5px}
+.dgs-body{position:relative;display:flex;min-height:200px}
+.dgs-view{position:relative;flex:1;min-width:0;background:var(--_bg);cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;overflow:hidden}
+.dgs-view.drag{cursor:grabbing}
+.dgs-view>svg{display:block;width:100%;height:100%}
+.dgs svg .dgs-sel{filter:drop-shadow(0 0 4px #f59e0b) drop-shadow(0 0 2px #f59e0b)}
+.dgs svg path.dgs-sel,.dgs svg line.dgs-sel{stroke:#f59e0b!important;stroke-width:3.5px!important}
+.dgs-toast{position:absolute;left:0;right:0;bottom:14px;margin:0 auto;width:max-content;max-width:90%;background:rgba(15,23,42,.9);color:#fff;padding:8px 14px;border-radius:10px;font-size:13.5px;opacity:0;transition:opacity .2s;pointer-events:none;text-align:center}
+.dgs-toast.show{opacity:1}
+.dgs-mini{display:none;position:absolute;left:10px;bottom:10px;width:220px;background:var(--_card);border:1px solid var(--_ln);border-radius:8px;overflow:hidden;box-shadow:0 2px 8px #0003;cursor:crosshair;z-index:3}
+.dgs.fs .dgs-mini{display:block}.dgs.fs .dgs-mini.off{display:none}
+.dgs-mini svg{display:block;width:100%;height:auto;pointer-events:none}
+.dgs-mini .vp{position:absolute;border:2px solid #f59e0b;background:#f59e0b22;pointer-events:none;box-sizing:border-box}
+.dgs-panel{position:absolute;top:0;bottom:0;inset-inline-end:0;width:min(500px,94%);display:flex;flex-direction:column;background:var(--_card);border-inline-start:1px solid var(--_ln);box-shadow:0 0 28px rgba(0,0,0,.28);transform:translateX(-104%);transition:transform .18s;z-index:3;visibility:hidden;direction:inherit}
+html[dir="ltr"] .dgs-panel{transform:translateX(104%)}
+.dgs-panel.open,html[dir="ltr"] .dgs-panel.open{transform:none;visibility:visible}
+.dgp-h{display:flex;gap:6px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--_ln);background:var(--_pb)}
+.dgp-h b{flex:1;font-size:15.5px;color:var(--_ti);overflow-wrap:anywhere;line-height:1.6}
+.dgp-b{flex:1;overflow:auto;padding:10px 14px 24px;font-size:14px;line-height:1.95;overscroll-behavior:contain;color:var(--_tx)}
+.dgp-b h4{font-size:14px;color:var(--_ti);margin:16px 0 6px;padding-bottom:4px;border-bottom:1px dashed var(--_ln)}
+.dgp-b h4:first-child{margin-top:4px}
+.dgp-b pre{font-size:11.5px;max-height:320px;overflow:auto;direction:ltr;text-align:left}
+.dgp-b .mono,.dgp-b code{direction:ltr;unicode-bidi:isolate;font-family:ui-monospace,Menlo,monospace;font-size:12.5px}
+.dgp-b .ok{color:var(--green,#3fb950)}.dgp-b .warn{color:var(--amber,#d29922)}.dgp-b .bad{color:var(--red,#f85149)}
+.dgp-b ul{margin:4px 0;padding-inline-start:20px}
+.dgp-desc{text-align:justify;margin:0 0 6px}.dgp-desc.note{color:var(--_mu);font-size:13px}
+.dgp-kv{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:4px 12px;margin:6px 0;font-size:13.5px}
+.dgp-kv dt{color:var(--_mu)}.dgp-kv dd{margin:0;overflow-wrap:anywhere}
+.dgs.fs{margin:0;border-radius:0;border:0;width:100%;height:100%}
+.dgs.fs .dgs-body{flex:1}
+.dgs.max{position:fixed;inset:0;z-index:70}
+body.dgs-lock{overflow:hidden}
+@media (max-width:860px){.dgs-bar .hint{display:none}.dgs-panel{width:100%;border-inline-start:0}}
+.xpl-play{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:6px 0 0}
+.xpl-play .btn{font:inherit;font-size:13px;border:1px solid var(--ss-line,var(--border,#30363d));background:var(--ss-card,var(--btn,#21262d));color:inherit;border-radius:9px;padding:4px 12px;min-height:32px;cursor:pointer}
+.xpl-play .btn.pri{background:var(--ss-accent,var(--blue,#58a6ff));color:var(--on-solid,#fff);border-color:transparent}
+.xpl-play .muted{color:var(--ss-muted,var(--muted,#8b949e));font-size:12.5px}
+.xpl-legend{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;font-size:12.5px;margin:8px 0 0}
+.xpl-legend .sw{display:inline-block;width:14px;height:14px;border-radius:4px;vertical-align:-2px;margin-inline-end:4px}
+.xpl-legend .lg-ic{display:inline-block;min-width:16px;text-align:center;margin-inline-end:4px}
+.xpl-md{line-height:2;text-align:justify}
+.xpl-tags{margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap}
+.xpl-tags .chip,.xpl-rel .chip{font-size:12px;border-radius:999px;padding:1px 10px;background:var(--_pb);border:1px solid var(--_ln);color:var(--_tx);text-decoration:none}
+.xpl-svg .xk{cursor:pointer;outline:none}
+.xpl-svg .xn .xb{stroke-width:1.6;transition:stroke-width .12s}
+.xpl-svg .xn.xk:hover .xb,.xpl-svg .xn.xk:focus .xb{stroke-width:3}
+.xpl-svg .xe.xk:hover .xl,.xpl-svg .xe.xk:focus .xl,.xpl-svg .xm.xk:hover .xl,.xpl-svg .xm.xk:focus .xl{stroke-width:3.2}
+.xpl-svg .xm.xk:hover .xmt,.xpl-svg .xm.xk:focus .xmt{font-weight:700}
+.xpl-svg .xnote.xk:hover .xb{stroke-width:2.4}
+.xpl-svg.xpl-hov .xn:not(.xpl-on),.xpl-svg.xpl-hov .xe:not(.xpl-on){opacity:.22;transition:opacity .12s}
+.xpl-svg .xpl-cur .xl{stroke-width:3.4}.xpl-svg .xpl-cur .xmt{font-weight:800}.xpl-svg .xm.xpl-cur .xsn circle{fill:#f59e0b}
+/* ── gantt (پلنِ ۵۳۴) — رنگ‌ها از توکن‌های نقشِ پنلِ میزبان (--ok/--warn/--bad/--accent-purple) با جایگزینِ هگز؛ در تمِ تیره
+   همان توکن‌ها خودشان عوض می‌شوند، پس بلوکِ تیره‌ی جدا لازم نیست. بزرگ‌تر از قاعده‌ی درون‌خطیِ svg() (specificity ِ بیشتر) ── */
+.dgs{--_ok:var(--ss-ok,var(--green,#3fb950));--_warn:var(--ss-warn,var(--amber,#d29922));--_bad:var(--ss-bad,var(--red,#f85149));--_pu:var(--ss-purple,#a371f7)}
+.xpl-svg .xgl{stroke:var(--_ln,#cbd5e1)}.xpl-svg .xga,.xpl-svg .xgs2,.xpl-svg .xgbn{fill:var(--_mu,#64748b)}.xpl-svg .xgn{fill:var(--_tx,#1e293b)}
+.xpl-svg .xgz{fill:var(--_pb,#f1f5f9)}
+.xpl-svg .xg-p{fill:var(--_ln,#cbd5e1)}.xpl-svg .xg-p-unk{fill:url(#xg-hatch)}.xpl-svg .xg-hb{fill:var(--_card,#f8fafc)}.xpl-svg .xg-hl{stroke:var(--_mu,#94a3b8)}
+.xpl-svg .xg-q-warn{fill:var(--_warn,#d4820d)}.xpl-svg .xg-q-bad{fill:var(--_bad,#c0392b)}
+.xpl-svg .xg-t{fill:var(--_ok,#16a085)}.xpl-svg .xg-s{fill:var(--_warn,#d4820d)}.xpl-svg .xg-c{fill:var(--_pu,#8e44ad)}
+.xpl-svg .xgm-join{stroke:var(--_ok,#16a085)}.xpl-svg .xgm-leave,.xpl-svg .xgm-leave-bad{stroke:var(--_bad,#c0392b)}.xpl-svg .xgm-alarm{fill:var(--_warn,#d4820d)}.xpl-svg .xgm-pre{stroke:var(--_mu,#94a3b8);stroke-dasharray:2 2}
+.xpl-svg .xgcdr,.xpl-svg .xgx{stroke:var(--_tx,#475569)}.xpl-svg .xgsd{fill:var(--_mu,#475569)}
+.xpl-svg .xgsp-join .xgsd{fill:var(--_ok,#16a085)}.xpl-svg .xgsp-leave .xgsd,.xpl-svg .xgsp-node_down .xgsd,.xpl-svg .xgsp-cdr_leave_bad .xgsd{fill:var(--_bad,#c0392b)}
+.xpl-svg .xgsp-share_start .xgsd,.xpl-svg .xgsp-share_stop .xgsd,.xpl-svg .xgsp-bad_interval .xgsd{fill:var(--_warn,#d4820d)}.xpl-svg .xgsp-cam_on .xgsd,.xpl-svg .xgsp-cam_off .xgsd{fill:var(--_pu,#8e44ad)}
+.xpl-svg .xgsp:hover .xgsd,.xpl-svg .xgsp:focus .xgsd{r:4.2px}.xpl-svg .xgsp.xpl-cur .xgsd{r:5px;stroke:var(--_tx,#18212f);stroke-width:1.5}
+.xpl-svg .xgk:hover .xgm,.xpl-svg .xgk:focus .xgm{stroke-width:3.5}.xpl-svg .xgbar.xk:hover,.xpl-svg .xgbar.xk:focus,.xpl-svg .xgb.xk:hover,.xpl-svg .xgb.xk:focus{stroke:var(--_tx,#18212f);stroke-width:1.2}
+.xpl-svg .xgnm:hover .xgn,.xpl-svg .xgnm:focus .xgn{font-weight:700}.xpl-svg .xgr .xk:focus-visible{outline:2px solid var(--_ac,#4f46e5);outline-offset:1px}
+.xpl-svg .xgnm.xpl-cur .xgn{font-weight:800}.xpl-svg .xgbar.xpl-cur,.xpl-svg .xgb.xpl-cur{stroke:var(--_tx,#18212f);stroke-width:1.6}
+/* تمِ تیره (پیش‌فرضِ این پنل): رنگ‌های لحن (--xp-*) و متنِ درون‌svg. در تمِ روشن همان متغیرها «initial» می‌شوند
+   تا C() به جایگزینِ روشنِ خودِ موتور بیفتد — یک منبع برای هر تم، بی تکرارِ پالت. */
+:root:not([data-theme="light"]) .xpl-svg .xns{fill:#9ca3af}
+:root:not([data-theme="light"]) .xpl-svg .xlt,:root:not([data-theme="light"]) .xpl-svg .xmt{fill:#e5e7eb}
+:root:not([data-theme="light"]) .xpl-svg .xtm{fill:#94a3b8}
+:root:not([data-theme="light"]) .xpl-svg .xlb{fill:#161b22;stroke:#30363d}
+:root:not([data-theme="light"]) .xpl-svg .xnot{fill:#fde68a}
+:root:not([data-theme="light"]) .xpl-svg .xfl,:root:not([data-theme="light"]) .xpl-svg .xftt{fill:#cbd5e1}
+:root:not([data-theme="light"]) .xpl-svg .xft{fill:#30363d}
+:root:not([data-theme="light"]){--xp-user-bg:rgba(59,130,246,.15);--xp-user-ln:#60a5fa;--xp-user-tx:#bfdbfe;--xp-edge-bg:rgba(148,163,184,.12);--xp-edge-ln:#94a3b8;--xp-edge-tx:#e2e8f0;
+  --xp-core-bg:rgba(129,140,248,.16);--xp-core-ln:#818cf8;--xp-core-tx:#c7d2fe;--xp-ext-bg:rgba(251,146,60,.14);--xp-ext-ln:#fb923c;--xp-ext-tx:#fed7aa;
+  --xp-app-bg:rgba(52,211,153,.13);--xp-app-ln:#34d399;--xp-app-tx:#a7f3d0;--xp-store-bg:rgba(45,212,191,.13);--xp-store-ln:#2dd4bf;--xp-store-tx:#99f6e4;
+  --xp-iam-bg:rgba(192,132,252,.15);--xp-iam-ln:#c084fc;--xp-iam-tx:#e9d5ff;--xp-deny-bg:rgba(248,113,113,.14);--xp-deny-ln:#f87171;--xp-deny-tx:#fecaca;
+  --xp-ok-bg:rgba(74,222,128,.13);--xp-ok-ln:#4ade80;--xp-ok-tx:#bbf7d0;--xp-warn-bg:rgba(251,191,36,.13);--xp-warn-ln:#fbbf24;--xp-warn-tx:#fde68a;
+  --xp-note-bg:rgba(250,204,21,.12);--xp-note-ln:#facc15;--xp-note-tx:#fef08a;--xp-muted-bg:rgba(148,163,184,.10);--xp-muted-ln:#64748b;--xp-muted-tx:#cbd5e1}

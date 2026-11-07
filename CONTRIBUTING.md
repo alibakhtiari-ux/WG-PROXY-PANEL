@@ -38,6 +38,7 @@ Users need no build step; contributors build the archive. Before opening a pull 
 ```bash
 python3 -m unittest discover -s tests
 python3 tools/build_pyz.py && python3 dist/wg_panel.pyz --check
+python3 tools/build_nqmo_pyz.py && python3 -I dist/wg_nqmo.pyz --check
 ```
 
 That is necessary but **not sufficient**. Python cannot see inside the

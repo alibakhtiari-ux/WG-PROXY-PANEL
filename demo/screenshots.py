@@ -28,7 +28,12 @@ import run as demo  # noqa: E402
 # نام ⇐ بیشترین پهنا پس از فشرده‌سازی (پیکسل)
 SHOTS = {"overview.png": 2400, "client-chart.png": 2400, "heatmap.png": 2400,
          "rtl-fa.png": 2400, "light.png": 2400, "config-qr.png": 2400,
-         "share-mobile.png": 780, "telegram-chart.png": 900}
+         "share-mobile.png": 780, "telegram-chart.png": 900,
+         "egress-map.png": 2400, "egress-map-fa.png": 2400, "user-trace.png": 2400,
+         "event-timeline.png": 2400, "event-center.png": 2400,
+         "command-palette.png": 2400, "mobile-cards.png": 780}
+# کارپوشه‌های Excel ِ همان اجرا — برای تصویرِ excel-*.png که از خودِ Excel گرفته می‌شود
+REPORTS = ("report-en.xlsx", "report-fa.xlsx")
 # پیش‌نمایشِ مخزن: گرادیان دارد و ۲۵۶ رنگ آن را نواری می‌کند، پس فشرده
 # نمی‌شود (سقفِ GitHub یک مگابایت است؛ این حدودِ ۲۵۰KB است).
 SOCIAL = "social-preview.png"
@@ -82,6 +87,9 @@ def main():
     ap.add_argument("--warmup", type=int, default=180,
                     help="seconds to let the live samples build up first; "
                          "the table's sparklines show the last 3 minutes")
+    ap.add_argument("--reports", metavar="DIR",
+                    help="also keep the demo Excel workbooks here (not published; "
+                         "docs/screenshots/excel-*.png are taken from them in Excel)")
     a = ap.parse_args()
     work = tempfile.mkdtemp(prefix="wg-panel-shots-")
     state, raw = os.path.join(work, "demo"), os.path.join(work, "raw")
@@ -113,6 +121,11 @@ def main():
                         max_w) or packed
         print("  %-20s %4d KB" % (name, os.path.getsize(
             os.path.join(a.out, name)) // 1024))
+    if a.reports:
+        os.makedirs(a.reports, exist_ok=True)
+        for name in REPORTS:
+            shutil.copyfile(os.path.join(raw, name), os.path.join(a.reports, name))
+            print("  %-20s → %s" % (name, a.reports))
     shutil.copyfile(os.path.join(raw, SOCIAL),
                     os.path.join(os.path.dirname(a.out), SOCIAL))
     print("  %-20s %4d KB  (docs/, for Settings → Social preview)"

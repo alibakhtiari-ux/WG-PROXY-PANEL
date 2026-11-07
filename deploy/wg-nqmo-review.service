@@ -1,0 +1,26 @@
+# سورس: deploy/wg-nqmo-review.service → /etc/systemd/system/wg-nqmo-review.service
+[Unit]
+Description=بایگانیِ ساعتیِ بازبینیِ WG-NQMO روی سرور (state.json + خلاصه‌ی تشخیص‌ها)
+After=network-online.target
+# عمداً بدونِ وابستگی به wg-nqmo: اگر موتور خوابیده باشد، همین غیبت در ژورنال
+# دیده می‌شود (exit 1 روی state.json ِ ناخوانا) و چیزی را نمی‌اندازد.
+
+[Service]
+Type=oneshot
+User=wg-nqmo
+Group=wg-nqmo
+ExecStart=/usr/local/sbin/wg-nqmo-review.sh
+TimeoutStartSec=60
+Nice=10
+IOSchedulingClass=idle
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX
+ReadWritePaths=/var/lib/wg-nqmo
+UMask=0077

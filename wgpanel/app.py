@@ -3622,9 +3622,28 @@ def intentional_chain(iface, dev):
     اگر گارد به تونلِ دیگری سوییچ کند همان تونل عمدی می‌شود، و هر devِ
     دیگری (یا هر تونلِ دیگری جز wgwarp) همچنان حلقهٔ واقعیِ بحرانی است.
     """
-    if iface != WARP_IFACE or not dev:
+    if not dev:
         return False
-    return dev == (warp_guard_state().get("egress") or "")
+    if iface == WARP_IFACE:
+        return dev == (warp_guard_state().get("egress") or "")
+    # §29.157 — تونلِ فرعی روی تونلِ مادر. قاعده‌ی معماری (CLAUDE.md، «دام‌های
+    # شبکه»): «تونلِ مادر از eth0، تونلِ فرعی از awg». یعنی endpointِ wg21/wg22 و
+    # استخرِ wgpl* عمداً از awg1/awg3 می‌رود؛ از ۲۸ اکتبر تا ۴ نوامبر این دوازده
+    # تونل در کارتِ تونل‌ها، رباتِ تلگرام و متای WG-NQMO «loop» (بحرانی) خورده
+    # بودند و موتور ۱۲ تشخیصِ کاذبِ افتِ خروجی باز کرده بود.
+    # شرطِ عمدی‌بودن سه تایی و تنگ است تا حلقه‌ی واقعی پنهان نشود:
+    #   ۱) خودِ iface تونلِ WireGuard ِ ساده باشد (مادر هرگز استثنا نمی‌گیرد:
+    #      awg3 از داخلِ awg1 همان تونل‌درتونلِ §۲۹٫۱۳۰ است و باید loop بماند)؛
+    #   ۲) dev تونلِ AmneziaWG (مادر) باشد؛
+    #   ۳) endpointِ خودِ dev از اینترفیسِ فیزیکی برود (loop=False)، وگرنه
+    #      زنجیره روی زنجیره است و باز حلقه‌ی واقعی.
+    if _tunnel_is_awg(iface) or not _tunnel_is_awg(dev):
+        return False
+    mother_ep = read_tunnel_endpoint(dev)
+    if not mother_ep:
+        return False
+    _mdev, mother_loop = endpoint_route_check(mother_ep)
+    return not mother_loop
 
 
 def endpoint_route_state(iface, ep):
@@ -7575,6 +7594,17 @@ NQMO_RTT_MIN_SAMPLES = 5         # rules.PARAMS["rtt_min_samples"]
 NQMO_LOSS_N_MIN = 1000           # rules.PARAMS["loss_n_min"]
 NQMO_WINDOW = 300
 NQMO_PEER_MAX_AGE = 720          # پایانِ پنجره تا generated_at: دو پنجره + فاصله‌ی اجرا
+# معیارِ ارتقا از «فقط مشاهده» (سندِ ۰۱ §۴): دستِ‌کم این‌قدر روز داده و صفر تشخیصِ
+# سایه‌ایِ HIGH در هفت روزِ اخیر. موتور promotion را می‌نویسد؛ تصمیم با اپراتور است.
+NQMO_PROMOTION_DAYS = 7
+# §29.153 — با analysis.py هم‌گام (NqmoStateReadTests.test_constants_follow_the_engine)
+NQMO_HISTORY_HOURS = 24          # analysis.HISTORY_HOURS
+NQMO_WHY_MAX = 8                 # analysis.WHY_MAX
+NQMO_STREAMS = ("S1", "S2", "S4")    # analysis._JUDGED_STREAMS
+_NQMO_WHY_RE = re.compile(r"^[A-Za-z0-9_:-]{1,40}$")   # توکنِ quality_why (features._BAD)
+NQMO_CORR_CAUSES = ("SERVER", "EGRESS", "UNKNOWN")   # correlate.py: suspected_cause
+NQMO_STATUS_ERRORS = 10          # خطاهای اخیرِ موتور که به رابط می‌رسد (موتور ۲۰ تا می‌نویسد)
+NQMO_STATUS_THREADS = 8          # سقفِ نخ‌هایی که در «پوشش» نشان داده می‌شوند
 
 
 def _nqmo_num(v):
@@ -7699,6 +7729,18 @@ def nqmo_metric_rows(st, known=frozenset()):
         if isinstance(errs, list):
             out.append(("wg_nqmo_recent_errors", "Engine errors kept in the state (last 20)",
                         "gauge", [({}, len(errs))]))
+        eng = _nqmo_status_engine(cov)
+        if eng is not None:
+            if eng["cpu_pct"] is not None:
+                out.append(("wg_nqmo_engine_cpu_percent", "Engine CPU over the last minute",
+                            "gauge", [({}, eng["cpu_pct"])]))
+            if eng["rss_mb"] is not None:
+                out.append(("wg_nqmo_engine_rss_bytes", "Engine resident memory", "gauge",
+                            [({}, int(eng["rss_mb"] * 1024 * 1024))]))
+            if eng["sampling"] is not None:
+                out.append(("wg_nqmo_engine_sampling", "Header capture in sampling rotation "
+                            "because CPU crossed the cap (1/0)", "gauge",
+                            [({}, int(eng["sampling"]))]))
         sto = st.get("store") if isinstance(st.get("store"), dict) else {}
         mb = _nqmo_num(sto.get("size_mb"))
         if mb is not None:
@@ -7837,6 +7879,35 @@ def _nqmo_diags(st, detail):
             if x is not None]
 
 
+def _nqmo_series(v, n, lo, hi):
+    """آرایه‌ی تاریخچه: دقیقاً n خانه، هر خانه عددِ متناهی در [lo, hi] یا None.
+    طولِ غلط یا نوعِ غلط ⇒ None (کلِ سری کنار می‌رود، نه نصفش)."""
+    if not isinstance(v, list) or len(v) != n:
+        return None
+    out = []
+    for x in v:
+        if x is None:
+            out.append(None)
+            continue
+        x = _nqmo_num(x)
+        if x is None or not lo <= x <= hi:
+            return None
+        out.append(x)
+    return out
+
+
+def _nqmo_history(h):
+    """peers[].history ِ موتور (analysis._history): دو سریِ ساعتیِ هم‌طول یا None."""
+    if not isinstance(h, dict):
+        return None
+    rtt = _nqmo_series(h.get("rtt_ms"), NQMO_HISTORY_HOURS, 0, 60000)
+    loss = _nqmo_series(h.get("loss"), NQMO_HISTORY_HOURS, 0, 1)
+    end = _nqmo_num(h.get("end"))
+    if rtt is None or loss is None or end is None:
+        return None
+    return {"end": end, "rtt_ms": rtt, "loss": loss}
+
+
 def _nqmo_summary(p):
     out = {}
     for k in ("rtt_n", "loss_n"):
@@ -7851,7 +7922,120 @@ def _nqmo_summary(p):
         out["loss_point"] = out["loss_lb"] = out["loss_ub"] = None
     out["quality"] = _nqmo_pick(p.get("quality"), NQMO_PEER_QUALITY)
     out["mtu_status"] = _nqmo_pick(p.get("mtu_status"), NQMO_MTU_STATUS)
+    # §29.153: چرا عددی غایب است (کیفیتِ هر جریانِ داوری‌شده و توکن‌های quality_why)
+    # و تاریخچه‌ی ساعتی. توکن از واژگانِ بازِ موتور است ⇒ فقط شکلِ لاتینِ کوتاه.
+    st = p.get("streams") if isinstance(p.get("streams"), dict) else {}
+    out["streams"] = {s: _nqmo_pick(st.get(s), NQMO_DATA_QUALITY) for s in NQMO_STREAMS}
+    why = p.get("why") if isinstance(p.get("why"), list) else []
+    out["why"] = sorted({w for w in why[:NQMO_WHY_MAX]
+                         if isinstance(w, str) and _NQMO_WHY_RE.match(w)})
+    out["history"] = _nqmo_history(p.get("history"))
     return out
+
+
+def _nqmo_bool(v):
+    return v if type(v) is bool else None
+
+
+def _nqmo_count(v):
+    """شمارِ صحیحِ نامنفی، وگرنه None (bool و float عمداً رد می‌شوند)."""
+    return v if type(v) is int and 0 <= v <= 1 << 53 else None
+
+
+def _nqmo_status_threads(cov):
+    """{نام: سالم؟} از coverage.threads ِ موتور — فقط نامِ پاک و مقدارِ bool،
+    با سقفِ NQMO_STATUS_THREADS (هر نخ یک چیپ در رابط است)."""
+    th = cov.get("threads")
+    out = {}
+    if not isinstance(th, dict):
+        return out
+    for name, info in list(th.items())[:NQMO_STATUS_THREADS]:
+        lab = _nqmo_label(name)
+        if not lab or not isinstance(info, dict):
+            continue
+        ok = _nqmo_bool(info.get("healthy"))
+        if ok is not None:
+            out[lab] = ok
+    return out
+
+
+def _nqmo_status_errors(st, detail):
+    """خطاهای اخیرِ موتور (engine._err): زمان و محلِ هرکدام برای همه؛ متنِ خطا
+    (می‌تواند مسیرِ فایل یا جزئیاتِ درونی داشته باشد) فقط با nqmo.detail."""
+    errs = st.get("errors")
+    out = []
+    if not isinstance(errs, list):
+        return out
+    for e in reversed(errs[-50:]):           # تازه‌ترین‌ها؛ ورودیِ خراب جای یکی را نمی‌گیرد
+        if len(out) >= NQMO_STATUS_ERRORS:
+            break
+        if not isinstance(e, dict):
+            continue
+        row = {"ts": _nqmo_num(e.get("ts")), "where": _nqmo_label(e.get("where"))}
+        if row["where"] is None:
+            continue
+        if detail:
+            row["error"] = _nqmo_label(e.get("error")) or ""
+        out.append(row)
+    out.reverse()                            # صعودی مثلِ خودِ موتور
+    return out
+
+
+def _nqmo_status_promotion(st):
+    """آمادگیِ ارتقا از analysis.shadow_stats: روزهای داده و شمارِ تشخیص‌های
+    سایه‌ایِ HIGH در هفت روزِ اخیر (جمعِ همه‌ی پیرها، بدونِ نامِ پیر)."""
+    pr = st.get("promotion")
+    if not isinstance(pr, dict):
+        return None
+    days = _nqmo_num(pr.get("data_days"))
+    by = pr.get("shadow_high_by_peer_7d")
+    high = None
+    if isinstance(by, dict):
+        counts = [_nqmo_count(v) for v in by.values()]
+        high = sum(c for c in counts if c is not None) if counts else 0
+    if days is None and high is None:
+        return None
+    return {"data_days": None if days is None else round(max(days, 0.0), 2),
+            "shadow_high_7d": high, "days_required": NQMO_PROMOTION_DAYS}
+
+
+def _nqmo_status_engine(cov):
+    """هزینه‌ی خودِ موتور (engine.task_export → coverage.engine)."""
+    e = cov.get("engine")
+    if not isinstance(e, dict):
+        return None
+    out = {"cpu_pct": _nqmo_num(e.get("cpu_pct")), "rss_mb": _nqmo_num(e.get("rss_mb")),
+           "cpu_pct_max": _nqmo_num(e.get("cpu_pct_max")),
+           "sampling": _nqmo_bool(e.get("sampling"))}
+    for k in ("cpu_pct", "cpu_pct_max"):
+        if out[k] is not None and not 0 <= out[k] <= 100:
+            out[k] = None
+    if out["rss_mb"] is not None and out["rss_mb"] < 0:
+        out["rss_mb"] = None
+    return out
+
+
+def _nqmo_corr_summary(st):
+    """شمارشِ همبستگی‌ها بدونِ prefix و ASN (برای همه، نه فقط nqmo.detail):
+    شمارِ گروه، دستگاه‌های فعال و متأثر، و علتِ مظنون از واژگانِ بسته."""
+    corr = st.get("correlations")
+    if not isinstance(corr, list):
+        return None
+    groups = active = affected = 0
+    causes = set()
+    for c in corr[:50]:
+        if not isinstance(c, dict):
+            continue
+        groups += 1
+        active += _nqmo_count(c.get("active_peers")) or 0
+        affected += _nqmo_count(c.get("affected_peers")) or 0
+        cause = c.get("suspected_cause")
+        if isinstance(cause, str):
+            cause = cause.split(":", 1)[0]            # «EGRESS:awg1,awg3» ⇒ EGRESS
+            if cause in NQMO_CORR_CAUSES:
+                causes.add(cause)
+    return {"groups": groups, "active_peers": active, "affected_peers": affected,
+            "causes": sorted(causes)}
 
 
 def nqmo_status_doc(st, detail, known):
@@ -7862,6 +8046,8 @@ def nqmo_status_doc(st, detail, known):
     col = st.get("collectors") if isinstance(st.get("collectors"), dict) else {}
     cov = st.get("coverage") if isinstance(st.get("coverage"), dict) else {}
     sto = st.get("store") if isinstance(st.get("store"), dict) else {}
+    asn = cov.get("asn") if isinstance(cov.get("asn"), dict) else {}
+    probe = st.get("probe") if isinstance(st.get("probe"), dict) else None
     diags = _nqmo_diags(st, detail)
     fresh = _nqmo_fresh_peers(st, known)
     peers = []
@@ -7887,11 +8073,30 @@ def nqmo_status_doc(st, detail, known):
                           if c in col and (col[c] is None or type(col[c]) is bool)},
            "coverage": {"peers_total": _nqmo_num(cov.get("peers_total")),
                         "peers_active": _nqmo_num(cov.get("peers_handshake_180s")),
-                        "capture_enabled": cov.get("capture_enabled")
-                        if type(cov.get("capture_enabled")) is bool else None},
+                        "capture_enabled": _nqmo_bool(cov.get("capture_enabled")),
+                        # جزئیاتِ پوشش (engine.task_export): چرا C1 قرمز است، چند
+                        # endpoint مبهم یا بی‌مدل مانده، کدام نخ ناسالم است
+                        "meta_age_s": _nqmo_num(cov.get("meta_age_s")),
+                        # متنِ خطا مسیرِ فایل دارد؛ به رابط فقط «هست/نیست» می‌رسد
+                        "meta_error": (bool(cov.get("meta_error"))
+                                       if isinstance(cov.get("meta_error"), str) else None),
+                        "ambiguous_endpoints": _nqmo_count(cov.get("ambiguous_endpoints")),
+                        "unmodelled_endpoints": _nqmo_count(cov.get("unmodelled_endpoints")),
+                        "threads": _nqmo_status_threads(cov),
+                        "asn_stale": _nqmo_bool(asn.get("stale")),
+                        "engine": _nqmo_status_engine(cov)},
+           "correlation_summary": _nqmo_corr_summary(st),
            "store": {"size_mb": _nqmo_num(sto.get("size_mb")),
-                     "read_only": sto.get("read_only")
-                     if type(sto.get("read_only")) is bool else None},
+                     "read_only": _nqmo_bool(sto.get("read_only")),
+                     "recreated": _nqmo_bool(sto.get("recreated"))},
+           # پنجره‌ی تحلیلِ بسته‌شده (آغازش)؛ generated_at زمانِ نوشتنِ state است
+           "last_window": _nqmo_num(st.get("last_window")),
+           "probe": None if probe is None else {
+               "running": _nqmo_bool(probe.get("running")) is True,
+               "run_id": probe["run_id"] if type(probe.get("run_id")) is int
+               and probe["run_id"] > 0 else None},
+           "promotion": _nqmo_status_promotion(st),
+           "errors": _nqmo_status_errors(st, detail),
            "global": [d for d in diags if d["scope"] != "PEER"],
            "advisories": [_nqmo_clean(a) for a in adv[:50]
                           if isinstance(a, dict) and a.get("scope") == "SERVER_TUNNEL"],
@@ -15088,6 +15293,426 @@ def build_stats():
     }
 
 
+# ------------------------------------------- نمودارهای زنده (SvgStudio) و گزارشِ Excel
+#
+# مرزِ مسئولیت: این‌جا فقط **واقعیت** جمع می‌شود (همان منابعی که پنل و نگهبان‌ها
+# می‌خوانند — هیچ منطقِ موازی). ساختنِ مدلِ نمودار در wgpanel/viz.py و کتابِ Excel
+# در wgpanel/report.py است؛ هر دو تابعِ خالص‌اند و بی سرور آزموده می‌شوند. موتورِ
+# مرورگر (web/svgstudio.js) هیچ دانشی از شبکه ندارد.
+
+# مقصدهای سنجشِ مسیرِ پیش‌فرض از دیدِ کاربر: یکی در نیمه‌ی پایینِ IPv4 و یکی در نیمه‌ی
+# بالا — مسیرِ catch-all می‌تواند فضای نشانی را بینِ دو تونل نصف کند و یک مقصد فقط
+# یک نیمه را نشان می‌دهد. `ip route get` بسته‌ای نمی‌فرستد؛ فقط جدول را می‌پرسد.
+# با CONFIG["viz"]["probes"] قابلِ بازنویسی است.
+VIZ_DEFAULT_PROBES = ("1.0.0.1", "149.112.112.112")
+VIZ_FACTS_TTL = 5.0
+_VIZ_CACHE = {"ts": 0.0, "data": None}
+_VIZ_LOCK = threading.Lock()
+
+
+def _pkg_module(name):
+    """ماژولِ خواهرِ داخلِ پکیج (viz، report، xlsx) — از همان راهِ _pkg_bytes.
+
+    import ِ نسبی کار نمی‌کند: هارنسِ تست app.py را با نامِ سطح‌بالا و __package__ ِ
+    خالی بار می‌کند، و روی سرور کد داخلِ wg_panel.pyz است. پس متنِ ماژول از
+    __loader__ خوانده و یک بار در sys.modules نشانده می‌شود."""
+    import sys as _sys
+    import types as _types
+    key = "wgpanel." + name
+    mod = _sys.modules.get(key)
+    if mod is None:
+        mod = _types.ModuleType(key)
+        mod.__file__ = os.path.join(os.path.dirname(os.path.abspath(__file__)), name + ".py")
+        _sys.modules[key] = mod
+        try:
+            exec(compile(_pkg_text(name + ".py"), mod.__file__, "exec"), mod.__dict__)
+        except Exception:
+            _sys.modules.pop(key, None)
+            raise
+    return mod
+
+
+def viz_ctx(lang):
+    """زمینه‌ی ترجمه/ارقام/جهت برای سازنده‌های مدل."""
+    lang = lang if lang in _LANG_IDX else DEFAULT_LANG
+    V = _pkg_module("viz")
+    return V.Ctx(lambda k, **kw: t(k, lang, **kw), fa=lang in LANG_FA_DIGITS,
+                 rtl=LANG_DIR[lang] == "rtl")
+
+
+def _t_or(key, fallback, lang):
+    return t(key, lang) if key in I18N else fallback
+
+
+def _viz_probes():
+    p = (CONFIG.get("viz") or {}).get("probes")
+    out = []
+    for x in (p if isinstance(p, list) else VIZ_DEFAULT_PROBES):
+        try:
+            out.append(str(ipaddress.IPv4Address(str(x))))
+        except ValueError:
+            continue
+    return out[:6] or list(VIZ_DEFAULT_PROBES)
+
+
+def _routes_file_probe(path):
+    """نخستین پیشوندِ معتبرِ یک routes_file ِ ECMP ⇒ یک نشانیِ درونِ آن (برای ip route get)."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            for ln in f:
+                tok = ln.split("#", 1)[0].strip().split()
+                if not tok:
+                    continue
+                try:
+                    net = ipaddress.ip_network(tok[0], strict=False)
+                except ValueError:
+                    continue
+                if net.version == 4:
+                    return str(net.network_address + (1 if net.num_addresses > 2 else 0))
+    except OSError:
+        pass
+    return ""
+
+
+def _ks_rule_count():
+    rc, out, _ = run(["ip", "rule", "show"], timeout=5)
+    return sum(1 for ln in (out or "").splitlines() if " prohibit" in ln) if rc == 0 else 0
+
+
+def _user_vantage(ingress):
+    """(iif, src) ِ یک کاربرِ نمونه برای `ip route get … from … iif …`."""
+    for g in ingress:
+        ip = _sample_user_ip(g.get("subnet") or "")
+        if ip:
+            return g["iface"], ip
+    return "", ""
+
+
+def viz_egress_facts(stats=None):
+    """واقعیت‌های نقشه‌ی مسیرِ خروج (قالب در viz.egress_model). کشِ چندثانیه‌ای:
+    اسلایدِ TV و نقشه هر چند ثانیه می‌پرسند و هر سنجشِ مسیر یک پروسه‌ی ip است."""
+    with _VIZ_LOCK:
+        if _VIZ_CACHE["data"] is not None and time.time() - _VIZ_CACHE["ts"] < VIZ_FACTS_TTL and stats is None:
+            return _VIZ_CACHE["data"]
+    s = stats or build_stats()
+    f = {"wan": "", "ingress": [], "users": {}, "ks": {}, "tunnels": s.get("tunnels") or [],
+         "ecmp": {}, "default": [], "sni": None, "ai": None, "warp": None}
+    users = s.get("users") or []
+    f["users"] = {"total": len(users), "online": sum(1 for u in users if u.get("online")),
+                  "disabled": sum(1 for u in users if not u.get("enabled"))}
+    try:
+        f["wan"] = _wan_iface()
+        ks_if = user_ingress_ifaces()
+        f["ks"] = {"rules": _ks_rule_count(), "ifaces": ks_if}
+        rates = {i["iface"]: i for i in s.get("interfaces") or []}
+        seen = set()
+        for sec in s.get("sections") or []:
+            i = sec["iface"]
+            seen.add(i)
+            f["ingress"].append({
+                "iface": i, "peers": sec.get("count", 0),
+                "online": sum(1 for u in users if u["iface"] == i and u.get("online")),
+                "rx_rate": (rates.get(i) or {}).get("rx_rate", 0), "tx_rate": (rates.get(i) or {}).get("tx_rate", 0),
+                "subnet": sec.get("subnet") or iface_connected_subnet(i), "ks": i in ks_if})
+        for i in ks_if:                       # ورودیِ غیرِ WireGuard (مثلاً لایه‌ی AnyConnect)
+            if i in seen:
+                continue
+            f["ingress"].append({"iface": i, "peers": 0, "online": 0,
+                                 "rx_rate": (rates.get(i) or {}).get("rx_rate", 0),
+                                 "tx_rate": (rates.get(i) or {}).get("tx_rate", 0),
+                                 "subnet": iface_connected_subnet(i), "ks": True})
+        iif, src = _user_vantage(f["ingress"])
+        for p in _viz_probes():
+            dev = _route_dev(p, src=src, iif=iif) if src else _route_dev(p)
+            f["default"].append({"probe": p, "dev": dev})
+    except Exception as e:
+        log_action("viz egress facts: %r" % e)
+    try:
+        c = CONFIG.get("ecmp_guard") or {}
+        groups = []
+        for g in ecmp_groups(c):
+            groups.append({"name": g.get("name") or os.path.basename(g["routes_file"]),
+                           "tunnels": list(g["tunnels"]),
+                           "member": {x: ECMPGUARD.membership.get((g.get("name"), x)) for x in g["tunnels"]},
+                           "probe": _routes_file_probe(g["routes_file"])})
+        f["ecmp"] = {"enabled": bool(c.get("enabled")), "groups": groups}
+    except Exception as e:
+        log_action("viz ecmp facts: %r" % e)
+    try:
+        if os.path.isfile(WARP_SYNC):
+            w = warp_status()
+            f["sni"] = dict(w.get("sni") or {})
+            f["ai"] = w.get("ai_egress") or ai_egress_diag()
+            g = w.get("guard") or {}
+            f["warp"] = {"iface": WARP_IFACE, "up": bool((w.get("iface") or {}).get("up")),
+                         "handshake": (w.get("iface") or {}).get("handshake") or 0,
+                         "egress": g.get("egress") or "", "guard_alive": bool(g.get("alive")),
+                         "healthy": bool(w.get("healthy"))}
+    except Exception as e:
+        log_action("viz warp facts: %r" % e)
+    if stats is None:
+        with _VIZ_LOCK:
+            _VIZ_CACHE.update(ts=time.time(), data=f)
+    return f
+
+
+def viz_trace_facts(iface, name, can_tun):
+    """واقعیت‌های ردیابیِ یک کاربر؛ None ⇒ چنین کاربری نیست."""
+    s = build_stats()
+    u = next((x for x in s.get("users") or [] if x["iface"] == iface and x["name"] == name), None)
+    if u is None:
+        return None
+    ip = ""
+    for a in str(u.get("allowed_ips") or "").split(","):
+        a = a.strip()
+        try:
+            n = ipaddress.ip_network(a, strict=False)
+        except ValueError:
+            continue
+        if n.version == 4:
+            ip = str(n.network_address)
+            break
+    hist = []
+    try:
+        hist = SAMPLER.peer_history(iface, u["public_key"])
+    except Exception:
+        hist = []
+    ks_if = user_ingress_ifaces()
+    dec = []
+    if ip:
+        for p in _viz_probes():
+            dec.append({"kind": "default", "probe": p, "dev": _route_dev(p, src=ip, iif=iface)})
+        try:
+            for g in ecmp_groups(CONFIG.get("ecmp_guard") or {}):
+                pr = _routes_file_probe(g["routes_file"])
+                if pr:
+                    dec.append({"kind": "ecmp", "probe": pr, "dev": _route_dev(pr, src=ip, iif=iface),
+                                "group": g.get("name") or ""})
+        except Exception as e:
+            log_action("viz trace ecmp: %r" % e)
+        try:
+            if os.path.isfile(WARP_SYNC) and (warp_sni_status() or {}).get("enabled"):
+                main = _default_dev_of_table(WARP_TABLE)
+                if main:
+                    dec.append({"kind": "ai", "probe": "SNI · 443", "dev": main})
+        except Exception as e:
+            log_action("viz trace ai: %r" % e)
+    return {"user": u, "ip": ip, "hist": hist, "wan": _wan_iface(),
+            "ingress": {"iface": iface, "ks": iface in ks_if, "subnet": iface_subnet(iface) or ""},
+            "decisions": dec, "can_tun": bool(can_tun),
+            "tunnels": {x["iface"]: x for x in (s.get("tunnels") or [])} if can_tun else {}}
+
+
+def _hour_ts(h):
+    try:
+        return datetime.strptime(h, "%Y-%m-%d %H").timestamp()
+    except (TypeError, ValueError):
+        return None
+
+
+def viz_timeline_facts(hours, perms, lang):
+    """رویدادهای بازه (پیش‌فرض ۲۴ ساعت) و مصرفِ ساعتیِ هر تونل.
+
+    منبع‌ها به مجوزِ همان بخش در رابط گره خورده‌اند: رویدادِ تونل/اینترفیس و WARP با
+    tun.view (همان /api/warp/events)، NQMO با nqmo.view، بقیه‌ی ممیزی با audit.view."""
+    t1 = time.time()
+    t0 = t1 - hours * 3600
+    s = build_stats()
+    tun = []
+    for x in s.get("tunnels") or []:
+        hrs = []
+        if hours <= 24 * 21:
+            for r in META.usage_series(x["iface"], IFACE_AGG_KEY, "24h" if hours <= 24 else "7d", gran="hour"
+                                       if hours > 24 else None):
+                ts = _hour_ts(r["t"])
+                if ts is not None and ts + 3600 > t0:
+                    hrs.append({"t": ts, "bytes": (r.get("rx") or 0) + (r.get("tx") or 0)})
+        tun.append({"iface": x["iface"], "health": x.get("health"), "hours": hrs})
+    return {"t0": t0, "t1": t1, "tunnels": tun, "events": viz_events(t0, perms, lang)}
+
+
+def viz_events(t0, perms, lang):
+    """رویدادهای پس از t0 از چهار منبع (ممیزیِ تونل، tunnel-guard، WARP، NQMO؛ و ممیزیِ دیگر با audit.view)، به یک شکل (خط‌زمان و برگه‌ی «رویدادها»ی Excel)."""
+    days = max(1, int(math.ceil((time.time() - t0) / 86400.0)))
+    ev = []
+    sev_of = {"ok": "ok", "bad": "bad"}
+    for cat in ("tunnel", "iface"):
+        for r in META.audit_list(category=cat, since_days=days, limit=600):
+            if r["ts"] < t0:
+                continue
+            a = r.get("action") or ""
+            bad = any(w in a for w in ("down", "found", "fail", "degrade"))
+            ev.append({"ts": r["ts"], "src": "audit", "subject": r.get("target") or "", "action": a,
+                       "title": _t_or("ui.audit.act." + a, a, lang), "actor": r.get("actor") or "",
+                       "detail": audit_detail_text(r.get("detail"), lang),
+                       "sev": "bad" if bad else ("ok" if any(w in a for w in ("up", "fix")) else "info")})
+    try:
+        ev += guard_events(t0, lang)
+    except Exception as e:
+        log_action("viz guard events: %r" % e)
+    try:
+        for r in warp_events_read(limit=300):
+            if r["ts"] < t0:
+                continue
+            k = r.get("kind") or ""
+            ev.append({"ts": r["ts"], "src": "warp", "subject": "", "action": k,
+                       "title": _t_or("ui.warpev." + k, k, lang), "actor": r.get("actor") or "",
+                       "detail": r.get("detail") or "", "sev": "warn" if k in ("egress", "rotate") else "info"})
+    except Exception as e:
+        log_action("viz warp events: %r" % e)
+    if "nqmo.view" in perms and nqmo_enabled():
+        try:
+            for r in nqmo_events(nqmo_state(), 0, NQMO_EVENTS_MAX, False, nqmo_panel_peers()):
+                ts = r.get("ts") or 0
+                if not ts or ts < t0:
+                    continue
+                cls = r.get("class") or ""
+                subj = r.get("peer") or r.get("subject") or ""
+                ev.append({"ts": ts, "src": "nqmo", "subject": "", "action": r.get("kind") or "",
+                           "title": "%s · %s" % (_t_or("ui.nqmo.cls." + cls, cls, lang), r.get("kind") or ""),
+                           "actor": subj, "detail": "%s %s" % (r.get("severity") or "", r.get("confidence") or ""),
+                           "sev": "ok" if r.get("kind") == "close" else ("bad" if r.get("severity") == "CRITICAL" else "warn")})
+        except Exception as e:
+            log_action("viz nqmo events: %r" % e)
+    if "audit.view" in perms:
+        for r in META.audit_list(since_days=days, limit=400):
+            if r["ts"] < t0 or r.get("category") in ("tunnel", "iface", "peer", "auth"):
+                continue
+            a = r.get("action") or ""
+            ev.append({"ts": r["ts"], "src": "audit", "subject": "", "action": a,
+                       "title": _t_or("ui.audit.act." + a, a, lang), "actor": r.get("actor") or "",
+                       "detail": "%s %s" % (r.get("target") or "", audit_detail_text(r.get("detail"), lang)),
+                       "sev": sev_of.get("ok" if r.get("ok") else "bad", "info")})
+    return ev
+
+
+GUARD_EVENTS_MAX = 400
+
+
+def guard_events(t0, lang):
+    """کنش‌ها و تغییرِ وضعیتِ tunnel-guard از ژورنال (تنها جایی که ثبت می‌شوند جز تلگرام).
+    روی مک/دمو journalctl نیست ⇒ فهرستِ خالی."""
+    V = _pkg_module("viz")
+    rc, out, _ = run(["journalctl", "-t", "tunnel-guard", "--since", "@%d" % int(t0),
+                      "-o", "json", "--no-pager", "-n", "5000"], timeout=10)
+    if rc != 0:
+        return []
+    ev = []
+    for line in out.splitlines():
+        try:
+            r = json.loads(line)
+            ts = int(r["__REALTIME_TIMESTAMP"]) / 1e6
+            msg = r.get("MESSAGE")
+            if isinstance(msg, list):          # journald پیامِ غیر-UTF-8 را آرایه‌ی بایت می‌دهد
+                msg = bytes(msg).decode("utf-8", "replace")
+        except (ValueError, KeyError, TypeError):
+            continue
+        g = V.guard_event(msg)
+        if g is None or ts < t0:
+            continue
+        subj, kind, sev, text = g
+        ev.append({"ts": ts, "src": "guard", "subject": subj, "action": "guard." + kind,
+                   "title": t("viz.gd." + kind, lang), "actor": "tunnel-guard",
+                   "detail": text, "sev": sev})          # متنِ خامِ لاگ — پیامِ سیستم است و ترجمه نمی‌شود
+    return ev[-GUARD_EVENTS_MAX:]
+
+
+# ── کارپوشه‌ی Excel ─────────────────────────────────────────────────────
+REPORT_DAYS = (1, 183)      # بازه‌ی مجاز؛ جدولِ روزانه ۶ ماه نگه داشته می‌شود
+
+
+def _report_usage(days, ifaces):
+    """(range_bytes, daily) ِ کاربرانِ اینترفیس‌های ifaces در days روزِ اخیر (امروز هم).
+
+    فقط پیرهای کاربر: شمارنده‌ی خودِ اینترفیس و جمعِ تجمیعی کنار گذاشته می‌شوند،
+    و تونل‌ها (که پیرهایشان هم در usage_day اند) با فیلترِ اینترفیس بیرون می‌مانند."""
+    ifaces = sorted(set(ifaces))
+    if not ifaces:
+        return {}, []
+    since = (datetime.now() - timedelta(days=days - 1)).strftime("%Y-%m-%d")
+    q = ",".join("?" * len(ifaces))
+    base = ("FROM usage_day WHERE day>=? AND pubkey NOT IN (?, ?) AND iface IN (%s)" % q)
+    args = [since, NETDEV_KEY, IFACE_AGG_KEY] + ifaces
+    con = MetaDB._connect()
+    try:
+        rng = {(i, p): (rx or 0) + (tx or 0) for i, p, rx, tx in con.execute(
+            "SELECT iface, pubkey, SUM(rx), SUM(tx) " + base + " GROUP BY iface, pubkey", args)}
+        daily = [{"day": d, "bytes": b or 0, "active": n} for d, b, n in con.execute(
+            "SELECT day, SUM(rx) + SUM(tx), COUNT(DISTINCT iface || '/' || pubkey) " + base +
+            " AND rx + tx > 0 GROUP BY day ORDER BY day", args)]
+    finally:
+        con.close()
+    return rng, daily
+
+
+def _report_metric(metric, days):
+    """میانگینِ روزانه‌ی یک متریکِ سامانه در days روزِ اخیر."""
+    mode = "7d" if days <= 7 else ("30d" if days <= 30 else "6m")
+    since = (datetime.now() - timedelta(days=days - 1)).strftime("%Y-%m-%d")
+    return [r for r in META.metric_series(metric, mode) if str(r.get("t")) >= since]
+
+
+def report_facts(perms, days, mask, lang):
+    """واقعیت‌های کارپوشه (قالب در report.build). هر بخش فقط با مجوزِ همان بخش در رابط
+    جمع می‌شود — کتاب چیزی را نشان نمی‌دهد که همان کاربر در پنل نمی‌بیند."""
+    perms = set(perms)
+    now = time.time()
+    s = build_stats()
+    f = {"now": now, "host": _host_label(), "build": BUILD_ID or "", "days": days,
+         "mask": bool(mask), "perms": perms}
+    if "wg.view" in perms:
+        users = []
+        for u in s.get("users") or []:
+            u = dict(u)
+            try:
+                u["hist"] = SAMPLER.peer_history(u["iface"], u["public_key"])[-60:]
+            except Exception:
+                u["hist"] = []
+            users.append(u)
+        f["users"] = users
+        try:
+            f["range_bytes"], f["daily"] = _report_usage(
+                days, [x["iface"] for x in s.get("sections") or []])
+        except Exception as e:
+            log_action("report usage: %r" % e)
+    if "tun.view" in perms:
+        f["tunnels"] = s.get("tunnels") or []
+        f["egress"] = viz_egress_facts()
+        try:
+            f["events"] = viz_events(now - days * 86400, perms, lang)
+        except Exception as e:
+            log_action("report events: %r" % e)
+    if "audit.view" in perms:
+        rows = []
+        for r in META.audit_list(since_days=days, limit=2000):
+            a = r.get("action") or ""
+            rows.append(dict(r, action_text=_t_or("ui.audit.act." + a, a, lang),
+                             detail=audit_detail_text(r.get("detail"), lang)))
+        f["audit"] = rows
+    if "sys.view" in perms:
+        f["speed"] = [r for r in META.speedtest_recent(2000) if (r.get("ts") or 0) >= now - days * 86400]
+        f["sys"] = {m: _report_metric(m, days) for m in ("cpu", "ram", "disk")}
+    return f
+
+
+def report_xlsx(perms, days, mask, lang):
+    """بایت‌های کارپوشه + نامِ فایل."""
+    V, R, X = _pkg_module("viz"), _pkg_module("report"), _pkg_module("xlsx")
+    data = R.build(report_facts(perms, days, mask, lang), viz_ctx(lang), X, V)
+    return data, "wg-report-%s.xlsx" % datetime.now().strftime("%Y%m%d-%H%M")
+
+
+def viz_model(kind, lang, **kw):
+    """مدلِ کاوشگرِ SvgStudio برای یکی از سه نما (همه‌ی هوش همین‌جا و در viz.py)."""
+    V, cx = _pkg_module("viz"), viz_ctx(lang)
+    if kind == "egress":
+        return V.egress_model(viz_egress_facts(), cx)
+    if kind == "trace":
+        f = viz_trace_facts(kw["iface"], kw["name"], kw.get("can_tun"))
+        return None if f is None else V.trace_model(f, cx)
+    return V.timeline_model(viz_timeline_facts(kw["hours"], kw["perms"], lang), cx)
+
+
 # ------------------------------------------------------------- Prometheus
 
 def build_metrics():
@@ -15339,6 +15964,20 @@ THREE_VER = "0.180.0"
 #   - prefers-reduced-motion: بدون چرخش خودکار و با ذرات کم/آهسته.
 # منبع: wgpanel/web/tv3d.mjs
 TV3D_JS = _pkg_text("web/tv3d.mjs")
+
+# ------------------------------------------------------- SvgStudio (نقشه و گزارش)
+# موتورِ عمومیِ نمودار (svgstudio.js/css)، چسبِ صفحه (studio.js) و svg-pan-zoom ِ
+# vendorشده. سه فایلِ اول URL ِ بی‌نسخه دارند ⇒ همان no-store ِ پیش‌فرض (با هر استقرار
+# عوض می‌شوند)؛ vendor نسخه‌دار است ⇒ کشِ immutable. هیچ‌کدام CDN نمی‌خواهد (air-gap).
+SVGPANZOOM_VER = "3.6.1"
+STUDIO_ASSETS = {
+    "/svgstudio.js": ("web/svgstudio.js", "text/javascript; charset=utf-8", False),
+    "/svgstudio.css": ("web/svgstudio.css", "text/css; charset=utf-8", False),
+    "/studio.js": ("web/studio.js", "text/javascript; charset=utf-8", False),
+    "/vendor/svg-pan-zoom-%s.min.js" % SVGPANZOOM_VER:
+        ("web/vendor/svg-pan-zoom-%s.min.js" % SVGPANZOOM_VER, "text/javascript; charset=utf-8", True),
+}
+STUDIO_BYTES = {k: _pkg_bytes(v[0]) for k, v in STUDIO_ASSETS.items()}
 
 
 # ------------------------------------------------------------------ HTTP سرور
@@ -15776,6 +16415,10 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, zlib.decompress(gz, 31),
                            "text/javascript; charset=utf-8",
                            extra_headers=hdrs)
+        elif path in STUDIO_ASSETS:
+            _rel, ctype, immutable = STUDIO_ASSETS[path]
+            self._send(200, STUDIO_BYTES[path], ctype, extra_headers=(
+                {"Cache-Control": "public, max-age=31536000, immutable"} if immutable else None))
         elif path == "/tv3d.mjs":
             # ماژول صحنه‌ی سه‌بعدی نمای TV — جدا از PAGE_HTML تا فقط با ورود
             # به اسلاید «شبکه (سه‌بعدی)» بارگیری شود، نه در هر بازشدن صفحه
@@ -15867,6 +16510,43 @@ class Handler(BaseHTTPRequestHandler):
                         "cfg_ifaces": list(CONFIG.get("speedtest_ifaces")
                                            or []),
                         "rows": META.speedtest_recent(1200)})
+        elif path in ("/api/viz/egress", "/api/viz/trace", "/api/viz/timeline"):
+            if self._perm_denied(path):
+                return
+            from urllib.parse import parse_qs
+            p = parse_qs(urlparse(self.path).query)
+            lang = self._lang()
+            perms = user_perms(find_user(self._session()["u"]))
+            if path == "/api/viz/egress":
+                X = viz_model("egress", lang)
+            elif path == "/api/viz/trace":
+                iface = (p.get("iface") or [""])[0]
+                name = (p.get("name") or [""])[0]
+                X = viz_model("trace", lang, iface=iface, name=name, can_tun="tun.view" in perms)
+                if X is None:
+                    self._json({"ok": False, "error": aerr("api.err.peer.notfound", v=name)}, 404)
+                    return
+            elif path == "/api/viz/timeline":
+                h = (p.get("hours") or ["24"])[0]
+                hours = max(1, min(168, int(h))) if h.isdigit() else 24
+                X = viz_model("timeline", lang, hours=hours, perms=perms)
+            self._json(X)
+        elif path == "/api/report.xlsx":
+            if self._perm_denied(path):
+                return
+            from urllib.parse import parse_qs
+            p = parse_qs(urlparse(self.path).query)
+            d = (p.get("days") or ["30"])[0]
+            days = max(REPORT_DAYS[0], min(REPORT_DAYS[1], int(d))) if d.isdigit() else 30
+            # پوشاندنِ endpoint پیش‌فرض است؛ فقط mask=0 ِ صریح بازش می‌کند
+            mask = (p.get("mask") or ["1"])[0] != "0"
+            perms = user_perms(find_user(self._session()["u"]))
+            data, fn = report_xlsx(perms, days, mask, self._lang())
+            self._send(200, data,
+                       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                       extra_headers={"Content-Disposition": 'attachment; filename="%s"' % fn})
+            self._audit("settings", "report.xlsx", "*",
+                        adet("ui.audit.det.report.mask" if mask else "ui.audit.det.report", d=days))
         elif path == "/api/backup":
             if self._perm_denied(path):
                 return
@@ -15899,6 +16579,8 @@ class Handler(BaseHTTPRequestHandler):
         "/api/warp/presets": "warp.manage",
         "/api/warp/preset/toggle": "warp.manage",
         "/api/warp/events": "tun.view",
+        "/api/viz/egress": "tun.view", "/api/viz/timeline": "tun.view",
+        "/api/viz/trace": "wg.view", "/api/report.xlsx": "wg.view",
         "/api/warp/latency": "tun.view",
         "/api/warp/endpoints/rank": "warp.manage",
         "/api/warp/target/add": "warp.manage",

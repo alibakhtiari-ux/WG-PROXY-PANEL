@@ -26,6 +26,10 @@
   --chart-grid:rgba(139,148,158,.16); --chart-cross:rgba(230,237,243,.4);
   --rx-fill:rgba(88,166,255,.28); --tx-fill:rgba(63,185,80,.25);
   --rx-bar:rgba(88,166,255,.85); --tx-bar:rgba(63,185,80,.85);
+  /* لایه‌ی تجربه‌ی کاربری: ته‌رنگِ انتخاب، پرده‌ی پشتِ دیالوگ، سایه و متنِ روی دکمه‌ی پُر */
+  --blue-tint:rgba(88,166,255,.12); --blue-tint2:rgba(88,166,255,.28);
+  --red-tint:rgba(248,81,73,.18); --scrim:rgba(0,0,0,.72);
+  --shadow:rgba(0,0,0,.45); --on-solid:#fff;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 /* اسکرول‌بارِ تیره‌ی سراسری — اسکرول‌بارِ پیش‌فرضِ سیستم روی تمِ تیره سفید
@@ -187,9 +191,7 @@ pre.conf{background:var(--bg);border:1px solid var(--border);border-radius:8px;
 .cselwrap:has(>.langsel) .csel,
 .cselwrap:has(>.langsel) .csel-lbl{unicode-bidi:plaintext}
 .cselwrap:has(>.langsel) .csel{min-width:86px;font-size:12px;padding:5px 10px}
-#toast{position:fixed;bottom:18px;inset-inline-start:18px;background:var(--btn);border:1px solid
-  var(--border);border-radius:8px;padding:10px 16px;font-size:13px;z-index:99;
-  transition:opacity .4s;opacity:0;pointer-events:none;max-width:70vw;white-space:pre-wrap}
+/* #toast دیگر یک جعبه‌ی تکی نیست، ظرفِ صفِ اعلان‌هاست — قاعده‌اش در «لایه‌ی تجربه‌ی کاربری» پایین‌تر */
 tr.sect td{background:var(--panel2);color:var(--blue);font-size:13px;padding:9px}
 tr.sect b{direction:ltr;display:inline-block}
 .badge2{font-size:10px;border-radius:8px;padding:1px 7px;margin-inline-start:6px;
@@ -617,6 +619,9 @@ pre.logbox{background:var(--bg);border:1px solid var(--border);border-radius:8px
   --chart-grid:rgba(87,96,106,.18); --chart-cross:rgba(31,35,40,.45);
   --rx-fill:rgba(9,105,218,.20); --tx-fill:rgba(26,127,55,.18);
   --rx-bar:rgba(9,105,218,.75); --tx-bar:rgba(26,127,55,.75);
+  --blue-tint:rgba(9,105,218,.10); --blue-tint2:rgba(9,105,218,.22);
+  --red-tint:rgba(207,34,46,.12); --scrim:rgba(31,35,40,.45);
+  --shadow:rgba(31,35,40,.18); --on-solid:#fff;
 }
 /* پالتِ کوررنگی (Okabe–Ito): آبی/نارنجی به‌جای آبی/سبز + مجموعِ صورتی */
 :root[data-pal="cb"]{
@@ -746,11 +751,250 @@ pre.logbox{background:var(--bg);border:1px solid var(--border);border-radius:8px
   background:rgba(212,130,13,.10);cursor:help}
 .perm-chip.risky{border-color:var(--warn,#d4820d);color:var(--warn,#d4820d);
   background:rgba(212,130,13,.10)}
+
+/* ===================== لایه‌ی تجربه‌ی کاربری (۷ نوامبر ۲۰۲۶) =====================
+   ناوبریِ بخش‌ها، منوهای نوارِ بالا، اعلانِ صف‌دار، پنجره‌ی تأییدِ یکدست، حالت‌های
+   بارگذاری/خالی/خطا، چیپ‌های فیلترِ کاربران، کارتِ موبایل، کشوی رویدادها و
+   جست‌وجوی سراسری. همه‌ی رنگ‌ها از توکن‌های :root می‌آیند و جهت‌ها منطقی‌اند. */
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+  clip:rect(0 0 0 0);white-space:nowrap;border:0}
+/* حلقه‌ی فوکوسِ یکدست، فقط برای صفحه‌کلید (focus-visible) و نه کلیکِ موش */
+:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+/* select ِ بومیِ منوی سفارشی نامرئی است ولی فوکوس را او می‌گیرد؛ حلقه روی ظاهرِ آن */
+.cselwrap:has(select:focus-visible) .csel{outline:2px solid var(--blue);outline-offset:2px}
+input.filter:focus,#addrow input:focus{border-color:var(--blue);outline:none}
+th.sortable:focus-visible{outline-offset:-2px}
+th.sortable.s-asc,th.sortable.s-desc{color:var(--blue)}
+th.sortable.s-asc::after{content:' ▲';font-size:9px}
+th.sortable.s-desc::after{content:' ▼';font-size:9px}
+
+/* ---- نوارِ بالا: آمار، ابزارهای آیکونی، منوی مدیریت و منوی حساب ---- */
+.tb-title{min-width:0}
+.tb-stats{display:flex;gap:8px;flex-wrap:wrap}
+.tb-tools{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.menu{position:relative;display:inline-block}
+.menu>button{display:inline-flex;align-items:center;gap:6px;height:36px}
+.menu>button .cav{font-size:9px;color:var(--muted)}
+.menu-pop{position:absolute;z-index:72;top:calc(100% + 4px);inset-inline-end:0;
+  min-width:220px;background:var(--panel);border:1px solid var(--border);
+  border-radius:10px;box-shadow:0 10px 30px var(--shadow);padding:5px;
+  display:flex;flex-direction:column;gap:2px}
+.menu-pop>button{display:block;width:100%;text-align:start;border:0;
+  background:transparent;padding:8px 12px;font-size:13px;border-radius:6px;white-space:nowrap}
+.menu-pop>button:hover,.menu-pop>button:focus-visible{background:var(--btn);outline:none}
+.menu-pop>button.danger{color:var(--red)}
+.menu-sep{height:1px;background:var(--border);margin:4px 2px}
+#whoami{unicode-bidi:plaintext}
+#bell-btn{position:relative}
+.bell-n{position:absolute;top:-4px;inset-inline-end:-4px;min-width:17px;height:17px;
+  padding:0 4px;border-radius:9px;background:var(--blue);color:var(--on-solid);font-size:10px;
+  font-weight:700;line-height:17px;text-align:center}
+.bell-n.bad{background:var(--red)}
+
+/* ---- ناوبریِ چسبانِ بخش‌ها ---- */
+#secnav{position:sticky;top:0;z-index:40;display:flex;align-items:center;gap:6px;
+  margin:4px -16px 6px;padding:8px 16px;background:var(--bg);
+  border-bottom:1px solid var(--border);overflow-x:auto;scrollbar-width:none}
+#secnav::-webkit-scrollbar{display:none}
+#secnav button{flex:0 0 auto}
+.snav{display:inline-flex;align-items:center;gap:6px;border-radius:999px;
+  padding:4px 12px;font-size:12px;color:var(--muted);background:transparent}
+.snav:hover{color:var(--fg)}
+.snav.on{color:var(--blue);border-color:var(--blue);background:var(--blue-tint)}
+.snav.folded{opacity:.6}
+.snb{font-size:10px;border-radius:8px;padding:0 6px;background:var(--btn);color:var(--fg)}
+.snb.bad{background:var(--red-tint);color:var(--red)}
+.snav-sp{flex:1 0 8px}
+h2[data-sec]{scroll-margin-top:60px;display:flex;align-items:center;gap:8px;
+  cursor:pointer;user-select:none}
+.sec-fold{width:24px;height:24px;padding:0;border-radius:6px;font-size:11px;
+  line-height:1;color:var(--muted);background:transparent;flex:0 0 auto;transition:transform .15s}
+[dir=rtl] h2.is-folded .sec-fold{transform:rotate(90deg)}
+[dir=ltr] h2.is-folded .sec-fold{transform:rotate(-90deg)}
+h2.is-folded{opacity:.8}
+.sec-folded{display:none !important}
+
+/* ---- اعلان‌های صف‌دار ---- */
+#toast{position:fixed;bottom:18px;inset-inline-start:18px;z-index:99;display:flex;
+  flex-direction:column;gap:8px;max-width:min(440px,calc(100vw - 36px));pointer-events:none}
+.tst{pointer-events:auto;display:flex;align-items:flex-start;gap:10px;
+  background:var(--panel);border:1px solid var(--border);
+  border-inline-start:4px solid var(--muted);border-radius:8px;padding:10px 12px;
+  font-size:13px;box-shadow:0 8px 24px var(--shadow);white-space:pre-wrap;
+  animation:tst-in .18s ease-out}
+.tst-ok{border-inline-start-color:var(--green)}
+.tst-err{border-inline-start-color:var(--red)}
+.tst-info{border-inline-start-color:var(--blue)}
+.tst .ti{flex:0 0 auto;font-weight:700}
+.tst-ok .ti{color:var(--green)} .tst-err .ti{color:var(--red)} .tst-info .ti{color:var(--blue)}
+.tst .tm{flex:1;min-width:0;unicode-bidi:plaintext;overflow-wrap:anywhere}
+.tst .ta{flex:0 0 auto;font-weight:700;color:var(--blue);border-color:var(--blue);padding:3px 10px}
+.tst .tc{flex:0 0 auto;border:0;background:transparent;color:var(--muted);
+  padding:0 4px;font-size:14px;line-height:1.4}
+.tst.out{opacity:0;transform:translateY(6px);transition:opacity .25s,transform .25s}
+@keyframes tst-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+/* ---- پنجره‌ی تأیید/ورودی (جای confirm/prompt ِ بومی) و جست‌وجوی سراسری ---- */
+#ask-bg,#cmdk-bg{position:fixed;inset:0;background:var(--scrim);display:flex;
+  align-items:center;justify-content:center;z-index:60}
+#cmdk-bg{z-index:65;align-items:flex-start;padding-top:12vh}
+.ask-box{max-width:480px}
+.ask-box.danger{border-color:var(--red)}
+.ask-box.danger h3{color:var(--red)}
+#ask-body{white-space:pre-line;line-height:1.9;font-size:13px;unicode-bidi:plaintext;
+  overflow-wrap:anywhere}
+.ask-type{margin-top:12px;font-size:12px;color:var(--muted)}
+.ask-type code{display:inline-block;margin:4px 0;padding:2px 8px;border-radius:6px;
+  background:var(--bg);border:1px solid var(--border);color:var(--fg);direction:ltr;
+  user-select:all;font-family:ui-monospace,monospace;overflow-wrap:anywhere}
+#ask-fields label{display:block;color:var(--muted);font-size:12px;margin:10px 0 4px}
+#ask-fields input[type=text],#ask-fields input[type=number],
+#ask-fields input[type=password]{width:100%;background:var(--bg);border:1px solid var(--border);
+  color:var(--fg);border-radius:6px;padding:8px;font-family:inherit;margin:0;
+  unicode-bidi:plaintext;text-align:start}
+#ask-fields input:focus{border-color:var(--blue);outline:none}
+#ask-fields input[readonly]{direction:ltr;text-align:left}
+#ask-fields label.chk{display:flex;gap:8px;align-items:center;color:var(--fg);cursor:pointer}
+#ask-fields label.chk input{width:auto}
+.ask-box .mrow button{min-width:96px}
+.ask-box button:disabled{cursor:not-allowed}
+button.danger.solid{background:var(--red);border-color:var(--red);color:var(--on-solid)}
+.cmdk-box{background:var(--panel);border:1px solid var(--border);border-radius:12px;
+  width:min(620px,94vw);max-height:70vh;display:flex;flex-direction:column;
+  overflow:hidden;box-shadow:0 20px 60px var(--shadow)}
+#cmdk-in{width:100%;background:transparent;border:0;border-bottom:1px solid var(--border);
+  color:var(--fg);font-family:inherit;font-size:15px;padding:14px 16px;
+  unicode-bidi:plaintext;text-align:start}
+#cmdk-in:focus{outline:none}
+#cmdk-list{overflow:auto;padding:6px}
+.cmdk-g{font-size:11px;color:var(--muted);padding:8px 10px 4px}
+.cmdk-it{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;
+  cursor:pointer;font-size:13px}
+.cmdk-it.sel{background:var(--blue-tint);color:var(--blue)}
+.cmdk-it .ck-ic{flex:0 0 22px;text-align:center}
+.cmdk-it .ck-l{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap;unicode-bidi:plaintext}
+.cmdk-it .ck-s{color:var(--muted);font-size:11px;direction:ltr;unicode-bidi:isolate}
+.cmdk-foot{padding:8px 14px;border-top:1px solid var(--border);font-size:11px}
+.cmdk-none{padding:18px;text-align:center;color:var(--muted)}
+kbd{font-family:ui-monospace,monospace;font-size:11px;border:1px solid var(--border);
+  border-bottom-width:2px;border-radius:5px;padding:1px 6px;background:var(--bg);
+  direction:ltr;display:inline-block}
+.keys-t{min-width:0} .keys-t td{white-space:normal}
+
+/* ---- حالت‌های یکدستِ بارگذاری/خالی/خطا ---- */
+.st-box{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;
+  padding:18px 10px;color:var(--muted);font-size:12.5px;text-align:center;white-space:normal}
+.st-error{color:var(--red)}
+.st-box button{font-size:12px;padding:3px 12px}
+.st-spin{width:14px;height:14px;border-radius:50%;border:2px solid var(--border2);
+  border-top-color:var(--blue);animation:st-spin .8s linear infinite}
+@keyframes st-spin{to{transform:rotate(360deg)}}
+tr.st-row td{padding:0 !important}
+
+/* ---- چیپ‌های فیلتر، نوارِ سهمیه و نشانِ انقضای کاربران ---- */
+.uchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.uchip{border-radius:999px;padding:4px 11px;font-size:12px;color:var(--muted)}
+.uchip b{font-weight:600;color:var(--fg);margin-inline-start:4px}
+.uchip.on{color:var(--blue);border-color:var(--blue);background:var(--blue-tint)}
+.uchip.on b{color:var(--blue)}
+.uchip.warn b{color:var(--amber)}
+.uchip:disabled{opacity:.45;cursor:default}
+.qbar{display:block;height:4px;border-radius:3px;background:var(--border);
+  margin-top:4px;overflow:hidden}
+.qbar>span{display:block;height:100%;border-radius:3px;background:var(--green)}
+.qbar.qb-warn>span{background:var(--amber)}
+.qbar.qb-over>span{background:var(--red)}
+.exp-chip{font-size:10px;border-radius:8px;padding:1px 7px;margin-inline-start:6px;
+  white-space:nowrap;border:1px solid var(--border);color:var(--muted)}
+.exp-chip.exp-warn{color:var(--amber);border-color:var(--amber)}
+.exp-chip.exp-bad{color:var(--red);border-color:var(--red)}
+@keyframes row-flash{from{background:var(--blue-tint2)}to{background:transparent}}
+tr.row-flash td{animation:row-flash 1.8s ease-out}
+
+/* ---- کشوی رویدادهای اخیر ---- */
+#evpanel{position:fixed;top:0;bottom:0;inset-inline-end:0;width:min(420px,100vw);
+  z-index:55;background:var(--panel);border-inline-start:1px solid var(--border);
+  box-shadow:0 0 30px var(--shadow);display:flex;flex-direction:column}
+.ev-head{display:flex;align-items:center;gap:8px;padding:12px 14px;
+  border-bottom:1px solid var(--border)}
+.ev-head b{flex:1;font-size:14px}
+.ev-x{width:30px;height:30px;padding:0}
+.ev-tabs{display:flex;gap:6px;padding:8px 14px;border-bottom:1px solid var(--border)}
+#ev-list{flex:1;overflow:auto;padding:6px 8px}
+.ev-it{display:flex;gap:10px;width:100%;text-align:start;background:transparent;border:0;
+  border-radius:8px;padding:9px 8px;cursor:pointer;color:var(--fg);font-size:12.5px;
+  align-items:flex-start}
+.ev-it:hover{background:var(--btn)}
+.ev-it .evd{flex:0 0 8px;height:8px;border-radius:50%;margin-top:6px;background:var(--muted)}
+.ev-it.bad .evd{background:var(--red)}
+.ev-it.ok .evd{background:var(--green)}
+.ev-it.info .evd{background:var(--blue)}
+.ev-it .evb{flex:1;min-width:0}
+.ev-it .evt{display:block;font-weight:600;unicode-bidi:plaintext;overflow-wrap:anywhere;
+  white-space:normal}
+.ev-it .evm{display:block;color:var(--muted);font-size:11px;margin-top:2px;
+  white-space:normal;overflow-wrap:anywhere}
+.ev-it.unread .evt::after{content:'';display:inline-block;width:6px;height:6px;
+  border-radius:50%;background:var(--blue);margin-inline-start:6px;vertical-align:middle}
+.evn{display:inline-block;margin-inline-start:6px;padding:0 6px;border-radius:9px;background:var(--panel2);color:var(--muted);font-size:11px;font-weight:400}
+.ev-foot{padding:10px 14px;border-top:1px solid var(--border);font-size:11px;line-height:1.8}
+
+@media (prefers-reduced-motion:reduce){
+  .tst{animation:none} .tst.out{transition:none}
+  .st-spin{animation:none} tr.row-flash td{animation:none} .sec-fold{transition:none}
+}
+
+/* ---- موبایل: نوارِ بالای جمع‌وجور و کارتِ کاربر به‌جای جدولِ یازده‌ستونه ---- */
+@media (max-width:640px){
+  #secnav{margin:4px -10px 6px;padding:8px 10px}
+  .tb-title{width:100%}
+  .tb-stats{display:grid;grid-template-columns:1fr 1fr;width:100%}
+  .tb-tools{width:100%}
+  .uchips{width:100%}
+  input.filter{min-width:0;flex:1 1 140px}
+  #users{min-width:0}
+  #users thead{display:none}
+  #users,#users tbody,#users tbody tr{display:block}
+  #users tbody tr.urow{display:grid;grid-template-columns:auto minmax(0,1fr) auto;
+    grid-template-areas:"st name en" "st ip ip" "st rate rate" "st month month" "act act act";
+    gap:3px 10px;padding:10px 2px;border-bottom:1px solid var(--border);align-items:center}
+  #users tbody tr.urow td{display:block;border:0;padding:0;white-space:normal}
+  #users tbody tr.urow td.c-st{grid-area:st;align-self:start;padding-top:5px}
+  #users tbody tr.urow td.c-name{grid-area:name;min-width:0}
+  #users tbody tr.urow td.c-en{grid-area:en}
+  #users tbody tr.urow td.c-ip{grid-area:ip;font-size:11px}
+  #users tbody tr.urow td.c-rate{grid-area:rate}
+  #users tbody tr.urow td.c-month{grid-area:month}
+  #users tbody tr.urow td.c-chart,#users tbody tr.urow td.c-total,
+  #users tbody tr.urow td.c-hs,#users tbody tr.urow td.c-ep{display:none}
+  #users tbody tr.urow td.c-act{grid-area:act;display:flex;gap:6px;flex-wrap:wrap;
+    padding-top:6px;position:static !important;box-shadow:none !important;background:transparent !important}
+  #users tbody tr.urow td.c-act button{flex:1 1 auto;min-height:36px}
+  #users .rate,#users .total{min-width:0}
+  #users .rate .rx,#users .rate .tx{display:inline}
+  #users .rate .rate-sep{display:inline}
+  #users .notetxt{max-width:none;white-space:normal}
+  #users tr.sect td,#users tr.graphrow td,#users tr.st-row td{display:block}
+  #users tr.sect td{white-space:normal;line-height:1.9}
+}
+/* نقشه و گزارش (studio.js) — موتورِ نمودار سبکِ خودش را در /svgstudio.css دارد */
+.viz-card{padding:12px}
+.viz-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.viz-head>b{font-size:14px}
+.viz-tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-inline-start:auto}
+.viz-tools .filter{min-width:180px}
+.viz-chk{display:inline-flex;align-items:center;gap:4px;font-size:12px}
+.viz-note{font-size:12px}
+.viz-body{min-height:120px}
+#tvmode .viz-tv{flex:1;min-height:0;display:flex;flex-direction:column}
+.viz-tv-msg{font-size:20px;text-align:center;padding:40px}
 </style>
+<link rel="stylesheet" href="/svgstudio.css">
 </head>
 <body>
 <div class="topbar">
-  <div>
+  <div class="tb-title">
     <h1>⟦ui.app.title⟧</h1>
     <div class="sub">⟦ui.top.subtitle⟧ <span id="clock"></span></div>
   </div>
@@ -760,64 +1004,96 @@ pre.logbox{background:var(--bg);border:1px solid var(--border);border-radius:8px
   <div id="stale-banner" class="hidden" style="direction:rtl;text-align:right;
        background:var(--red);color:#fff;padding:4px 10px;border-radius:6px;
        font-size:12px;font-weight:700"></div>
-  <div class="stat">⟦ui.top.wanrx⟧<b id="sum-wanrx">—</b></div>
-  <div class="stat">⟦ui.top.wantx⟧<b id="sum-wantx">—</b></div>
-  <div class="stat">⟦ui.top.online⟧<b id="sum-online">—</b></div>
-  <div class="stat">⟦ui.top.tunnels⟧<b id="sum-tun">—</b></div>
+  <div class="tb-stats">
+    <div class="stat">⟦ui.top.wanrx⟧<b id="sum-wanrx">—</b></div>
+    <div class="stat">⟦ui.top.wantx⟧<b id="sum-wantx">—</b></div>
+    <div class="stat">⟦ui.top.online⟧<b id="sum-online">—</b></div>
+    <div class="stat">⟦ui.top.tunnels⟧<b id="sum-tun">—</b></div>
+  </div>
   <div style="flex:1"></div>
-  <span id="whoami" class="badge" data-ltr></span>
-  <button id="btn-users" class="hidden" onclick="el('pu-sec').scrollIntoView({behavior:'smooth'})">⟦ui.au.cat.panel⟧</button>
-  <button id="btn-allow" class="hidden" onclick="showAllowModal()">⟦ui.top.iplimit⟧</button>
-  <button id="btn-alerts" class="hidden" onclick="showAlertsModal()">⟦ui.top.alerts⟧</button>
-  <button id="btn-bot" class="hidden" onclick="showBotModal()">⟦ui.top.bot⟧</button>
-  <button id="btn-ecmp" class="hidden" onclick="showEcmpModal()">⟦ui.top.ecmp⟧</button>
-  <button id="btn-backup" class="hidden" onclick="showBackupModal()">⟦ui.top.backup⟧</button>
-  <button id="btn-log" class="hidden" onclick="showLogModal()">⟦ui.top.actionlog⟧</button>
-  <button onclick="showTotpModal()">⟦ui.th.totp⟧</button>
-  <button onclick="showPwModal()">⟦ui.top.chpw⟧</button>
-  <select id="langsel" class="rtlsel langsel" onchange="setLang(this.value)"
-    title="⟦ui.lang.aria⟧" aria-label="⟦ui.lang.aria⟧">
-    <option value="fa">فارسی</option>
-    <option value="en">English</option>
-    <option value="ru">Русский</option>
-    <option value="zh">中文</option>
-  </select>
-  <button id="theme-toggle" class="theme-toggle" onclick="toggleTheme()"
-    title="⟦ui.top.theme⟧" aria-label="⟦ui.top.theme.aria⟧"><span id="theme-ic">🌙</span></button>
-  <button class="theme-toggle" onclick="togglePal()"
-    title="⟦ui.top.pal⟧" aria-label="⟦ui.top.pal.aria⟧">🎨</button>
-  <button class="theme-toggle" onclick="tvOpen()"
-    title="⟦ui.top.tv⟧" aria-label="⟦ui.top.tv.aria⟧">📺</button>
-  <button onclick="logout()">⟦ui.top.logout⟧</button>
+  <!-- ابزارهای آیکونی کنارِ هم، و دکمه‌های مدیریتی در دو منو. شناسه‌ی دکمه‌ها
+       (btn-allow، btn-log، …) عمداً همان قبلی است: applyRole با همین‌ها
+       نمایش/پنهانشان می‌کند و منو فقط ظرفِ تازه‌ی آن‌هاست. -->
+  <div class="tb-tools">
+    <button id="cmdk-btn" class="theme-toggle" onclick="cmdkOpen()"
+      title="⟦ui.ux.search⟧" aria-label="⟦ui.ux.search.aria⟧" aria-keyshortcuts="Control+K Meta+K">🔍</button>
+    <button id="bell-btn" class="theme-toggle hidden" onclick="evToggle()"
+      title="⟦ui.ux.ev.btn⟧" aria-label="⟦ui.ux.ev.btn⟧" aria-expanded="false"
+      aria-controls="evpanel">🔔<span id="bell-n" class="bell-n hidden"></span></button>
+    <select id="langsel" class="rtlsel langsel" onchange="setLang(this.value)"
+      title="⟦ui.lang.aria⟧" aria-label="⟦ui.lang.aria⟧">
+      <option value="fa">فارسی</option>
+      <option value="en">English</option>
+      <option value="ru">Русский</option>
+      <option value="zh">中文</option>
+    </select>
+    <button id="theme-toggle" class="theme-toggle" onclick="toggleTheme()"
+      title="⟦ui.top.theme⟧" aria-label="⟦ui.top.theme.aria⟧"><span id="theme-ic">🌙</span></button>
+    <button class="theme-toggle" onclick="togglePal()"
+      title="⟦ui.top.pal⟧" aria-label="⟦ui.top.pal.aria⟧">🎨</button>
+    <button class="theme-toggle" onclick="tvOpen()"
+      title="⟦ui.top.tv⟧" aria-label="⟦ui.top.tv.aria⟧">📺</button>
+    <div class="menu hidden" id="adm-menu">
+      <button id="adm-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="adm-pop"
+        aria-label="⟦ui.ux.menu.admin.aria⟧" onclick="menuToggle('adm')">⚙ ⟦ui.ux.menu.admin⟧ <span class="cav" aria-hidden="true">▼</span></button>
+      <div class="menu-pop hidden" id="adm-pop" role="menu" aria-labelledby="adm-btn">
+        <button role="menuitem" id="btn-users" class="hidden" onclick="menuClose();secGo('pu')">⟦ui.au.cat.panel⟧</button>
+        <button role="menuitem" id="btn-allow" class="hidden" onclick="menuClose();showAllowModal()">⟦ui.top.iplimit⟧</button>
+        <button role="menuitem" id="btn-alerts" class="hidden" onclick="menuClose();showAlertsModal()">⟦ui.top.alerts⟧</button>
+        <button role="menuitem" id="btn-bot" class="hidden" onclick="menuClose();showBotModal()">⟦ui.top.bot⟧</button>
+        <button role="menuitem" id="btn-ecmp" class="hidden" onclick="menuClose();showEcmpModal()">⟦ui.top.ecmp⟧</button>
+        <button role="menuitem" id="btn-backup" class="hidden" onclick="menuClose();showBackupModal()">⟦ui.top.backup⟧</button>
+        <button role="menuitem" id="btn-log" class="hidden" onclick="menuClose();showLogModal()">⟦ui.top.actionlog⟧</button>
+      </div>
+    </div>
+    <div class="menu" id="me-menu">
+      <button id="me-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="me-pop"
+        aria-label="⟦ui.ux.menu.me.aria⟧" onclick="menuToggle('me')">👤 <span id="whoami" data-ltr></span> <span class="cav" aria-hidden="true">▼</span></button>
+      <div class="menu-pop hidden" id="me-pop" role="menu" aria-labelledby="me-btn">
+        <button role="menuitem" onclick="menuClose();showTotpModal()">⟦ui.th.totp⟧</button>
+        <button role="menuitem" onclick="menuClose();showPwModal()">⟦ui.top.chpw⟧</button>
+        <button role="menuitem" onclick="menuClose();showKeysHelp()">⟦ui.ux.keys.title⟧</button>
+        <div class="menu-sep" role="separator"></div>
+        <button role="menuitem" class="danger" onclick="menuClose();logout()">⟦ui.top.logout⟧</button>
+      </div>
+    </div>
+  </div>
 </div>
+<!-- ناوبریِ بخش‌ها: چیپ‌ها را JS از روی h2[data-sec] می‌سازد (navBuild) تا
+     فهرست هرگز از خودِ صفحه عقب نماند؛ نمایشِ هر چیپ تابعِ مجوزِ همان بخش است. -->
+<nav id="secnav" aria-label="⟦ui.ux.nav.aria⟧"></nav>
 
-<h2 class="sec-sys">⟦ui.sys.title⟧ <span class="badge">⟦ui.sys.badge⟧</span></h2>
+<h2 class="sec-sys" data-sec="sys">⟦ui.sys.title⟧ <span class="badge">⟦ui.sys.badge⟧</span></h2>
 <div class="card gauges-card sec-sys"><div id="gauges" class="gauges"></div></div>
 
-<h2 class="sec-wg">⟦ui.wg.title⟧</h2>
+<h2 class="sec-wg" data-sec="wg">⟦ui.wg.title⟧</h2>
 <div id="addrow" class="sec-wg">
   <span id="addrow-admin" style="display:flex;gap:8px;flex-wrap:wrap">
     <button class="primary" id="addbtn" onclick="showAddModal()">⟦ui.wg.add⟧</button>
     <button id="overviewbtn" onclick="showOverview()">⟦ui.wg.overview⟧</button>
   </span>
+  <!-- چیپ‌های وضعیت را renderUsers با شمارشِ زنده می‌سازد (ufChipsHtml) -->
+  <div id="uchips" class="uchips" role="group" aria-label="⟦ui.ux.uf.aria⟧"></div>
   <div style="flex:1"></div>
   <input class="filter" id="ufilter" placeholder="⟦ui.wg.filter⟧"
-         oninput="rerender()">
+         aria-label="⟦ui.wg.filter⟧" oninput="rerender()">
 </div>
 <div class="card sec-wg"><table id="users">
   <thead><tr>
     <th>⟦ui.th.status⟧</th>
-    <th class="sortable" onclick="setUSort('name')">⟦ui.th.name⟧</th>
+    <th class="sortable" data-sk="name" onclick="setUSort('name')">⟦ui.th.name⟧</th>
     <th>IP</th><th>⟦ui.th.chart⟧</th>
-    <th class="sortable" onclick="setUSort('rate')">⟦ui.th.rate⟧</th>
+    <th class="sortable" data-sk="rate" onclick="setUSort('rate')">⟦ui.th.rate⟧</th>
     <th>⟦ui.th.total⟧</th>
-    <th class="sortable" onclick="setUSort('month')">⟦ui.th.month⟧</th>
+    <th class="sortable" data-sk="month" onclick="setUSort('month')">⟦ui.th.month⟧</th>
     <th>⟦ui.th.handshake⟧</th>
-    <th>Endpoint</th><th>⟦ui.th.enabled⟧</th><th></th>
-  </tr></thead><tbody></tbody>
+    <th>Endpoint</th><th>⟦ui.th.enabled⟧</th><th><span class="sr-only">⟦ui.ux.actions⟧</span></th>
+  </tr></thead><tbody>
+    <tr class="st-row"><td colspan="11"><div class="st-box" role="status"><span class="st-spin" aria-hidden="true"></span><span>⟦ui.common.loadingstate⟧</span></div></td></tr>
+  </tbody>
 </table></div>
 
-<h2 id="proxy-admin" class="hidden">⟦ui.px.title⟧
+<h2 id="proxy-admin" class="hidden" data-sec="proxy">⟦ui.px.title⟧
   <span class="badge">HTTP / HTTPS</span></h2>
 <div id="proxy-admin2" class="hidden">
   <div class="px-bar">
@@ -839,45 +1115,54 @@ pre.logbox{background:var(--bg);border:1px solid var(--border);border-radius:8px
   </table></div>
 </div>
 
-<h2 class="sec-tun">⟦ui.tun.title⟧</h2>
+<h2 class="sec-tun" data-sec="tun">⟦ui.tun.title⟧</h2>
 <div id="addrow" class="sec-tun">
   <div style="flex:1"></div>
   <input class="filter" id="tfilter" placeholder="⟦ui.tun.filter⟧"
-         oninput="rerender()">
+         aria-label="⟦ui.tun.filter⟧" oninput="rerender()">
 </div>
 <div class="card sec-tun"><table id="tunnels">
   <thead><tr>
-    <th class="sortable" onclick="setTSort('health')">⟦ui.th.health⟧</th>
-    <th class="sortable" onclick="setTSort('iface')">⟦ui.th.iface⟧</th>
+    <th class="sortable" data-sk="health" onclick="setTSort('health')">⟦ui.th.health⟧</th>
+    <th class="sortable" data-sk="iface" onclick="setTSort('iface')">⟦ui.th.iface⟧</th>
     <th>Endpoint</th><th>⟦ui.th.chart⟧</th>
-    <th class="sortable" onclick="setTSort('rate')">⟦ui.th.rate⟧</th>
+    <th class="sortable" data-sk="rate" onclick="setTSort('rate')">⟦ui.th.rate⟧</th>
     <th>⟦ui.th.total⟧</th><th>⟦ui.th.handshake⟧</th>
-    <th class="sortable" onclick="setTSort('boot')">⟦ui.th.boot⟧</th>
-    <th>systemd</th><th></th>
-  </tr></thead><tbody></tbody>
+    <th class="sortable" data-sk="boot" onclick="setTSort('boot')">⟦ui.th.boot⟧</th>
+    <th>systemd</th><th><span class="sr-only">⟦ui.ux.actions⟧</span></th>
+  </tr></thead><tbody>
+    <tr class="st-row"><td colspan="10"><div class="st-box" role="status"><span class="st-spin" aria-hidden="true"></span><span>⟦ui.common.loadingstate⟧</span></div></td></tr>
+  </tbody>
 </table></div>
 
-<h2 class="sec-net">⟦ui.if.title⟧</h2>
+<!-- نقشه و گزارش: سه نمای SvgStudio (مسیرِ خروج، ردیابیِ کاربر، خط‌زمان) و خروجیِ Excel.
+     محتوا را studio.js از کاتالوگ می‌سازد و مدل‌ها همه از /api/viz/* می‌آیند. -->
+<h2 id="viz-admin" class="hidden" data-sec="viz">⟦ui.viz.title⟧ <span class="badge">⟦ui.viz.badge⟧</span></h2>
+<div id="viz-admin2" class="hidden"></div>
+
+<h2 class="sec-net" data-sec="net">⟦ui.if.title⟧</h2>
 <div id="addrow" class="sec-net">
   <div class="mut" style="font-size:12px">⟦ui.if.desc⟧</div>
   <div style="flex:1"></div>
   <input class="filter" id="ifilter" placeholder="⟦ui.if.filter⟧"
-         oninput="rerender()">
+         aria-label="⟦ui.if.filter⟧" oninput="rerender()">
 </div>
 <div class="card sec-net"><table id="ifaces">
   <thead><tr>
     <th>⟦ui.th.status⟧</th>
-    <th class="sortable" onclick="setISort('iface')">⟦ui.th.iface⟧</th>
+    <th class="sortable" data-sk="iface" onclick="setISort('iface')">⟦ui.th.iface⟧</th>
     <th>⟦ui.th.role⟧</th><th>⟦ui.th.addrmtu⟧</th><th>⟦ui.th.chart⟧</th>
-    <th class="sortable" onclick="setISort('rate')">⟦ui.th.rate⟧</th>
-    <th class="sortable" onclick="setISort('rxtotal')">⟦ui.th.rxtotal⟧</th>
-    <th class="sortable" onclick="setISort('txtotal')">⟦ui.th.txtotal⟧</th>
-    <th class="sortable" onclick="setISort('total')">⟦ui.th.grandtotal⟧</th>
+    <th class="sortable" data-sk="rate" onclick="setISort('rate')">⟦ui.th.rate⟧</th>
+    <th class="sortable" data-sk="rxtotal" onclick="setISort('rxtotal')">⟦ui.th.rxtotal⟧</th>
+    <th class="sortable" data-sk="txtotal" onclick="setISort('txtotal')">⟦ui.th.txtotal⟧</th>
+    <th class="sortable" data-sk="total" onclick="setISort('total')">⟦ui.th.grandtotal⟧</th>
     <th>⟦ui.th.handshake⟧</th>
-  </tr></thead><tbody></tbody>
+  </tr></thead><tbody>
+    <tr class="st-row"><td colspan="10"><div class="st-box" role="status"><span class="st-spin" aria-hidden="true"></span><span>⟦ui.common.loadingstate⟧</span></div></td></tr>
+  </tbody>
 </table></div>
 
-<h2 id="svc-admin" class="hidden">⟦ui.svc.title⟧</h2>
+<h2 id="svc-admin" class="hidden" data-sec="svc">⟦ui.svc.title⟧</h2>
 <div id="svc-admin2" class="hidden">
   <div class="svc-bar">
     <div class="svc-desc">
@@ -893,7 +1178,7 @@ pre.logbox{background:var(--bg);border:1px solid var(--border);border-radius:8px
   <div id="svc-list" class="svc-list" aria-live="polite"></div>
 </div>
 
-<h2 id="pu-sec" class="hidden">⟦ui.pu.title⟧ <span class="badge">RBAC</span></h2>
+<h2 id="pu-sec" class="hidden" data-sec="pu">⟦ui.pu.title⟧ <span class="badge">RBAC</span></h2>
 <div id="pu-sec2" class="hidden">
   <div class="pu-bar">
     <div class="pu-tabs">
@@ -920,14 +1205,14 @@ pre.logbox{background:var(--bg);border:1px solid var(--border);border-radius:8px
   </table></div>
 </div>
 
-<h2 id="warp-admin" class="hidden">⟦ui.warp.title⟧ <span class="badge">⟦ui.warp.badge⟧</span></h2>
+<h2 id="warp-admin" class="hidden" data-sec="warp">⟦ui.warp.title⟧ <span class="badge">⟦ui.warp.badge⟧</span></h2>
 <div id="warp-admin2" class="hidden">
   <div class="card" style="padding:12px">
     <div id="warp-body" class="mut" style="font-size:12px">⟦ui.common.loadingstate⟧</div>
   </div>
 </div>
 
-<h2 id="leak-admin" class="hidden">⟦ui.leak.title⟧ <span class="badge">DNS / IPv6</span></h2>
+<h2 id="leak-admin" class="hidden" data-sec="leak">⟦ui.leak.title⟧ <span class="badge">DNS / IPv6</span></h2>
 <div id="leak-admin2" class="hidden">
   <div class="card" style="padding:12px">
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:2px 0">
@@ -940,28 +1225,41 @@ pre.logbox{background:var(--bg);border:1px solid var(--border);border-radius:8px
 
 <!-- کیفیتِ ارتباط (WG-NQMO، P7). همه‌چیز فقط‌خواندنی است جز سه فرمان (تأیید،
      probe، حالت) که هرکدام پشتِ مجوزِ خودش است و سرور دوباره می‌سنجد. -->
-<h2 id="nqmo-admin" class="hidden">⟦ui.nqmo.title⟧ <span class="badge">WG-NQMO</span></h2>
+<h2 id="nqmo-admin" class="hidden" data-sec="nqmo">⟦ui.nqmo.title⟧ <span class="badge">WG-NQMO</span></h2>
 <div id="nqmo-admin2" class="hidden">
   <div class="card" style="padding:12px">
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:2px 0">
       <button style="padding:2px 14px;font-size:12px" onclick="loadNqmo()">⟦ui.nqmo.refresh⟧</button>
-      <span class="mut" style="font-size:11px">⟦ui.nqmo.hint⟧</span>
+      <span class="mut" style="font-size:11px">⟦ui.nqmo.hint⟧ <span dir="ltr" class="mono">/metrics</span> ⟦ui.nqmo.metrics.hint⟧</span>
     </div>
     <div id="nqmo-body" class="mut" style="font-size:12px">⟦ui.common.loadingstate⟧</div>
   </div>
-  <div class="card hidden" id="nqmo-peers-card"><table id="nqmo-peers">
+  <!-- §29.154: فیلترِ جدول و رویدادها فقط سمتِ مرورگر است؛ سرور همان سند را می‌دهد -->
+  <div class="card hidden" id="nqmo-peers-card">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 12px 0">
+      <input class="filter" id="nqmo-pf" placeholder="⟦ui.nqmo.filter⟧" oninput="nqmoRenderPeers()">
+      <button id="nqmo-pf-only" style="padding:2px 12px;font-size:12px" onclick="nqmoToggleOnly()">⟦ui.nqmo.filter.only⟧</button>
+      <span class="mut" id="nqmo-pf-n" style="font-size:11px"></span>
+    </div>
+    <table id="nqmo-peers">
     <thead><tr>
       <th>⟦ui.nqmo.th.peer⟧</th><th>⟦ui.nqmo.th.quality⟧</th><th>⟦ui.nqmo.th.rtt⟧</th>
       <th>⟦ui.nqmo.th.loss⟧</th><th>⟦ui.nqmo.th.mtu⟧</th><th>⟦ui.nqmo.th.open⟧</th>
     </tr></thead><tbody></tbody>
   </table></div>
   <div class="card hidden" id="nqmo-events-card" style="padding:12px">
-    <div class="ed-sec" style="margin-top:0;border-top:0;padding-top:0">⟦ui.nqmo.events⟧</div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <div class="ed-sec" style="margin:0;border-top:0;padding-top:0">⟦ui.nqmo.events⟧</div>
+      <div style="flex:1"></div>
+      <input class="filter" id="nqmo-ef" placeholder="⟦ui.nqmo.evfilter⟧" oninput="nqmoRenderEvents()">
+      <span id="nqmo-ef-kinds"></span>
+      <span class="mut" id="nqmo-ef-n" style="font-size:11px"></span>
+    </div>
     <div id="nqmo-events" style="font-size:12px"></div>
   </div>
 </div>
 
-<h2 id="bk-admin" class="hidden">⟦ui.bk.title⟧ <span class="badge">⟦ui.bk.badge⟧</span></h2>
+<h2 id="bk-admin" class="hidden" data-sec="bk">⟦ui.bk.title⟧ <span class="badge">⟦ui.bk.badge⟧</span></h2>
 <div id="bk-admin2" class="hidden">
   <div class="card">
     <div id="bk-manual" class="hidden" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 10px 4px">
@@ -994,7 +1292,7 @@ pre.logbox{background:var(--bg);border:1px solid var(--border);border-radius:8px
   </div>
 </div>
 
-<h2 id="sp-admin" class="hidden">⟦ui.sp.title⟧ <span class="badge">⟦ui.sp.badge⟧</span></h2>
+<h2 id="sp-admin" class="hidden" data-sec="sp">⟦ui.sp.title⟧ <span class="badge">⟦ui.sp.badge⟧</span></h2>
 <div id="sp-admin2" class="hidden">
   <div class="card">
     <div class="mrow" style="padding:10px 10px 4px;align-items:center;gap:8px;flex-wrap:wrap">
@@ -1032,7 +1330,7 @@ pre.logbox{background:var(--bg);border:1px solid var(--border);border-radius:8px
   </div>
 </div>
 
-<h2 id="audit-admin" class="hidden">⟦ui.au.title⟧ <span class="badge">⟦ui.au.badge⟧</span></h2>
+<h2 id="audit-admin" class="hidden" data-sec="audit">⟦ui.au.title⟧ <span class="badge">⟦ui.au.badge⟧</span></h2>
 <div id="audit-admin2" class="hidden">
   <div id="addrow">
     <select id="a-cat" class="rtlsel" onchange="loadAudit()">
@@ -1052,7 +1350,7 @@ pre.logbox{background:var(--bg);border:1px solid var(--border);border-radius:8px
       <option value="90">⟦ui.au.d90⟧</option>
       <option value="183">⟦ui.au.d180⟧</option>
     </select>
-    <input class="filter" id="a-q" placeholder="⟦ui.au.filter⟧"
+    <input class="filter" id="a-q" placeholder="⟦ui.au.filter⟧" aria-label="⟦ui.au.filter⟧"
            oninput="auditDebounced()">
     <div style="flex:1"></div>
     <button onclick="exportAuditCsv()">⟦ui.common.csv⟧</button>
@@ -1067,7 +1365,7 @@ pre.logbox{background:var(--bg);border:1px solid var(--border);border-radius:8px
 </div>
 
 <div id="overlay" class="hidden">
-  <div class="box login-box">
+  <div class="box login-box" role="dialog" aria-modal="true" aria-label="⟦ui.login.btn⟧">
     <div class="login-logo">
       <svg viewBox="0 0 24 24" width="46" height="46" fill="none"
            stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
@@ -1103,7 +1401,7 @@ pre.logbox{background:var(--bg);border:1px solid var(--border);border-radius:8px
 </div>
 
 <div id="modal-bg" class="hidden">
-  <div class="box">
+  <div class="box" role="dialog" aria-modal="true" aria-labelledby="modal-title">
     <h3 id="modal-title" data-ltr></h3>
     <div id="modal-body"></div>
     <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
@@ -1118,9 +1416,55 @@ pre.logbox{background:var(--bg);border:1px solid var(--border);border-radius:8px
   <button class="cmpgo" onclick="showCompareModal()">⟦ui.cmp.btn⟧<span id="cmpn">0</span>)</button>
   <button onclick="clearCompare()">⟦ui.cmp.clear⟧</button>
 </div>
-<div id="toast"></div>
+
+<!-- پنجره‌ی تأیید/ورودی — جای confirm()/prompt() ِ بومی که روی مک چپ‌چین و
+     با دکمه‌های انگلیسی بود. لایه‌ی جدا و بالاترِ modal-bg، چون بیشترِ
+     تأییدها از داخلِ یک مودالِ باز (ویرایشِ کاربر) صدا زده می‌شوند. -->
+<div id="ask-bg" class="hidden">
+  <div class="box ask-box" id="ask-box" role="alertdialog" aria-modal="true"
+       aria-labelledby="ask-title" aria-describedby="ask-body">
+    <h3 id="ask-title"></h3>
+    <div id="ask-body"></div>
+    <div id="ask-fields"></div>
+    <div class="msg" id="ask-msg" role="alert"></div>
+    <div class="mrow">
+      <button id="ask-ok" class="primary"></button>
+      <button id="ask-cancel"></button>
+    </div>
+  </div>
+</div>
+
+<!-- جست‌وجوی سراسری و فرمان (Ctrl/⌘+K) -->
+<div id="cmdk-bg" class="hidden">
+  <div class="cmdk-box" role="dialog" aria-modal="true" aria-label="⟦ui.ux.keys.cmdk⟧">
+    <input id="cmdk-in" type="text" role="combobox" aria-expanded="true"
+      aria-controls="cmdk-list" aria-autocomplete="list" autocomplete="off"
+      spellcheck="false" placeholder="⟦ui.ux.cmdk.ph⟧" aria-label="⟦ui.ux.cmdk.ph⟧">
+    <div id="cmdk-list" role="listbox" aria-label="⟦ui.ux.keys.cmdk⟧"></div>
+    <div class="cmdk-foot mut">⟦ui.ux.cmdk.hint⟧</div>
+  </div>
+</div>
+
+<!-- کشوی رویدادهای اخیر -->
+<aside id="evpanel" class="hidden" role="dialog" aria-labelledby="ev-title">
+  <div class="ev-head">
+    <b id="ev-title">⟦ui.ux.ev.title⟧</b>
+    <button onclick="evMarkAll()">⟦ui.ux.ev.markall⟧</button>
+    <button class="ev-x" onclick="evClose()" aria-label="⟦ui.ux.close⟧" title="⟦ui.ux.close⟧">✕</button>
+  </div>
+  <div class="ev-tabs" role="group" aria-label="⟦ui.ux.ev.title⟧">
+    <button id="ev-f-all" class="uchip on" aria-pressed="true" onclick="evFilter(false)">⟦ui.ux.ev.all⟧</button>
+    <button id="ev-f-bad" class="uchip" aria-pressed="false" onclick="evFilter(true)">⟦ui.ux.ev.onlybad⟧</button>
+  </div>
+  <div id="ev-list"></div>
+  <div class="ev-foot mut">⟦ui.ux.ev.note⟧</div>
+</aside>
+
+<div id="toast" role="region" aria-label="⟦ui.ux.toast.region⟧"></div>
 
 <script src="/qr.js"></script>
+<script src="/svgstudio.js"></script>
+<script src="/studio.js"></script>
 <script>
 "use strict";
 // کاتالوگِ زبانِ فعال + جهتِ خط، تزریقِ سرور. عمداً بعد از "use strict"
@@ -1511,13 +1855,54 @@ function fmtAgo(ts){
   return _t('ui.js.fmtAgo.4', {p0: Math.floor(d/86400)});
 }
 
-function toast(msg, ok){
-  const t = el('toast');
-  t.textContent = msg;
-  t.style.color = ok ? 'var(--green)' : 'var(--red)';
-  t.style.opacity = 1;
-  clearTimeout(t._h);
-  t._h = setTimeout(() => t.style.opacity = 0, 4000);
+// اعلانِ صف‌دار. پیش از ۷ نوامبر ۲۰۲۶ یک جعبه‌ی تکی بود: پیامِ دوم اولی را
+// می‌بلعید، وضعیت فقط با رنگ گفته می‌شد و صفحه‌خوان چیزی نمی‌شنید.
+// امضا همان قبلی است — toast(msg, ok) — و ok ِ falsy مثلِ قبل «خطا» است؛
+// ok === 'info' اعلانِ خنثی است. opts.action = {label, fn} دکمه‌ای مثلِ «واگرد»
+// می‌سازد و اعلان را ۱۰ ثانیه نگه می‌دارد. موس یا فوکوس روی اعلان شمارش را
+// نگه می‌دارد تا خواندن یا زدنِ دکمه زیرِ دست ناپدید نشود.
+const TOAST_MAX = 4;
+function toast(msg, ok, opts){
+  opts = opts || {};
+  const box = el('toast');
+  if(!box) return;
+  const kind = ok === 'info' ? 'info' : (ok ? 'ok' : 'err');
+  const item = document.createElement('div');
+  item.className = 'tst tst-' + kind;
+  item.setAttribute('role', kind === 'err' ? 'alert' : 'status');
+  const ic = document.createElement('span');
+  ic.className = 'ti'; ic.setAttribute('aria-hidden', 'true');
+  ic.textContent = kind === 'ok' ? '✓' : (kind === 'err' ? '✕' : 'ℹ');
+  const tm = document.createElement('span');
+  tm.className = 'tm'; tm.textContent = String(msg == null ? '' : msg);
+  item.appendChild(ic); item.appendChild(tm);
+  let timer = null, left = opts.ms || (opts.action ? 10000 : (kind === 'err' ? 7000 : 4000)), t0 = 0;
+  const kill = () => {
+    clearTimeout(timer);
+    if(!item.isConnected) return;
+    item.classList.add('out');
+    setTimeout(() => item.remove(), 260);
+  };
+  const arm = () => { t0 = Date.now(); clearTimeout(timer); timer = setTimeout(kill, left); };
+  const hold = () => { clearTimeout(timer); left = Math.max(1500, left - (Date.now() - t0)); };
+  if(opts.action && typeof opts.action.fn === 'function'){
+    const ab = document.createElement('button');
+    ab.className = 'ta'; ab.type = 'button'; ab.textContent = opts.action.label;
+    ab.addEventListener('click', () => { kill(); opts.action.fn(); });
+    item.appendChild(ab);
+  }
+  const x = document.createElement('button');
+  x.className = 'tc'; x.type = 'button'; x.textContent = '✕';
+  x.setAttribute('aria-label', _t('ui.ux.close'));
+  x.addEventListener('click', kill);
+  item.appendChild(x);
+  item.addEventListener('mouseenter', hold);
+  item.addEventListener('mouseleave', arm);
+  item.addEventListener('focusin', hold);
+  item.addEventListener('focusout', arm);
+  box.appendChild(item);
+  while(box.children.length > TOAST_MAX) box.firstElementChild.remove();
+  arm();
 }
 
 async function api(path, body){
@@ -1654,6 +2039,8 @@ function applyRole(me){
   el('nqmo-admin2').classList.toggle('hidden', !nqv);
   if(nqv && !nqmoLoaded){ nqmoLoaded = true; loadNqmo(); }
   if(!nqv){ nqmoLoaded = false; clearTimeout(nqmoTimer); }
+  vizAfterRole();  // نقشه و گزارش (studio.js) — پیش از ناوبری تا چیپش هم‌گام باشد
+  uxAfterRole();   // چیپ‌های ناوبری، منوی مدیریت و زنگوله تابعِ همین مجوزها هستند
 }
 
 // نقشِ کاربر TOTP را الزامی کرده ولی هنوز فعال نیست → فقط راه‌اندازی TOTP
@@ -1662,7 +2049,8 @@ function forceTotpSetup(){
   if(totpForced) return;
   totpForced = true;
   document.querySelectorAll('h2, .card, #addrow, #pu-sec2, #proxy-admin2, ' +
-    '#svc-admin2, #audit-admin2, #nqmo-admin2').forEach(n => n.classList.add('hidden'));
+    '#svc-admin2, #audit-admin2, #nqmo-admin2, #viz-admin2, #secnav, #bell-btn, #adm-menu')
+    .forEach(n => n.classList.add('hidden'));
   const box = document.createElement('div');
   box.className = 'card';
   box.style.cssText = 'max-width:460px;margin:40px auto;padding:24px;text-align:center';
@@ -1811,7 +2199,7 @@ function paintSvcIps(key){
   faLocalize(h);
 }
 async function deleteSvcIp(key, ip){
-  if(!confirm(_t('ui.js.deleteSvcIp.1', {p0: ip}))) return;
+  if(!await askConfirm(_t('ui.js.deleteSvcIp.1', {p0: ip}), {danger: true, ok: _t('ui.ux.del')})) return;
   try{
     const r = await api('/api/svc/ip/delete', {service:key, ip:ip});
     if(r.ok){ toast(_t('ui.js.delPeer.2', {p0: ip}), true); fetchSvcIps(key); }
@@ -1819,7 +2207,7 @@ async function deleteSvcIp(key, ip){
   }catch(e){ if(e!=='auth') toast(_t('ui.js.addWarpSniHost.2'), false); }
 }
 async function editSvcIp(key, ip){
-  const nv = prompt(_t('ui.js.editSvcIp.1', {p0: ip}), ip);
+  const nv = await askPrompt(_t('ui.js.editSvcIp.1', {p0: ip}), ip, {ltr: true});
   if(nv == null) return;
   const nip = nv.trim();
   if(!nip || nip === ip) return;
@@ -2250,7 +2638,7 @@ function pxDestsPaint(){
   faLocalize(box);
 }
 async function delProxyUser(username){
-  if(!confirm(_t('ui.js.delProxyUser.1', {p0: username}))) return;
+  if(!await askConfirm(_t('ui.js.delProxyUser.1', {p0: username}), {danger: true, ok: _t('ui.ux.del')})) return;
   try{
     const r = await api('/api/proxy/delete', {username: username});
     if(r.ok){ toast(_t('ui.js.delPeer.2', {p0: username}), true); loadProxy(); }
@@ -2354,7 +2742,7 @@ async function svcAdd(){
   b.disabled = false; b.textContent = _t('ui.js.svcAdd.4');
 }
 async function deleteSvc(key, label){
-  if(!confirm(_t('ui.js.deleteSvc.1', {p0: label}))) return;
+  if(!await askConfirm(_t('ui.js.deleteSvc.1', {p0: label}), {danger: true, ok: _t('ui.ux.del')})) return;
   // وضعیت‌های بازِ همین سرویس را پاک کن
   svcOpenIps.delete(key); svcIpCache.delete(key);
   [...svcOpenMtr].filter(gk => gk.split('|')[0] === key).forEach(gk => svcOpenMtr.delete(gk));
@@ -2660,8 +3048,10 @@ function initPal(){
 }
 // ================= نمای TV/کیوسک: چرخشِ خودکارِ صفحه‌های وضعیت =================
 const _tv = {on: false, slide: 0, timer: null, n: 4};
+// اسلایدِ سه‌بعدی همیشه آخر است: بی WebGL یا با شکستش _tv.n یکی کم می‌شود و همان کنار می‌رود.
 const TV_SLIDES = [_t('ui.js.initPal.1'), _t('ui.js.initPal.2') + ')', _t('ui.js.initPal.3'), _t('ui.js.initPal.4'),
-                   _t('ui.js.initPal.5') + ')'];
+                   _t('ui.viz.tv'), _t('ui.js.initPal.5') + ')'];
+const TV_SLIDE_VIZ = 4, TV_SLIDE_3D = TV_SLIDES.length - 1;
 function tvOpen(){
   if(_tv.on) return;
   _tv.on = true; _tv.slide = 0;
@@ -2718,8 +3108,9 @@ function tvRender(){
     '" onclick="_tv.slide=' + i + ';tvRender()"></span>').join('');
   const body = el('tv-body');
   // خروج از اسلاید سه‌بعدی → رندرش متوقف؛ ظرفش زنده می‌ماند (کانتکست حفظ شود)
-  if(_tv.slide !== 4 && _tv3d && _tv3d.inst) _tv3d.inst.pause();
-  if(_tv.slide === 4){ tv3dShow(body); return; }
+  if(_tv.slide !== TV_SLIDE_3D && _tv3d && _tv3d.inst) _tv3d.inst.pause();
+  if(_tv.slide === TV_SLIDE_3D){ tv3dShow(body); return; }
+  if(_tv.slide === TV_SLIDE_VIZ){ vizTvShow(body); return; }
   const nt = s.net_totals || {rx_rate: 0, tx_rate: 0};
   if(_tv.slide === 0){
     const cur = (s.sys && s.sys.cur) || {};
@@ -2882,7 +3273,7 @@ function tv3dShow(body){
     }catch(err){ tv3dFail(_t('ui.js.tv3dShow.3')); return; }
     _tv3d.inst.resume();
     _tv3d.inst.update(tv3dData()); tv3dLegend();
-    if(_tv.slide !== 4) _tv3d.inst.pause();
+    if(_tv.slide !== TV_SLIDE_3D) _tv3d.inst.pause();
   }).catch(() => { _tv3d.loading = false; tv3dFail(_t('ui.js.tv3dShow.5')); });
 }
 function tv3dFail(msg){
@@ -3192,7 +3583,7 @@ function spDrawGauges(){
 }
 async function spRun(){
   const tgt = spIfaces.length ? spIfaces.join(_t('ui.js.loadLeakAudit.21') + ' ') : '—';
-  if(!confirm(_t('ui.js.spRun.2', {p0: tgt}))) return;
+  if(!await askConfirm(_t('ui.js.spRun.2', {p0: tgt}))) return;
   let r;
   try{ r = await api('/api/speedtest/run', {}); }catch(e){ return; }
   if(!r.ok){ toast(r.error || _t('ui.js.addWarpSniHost.3'), false); return; }
@@ -3290,7 +3681,7 @@ function toggleWarpSrcTop(){
 }
 // افزودنِ یک SNIِ دیده‌شده در splitter به مقصدهای WARP (کشفِ دامنه)
 async function addWarpSniHost(h){
-  if(!confirm(_t('ui.js.addWarpSniHost.1', {p0: h}))) return;
+  if(!await askConfirm(_t('ui.js.addWarpSniHost.1', {p0: h}))) return;
   let r;
   try{ r = await api('/api/warp/target/add', {target: h}); }
   catch(e){ toast(_t('ui.js.addWarpSniHost.2'), false); return; }
@@ -3384,9 +3775,16 @@ async function loadLeakAudit(){
 async function loadWarp(){
   if(!can('tun.view')) return;
   let r;
-  try{ r = await api('/api/warp/status', {}); }catch(e){ return; }
   const box = el('warp-body');
-  if(!r.ok){ box.textContent = r.error || _t('ui.js.addWarpSniHost.3'); box._split = false; return; }
+  // خطای شبکه پیش از این بی‌صدا برمی‌گشت و «در حالِ خواندنِ وضعیت…» تا ابد می‌ماند
+  try{ r = await api('/api/warp/status', {}); }
+  catch(e){
+    // فقط اگر هنوز چیزی رسم نشده (متنِ اولیه یا خطای قبلی)؛ قطعیِ گذرا محتوای سالمِ قبلی را پاک نکند
+    if(e !== 'auth' && (!box.firstElementChild || box.querySelector('.st-box')))
+      box.innerHTML = stateHtml('error', '', RETRY('loadWarp()'));
+    return;
+  }
+  if(!r.ok){ box.innerHTML = stateHtml('error', r.error || _t('ui.js.addWarpSniHost.3'), RETRY('loadWarp()')); box._split = false; return; }
   const w = r.warp || {};
   if(!w.installed){
     box.innerHTML = '<span class="mut">' + _t('ui.js.loadWarp.2') + '</span>';
@@ -4051,7 +4449,7 @@ async function addWarpTarget(){
   loadWarp();
 }
 async function delWarpTarget(t){
-  if(!confirm(_t('ui.js.delWarpTarget.1', {p0: t}))) return;
+  if(!await askConfirm(_t('ui.js.delWarpTarget.1', {p0: t}), {danger: true, ok: _t('ui.ux.del')})) return;
   let r;
   try{ r = await api('/api/warp/target/del', {target: t}); }catch(e){ return; }
   if(!r.ok){ toast(r.error || _t('ui.js.addWarpSniHost.3'), false); return; }
@@ -4162,7 +4560,7 @@ function renderManualBackup(mb){
 }
 async function runManualBackup(which){
   if(which === 'full' &&
-     !confirm(_t('ui.js.runManualBackup.1')))
+     !await askConfirm(_t('ui.js.runManualBackup.1')))
     return;
   let r;
   try{ r = await api('/api/backup/run', {which: which}); }catch(e){ return; }
@@ -4210,7 +4608,8 @@ async function doCloudRestore(){
   if(!obj){ msg.textContent = _t('ui.js.doCloudRestore.1'); return; }
   if(!comps.length){ msg.textContent = _t('ui.js.doCloudRestore.2'); return; }
   if(!pw){ msg.textContent = _t('ui.js.doCloudRestore.3'); return; }
-  if(!confirm(_t('ui.js.doCloudRestore.4', {p0: obj})))
+  if(!await askConfirm(_t('ui.js.doCloudRestore.4', {p0: obj}),
+                       {danger: true, typeText: obj}))
     return;
   el('bkr-go').disabled = true;
   msg.textContent = _t('ui.js.doCloudRestore.5');
@@ -4253,8 +4652,8 @@ async function loadAudit(){
     days: el('a-days').value, q: el('a-q').value.trim()});
   let r;
   try{ r = await fetch('/api/audit?' + params.toString()).then(x => x.json()); }
-  catch(e){ return; }
-  if(!r.ok) return;
+  catch(e){ auditLoadFailed(); return; }
+  if(!r.ok){ auditLoadFailed(r.error); return; }
   lastAudit = r.rows || [];
   // پرکردن فهرست کاربران (فقط اگر تغییر کرد)
   const sel = el('a-actor'), cur = sel.value;
@@ -4317,8 +4716,7 @@ function renderAudit(){
   const tb = el('audit').querySelector('tbody');
   el('a-count').textContent = _t('ui.js.renderAudit.1', {p0: lastAudit.length});
   if(!lastAudit.length){
-    tb.innerHTML = '<tr><td colspan="8" class="mut" style="text-align:center;padding:18px">' +
-      _t('ui.js.renderAudit.2') + '</td></tr>';
+    tb.innerHTML = stateRow(8, 'empty', _t('ui.js.renderAudit.2'));
     return;
   }
   tb.innerHTML = lastAudit.map(a => {
@@ -4489,8 +4887,8 @@ function copyGraphLink(k){
   try{ history.replaceState(null, '', h); }catch(e){}
   const done = () => toast(_t('ui.js.copyGraphLink.1'), true);
   if(navigator.clipboard && navigator.clipboard.writeText)
-    navigator.clipboard.writeText(url).then(done, () => prompt(_t('ui.js.copyGraphLink.2'), url));
-  else prompt(_t('ui.js.copyGraphLink.2'), url);
+    navigator.clipboard.writeText(url).then(done, () => askPrompt(_t('ui.js.copyGraphLink.2'), url, {readonly: true}));
+  else askPrompt(_t('ui.js.copyGraphLink.2'), url, {readonly: true});
 }
 function applyGraphHash(){
   try{
@@ -6267,6 +6665,7 @@ function setISort(k){
 }
 function rerender(){
   _liveHoverPause = false;   // ایمنی: بعد از هر بازساخت، قفل هاور باز شود
+  syncSortHeaders();
   if(lastStats && !busy){
     renderUsers(lastStats);
     renderTunnels(lastStats.tunnels);
@@ -6286,7 +6685,82 @@ function monthCell(u){
     s += ' <span class="' + (over ? 'quota-over' : '') + '">/ ' +
       u.quota_gb + 'GB</span>';
   }
-  return s + '</span>';
+  return s + qbarHtml(u) + '</span>';
+}
+
+// ---- سهمیه و انقضا: یک منبعِ حقیقت برای نوارِ ردیف، چیپِ فیلتر و کارتِ موبایل.
+// آستانه‌ها همان سمتِ سرورند: سقفِ ماهانه با مصرفِ ماه و سقفِ کل با مصرفِ عمر
+// سنجیده می‌شود، و کاربر از **همان روزِ** expires غیرفعال است (today >= expires)،
+// پس «۰ روز مانده» یعنی منقضی، نه «امروز آخرین روز».
+const QUOTA_WARN = 0.8, EXPIRY_WARN_DAYS = 7, EXPIRY_SHOW_DAYS = 14;
+function quotaInfo(u){
+  const GB = 1073741824;
+  let best = null;
+  const take = (used, cap, basis) => {
+    if(!cap || cap <= 0) return;
+    const pct = used / (cap * GB);
+    if(!best || pct > best.pct) best = {pct: pct, basis: basis, cap: cap};
+  };
+  take((u.month_rx || 0) + (u.month_tx || 0), +u.quota_gb, 'month');
+  take((u.life_rx || 0) + (u.life_tx || 0), +u.total_gb, 'total');
+  if(best) best.level = best.pct >= 1 ? 'over' : (best.pct >= QUOTA_WARN ? 'warn' : 'ok');
+  return best;
+}
+function daysLeft(u){
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(u.expires || '').trim());
+  if(!m) return null;
+  const now = new Date();
+  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.round((Date.UTC(+m[1], +m[2] - 1, +m[3]) - today) / 86400000);
+}
+function qbarHtml(u){
+  const q = quotaInfo(u);
+  if(!q) return '';
+  const p = Math.round(q.pct * 100);
+  return '<span class="qbar qb-' + q.level + '" title="' + esc(_t('ui.ux.q.title', {
+      basis: _t(q.basis === 'month' ? 'ui.ux.q.month' : 'ui.ux.q.total'),
+      p: faNum(String(p)), q: faNum(String(q.cap)) + 'GB'})) + '">' +
+    '<span style="width:' + Math.min(100, Math.max(2, p)) + '%"></span></span>';
+}
+function expChipHtml(u){
+  const d = daysLeft(u);
+  if(d === null || d > EXPIRY_SHOW_DAYS) return '';
+  const cls = d <= 0 ? 'exp-bad' : (d <= EXPIRY_WARN_DAYS ? 'exp-warn' : '');
+  // تاریخ در فارسی شمسی، در بقیه‌ی زبان‌ها همان میلادیِ ذخیره‌شده
+  const shown = (_FA_ON && gregToJalaliStr(u.expires)) || u.expires;
+  return '<span class="exp-chip ' + cls + '" title="' +
+    esc(faNum(_t('ui.ux.exp.title', {d: shown}))) + '">⏳ ' +
+    (d <= 0 ? _t('ui.ux.exp.expired') : _t('ui.ux.exp.left', {n: d})) + '</span>';
+}
+
+// ---- چیپ‌های فیلترِ وضعیت (یکی در هر لحظه؛ کلیکِ دوباره ⇒ همه)
+let ufChip = '';
+const UF_CHIPS = [
+  ['',         'ui.ux.uf.all',      () => true],
+  ['online',   'ui.ux.uf.online',   u => u.enabled && u.online],
+  ['offline',  'ui.ux.uf.offline',  u => u.enabled && !u.online],
+  ['disabled', 'ui.ux.uf.disabled', u => !u.enabled],
+  ['quota',    'ui.ux.uf.quota',    u => { const q = quotaInfo(u); return !!q && q.level !== 'ok'; }],
+  ['expiry',   'ui.ux.uf.expiry',   u => { const d = daysLeft(u); return d !== null && d <= EXPIRY_WARN_DAYS; }],
+];
+function ufPred(){ const c = UF_CHIPS.find(x => x[0] === ufChip); return c ? c[2] : UF_CHIPS[0][2]; }
+function setUfChip(k){
+  ufChip = (ufChip === k) ? '' : k;
+  rerender();
+}
+function ufChipsHtml(users){
+  return UF_CHIPS.map(c => {
+    const n = users.filter(c[2]).length, on = ufChip === c[0];
+    const warn = (c[0] === 'quota' || c[0] === 'expiry') && n > 0;
+    return '<button class="uchip' + (on ? ' on' : '') + (warn ? ' warn' : '') + '" ' +
+      'aria-pressed="' + on + '"' + (!n && !on && c[0] ? ' disabled' : '') +
+      ' onclick="setUfChip(' + jsArg(c[0]) + ')">' + esc(_t(c[1])) + '<b>' + n + '</b></button>';
+  }).join('');
+}
+function clearUserFilters(){
+  ufChip = '';
+  el('ufilter').value = '';
+  rerender();
 }
 
 function userRow(u){
@@ -6297,29 +6771,34 @@ function userRow(u){
     (u.rate_mbit ? '<span class="rate-badge" title="' + _t('ui.js.proxyFormBody.12') + '">⚡' +
       faNum(u.rate_mbit) + 'Mb</span>' : '') +
     (u.has_psk ? '<span class="psk-badge" title="' + _t('ui.js.userRow.5') + '">🔒</span>' : '') +
-    (u.share_active ? '<span class="share-badge" title="' + _t('ui.js.userRow.6') + '">🔗</span>' : '');
+    (u.share_active ? '<span class="share-badge" title="' + _t('ui.js.userRow.6') + '">🔗</span>' : '') +
+    expChipHtml(u);
   const note = u.note ? '<div class="notetxt" title="' + esc(u.note) + '">' +
     esc(u.note) + '</div>' : '';
   const args = jsArg(u.iface) + ',' + jsArg(u.name);
-  return '<tr>' +
-    '<td><span class="dot ' + dot + '" title="' + title + '"></span></td>' +
-    '<td><b>' + esc(u.name) + '</b>' + badge + note + '</td>' +
-    '<td class="mut" style="direction:ltr" data-ltr>' + esc(u.allowed_ips) + '</td>' +
-    '<td>' + graphBtn('u', u.iface, u.name) +
+  // کلاس‌های c-* فقط برای چیدمانِ کارتیِ موبایل‌اند (CSS ِ max-width:640px)؛
+  // در دسکتاپ هیچ اثری ندارند و جدول همان یازده ستون است.
+  const flash = _rowFlash && _rowFlash === u.iface + '|' + u.name;
+  return '<tr class="urow' + (flash ? ' row-flash' : '') + '">' +
+    '<td class="c-st"><span class="dot ' + dot + '" title="' + title + '" role="img" aria-label="' + title + '"></span></td>' +
+    '<td class="c-name"><b>' + esc(u.name) + '</b>' + badge + note + '</td>' +
+    '<td class="c-ip mut" style="direction:ltr" data-ltr>' + esc(u.allowed_ips) + '</td>' +
+    '<td class="c-chart">' + graphBtn('u', u.iface, u.name) +
       '<canvas class="spark" data-u="' + esc(u.iface) + '|' + esc(u.name) + '"></canvas></td>' +
-    '<td>' + rateCell(u) + '</td>' +
-    '<td><span class="total">↓' + fmtBytes(u.rx) + ' ↑' + fmtBytes(u.tx) + '</span></td>' +
-    '<td>' + monthCell(u) + '</td>' +
-    '<td class="mut"><span class="ago">' + fmtAgo(u.handshake) + '</span></td>' +
-    '<td class="mut endp" style="direction:ltr" data-ltr title="' +
+    '<td class="c-rate">' + rateCell(u) + '</td>' +
+    '<td class="c-total"><span class="total">↓' + fmtBytes(u.rx) + ' ↑' + fmtBytes(u.tx) + '</span></td>' +
+    '<td class="c-month">' + monthCell(u) + '</td>' +
+    '<td class="c-hs mut"><span class="ago">' + fmtAgo(u.handshake) + '</span></td>' +
+    '<td class="c-ep mut endp" style="direction:ltr" data-ltr title="' +
       esc(u.endpoint || '—') + '">' + esc(u.endpoint || '—') + '</td>' +
-    '<td>' + (can('wg.edit') ?
+    '<td class="c-en">' + (can('wg.edit') ?
       '<label class="switch"><input type="checkbox" ' +
       (u.enabled ? 'checked' : '') +
+      ' aria-label="' + esc(_t('ui.ux.uf.toggle', {name: u.name})) + '"' +
       ' onchange="togglePeer(' + args + ', this)">' +
       '<span class="slider"></span></label>'
       : (u.enabled ? _t('ui.js.ecmpAddGroup.3') : _t('ui.js.loadWarp.25'))) + '</td>' +
-    '<td>' +
+    '<td class="c-act">' +
       (can('wg.conf') && u.has_conf ?
       '<button onclick="showStoredConf(' + args + ')">' + _t('ui.js.renderProxy.13') + '</button> ' : '') +
       (can('wg.edit') ?
@@ -6354,20 +6833,44 @@ function userCmp(a, b){
   return r * usort.dir;
 }
 
+let _rowFlash = '';   // 'iface|name' ِ ردیفی که جست‌وجوی سراسری به آن پرید (یک رندر)
 function renderUsers(s){
   const q = (el('ufilter').value || '').trim().toLowerCase();
-  const match = u => !q ||
-    (u.name + ' ' + u.allowed_ips + ' ' + (u.note || '')).toLowerCase().includes(q);
+  const chip = ufPred();
+  const match = u => chip(u) && (!q ||
+    (u.name + ' ' + u.allowed_ips + ' ' + (u.note || '')).toLowerCase().includes(q));
   const tb = el('users').querySelector('tbody');
-  let html = '';
+  const chips = el('uchips');
+  // فقط وقتی شمارش‌ها عوض شد بازساخته شود؛ بازساختِ ۲ثانیه‌ای فوکوسِ صفحه‌کلید
+  // را از روی چیپ می‌پراند
+  if(chips){
+    const h = ufChipsHtml(s.users || []);
+    if(chips._h !== h){
+      const fi = Array.prototype.indexOf.call(chips.children, document.activeElement);
+      chips._h = h; chips.innerHTML = h; faLocalize(chips);
+      if(fi >= 0 && chips.children[fi]) chips.children[fi].focus();
+    }
+  }
+  let html = '', shown = 0;
   for(const sec of s.sections){
     let gu = s.users.filter(u => u.iface === sec.iface && match(u));
+    shown += gu.length;
     if(usort.key) gu = gu.slice().sort(userCmp);
     html += sectionRow(sec);
     html += gu.map(u => userRow(u) +
       (openGraphs.has(gkey('u', u.iface, u.name)) ?
         graphRowHtml(gkey('u', u.iface, u.name), 11) : '')).join('');
   }
+  _rowFlash = '';
+  // سه حالتِ خالی جدا گفته می‌شوند: هیچ کاربری نیست / فیلتر چیزی نیافت /
+  // هیچ اینترفیسِ کاربری نیست — «جدولِ خالیِ بی‌توضیح» هیچ‌کدام را نمی‌گوید.
+  if(!s.sections.length) html = stateRow(11, 'empty', _t('ui.ux.st.none'));
+  else if(!(s.users || []).length)
+    html += stateRow(11, 'empty', _t('ui.ux.users.empty'),
+      can('wg.add') ? {label: _t('ui.wg.add'), fn: 'showAddModal()'} : null);
+  else if(!shown)
+    html = stateRow(11, 'empty', _t('ui.ux.uf.nomatch'),
+      {label: _t('ui.ux.uf.clear'), fn: 'clearUserFilters()'});
   tb.innerHTML = html;
   faLocalize(tb);
   tb.querySelectorAll('canvas.spark').forEach(c => {
@@ -6438,7 +6941,7 @@ function renderTunnels(tunnels){
       '</tr>' +
       (openGraphs.has(gkey('t', t.iface)) ?
         graphRowHtml(gkey('t', t.iface), 10) : '');
-  }).join('');
+  }).join('') || stateRow(10, 'empty', _t(q ? 'ui.ux.st.nomatch' : 'ui.ux.st.none'));
   faLocalize(tb);
   tb.querySelectorAll('canvas.spark').forEach(c => {
     const t = tunnels.find(x => x.iface === c.dataset.t);
@@ -6493,7 +6996,7 @@ function renderIfaces(ifaces){
       '</tr>' +
       (openGraphs.has(gkey('i', i.iface)) ?
         graphRowHtml(gkey('i', i.iface), 10) : '');
-  }).join('');
+  }).join('') || stateRow(10, 'empty', _t(q ? 'ui.ux.st.nomatch' : 'ui.ux.st.none'));
   faLocalize(tb);
   tb.querySelectorAll('canvas.spark').forEach(c => {
     const i = ifaces.find(x => x.iface === c.dataset.i);
@@ -6518,12 +7021,22 @@ async function refresh(force){
   try{
     s = await api('/api/stats');
   }catch(e){
+    // 'auth' یعنی نشست نیست و فرمِ ورود همین حالا باز شده: نبودنِ داده
+    // آنجا طبیعی است، نه «کهنه». تا ۷ نوامبر ۲۰۲۶ همین شاخه بنرِ قرمزِ
+    // «داده کهنه است» را پشتِ فرمِ ورود هم روشن می‌کرد.
+    if(e === 'auth'){
+      _staleSince = 0; markStale(false);
+      return;
+    }
     // خطای خاموش و صفحه‌ی به‌ظاهر سالم: نرخ‌ها، شمارشِ آنلاین و وضعیتِ
     // تونل‌ها همه مقدارِ آخر را نگه می‌داشتند و تنها نشانه، ساعتی بود
     // که از حرکت می‌ایستاد — چون پایین‌ترِ همین تابع ست می‌شود.
     // داشبوردی که دروغِ آرام می‌گوید از پیامِ خطا بدتر است.
     if(!_staleSince) _staleSince = Date.now();
     markStale(true);
+    // هنوز هیچ داده‌ای نیامده ⇒ جدول‌ها به‌جای «در حالِ خواندن» ِ ابدی، خطا
+    // و دکمه‌ی تلاشِ دوباره نشان دهند
+    if(!lastStats) statsLoadFailed();
     return;
   }
   if(_staleSince){ _staleSince = 0; markStale(false); }
@@ -6548,6 +7061,7 @@ async function refresh(force){
   pushMetricHist(s.sys); // تاریخچه‌ی زندهٔ متریک‌ها برای گرافِ گیج
   updateGauges(s.sys);   // گیج‌های وضعیت سرور (به‌روزرسانی در جا، بدون بازساخت)
   if(_tv.on) tvRender(); // نمای TV با همان داده‌ی تازه
+  uxAfterStats(s);       // نشان‌های ناوبری + گذارهای زنده‌ی تونل برای کشوی رویدادها
   // جدول‌ها خودشان در renderها faLocalize می‌شوند؛ اینجا دیگر کلِ body را نمی‌پیماییم
   // (پیمایشِ ۲ثانیه‌ایِ کلِ صفحه ری‌فلوِ سراسری و چشمکِ اسکرول‌بار می‌ساخت).
 }
@@ -6558,8 +7072,15 @@ async function togglePeer(iface, name, cb){
     const r = await api('/api/peer/toggle',
       {iface: iface, name: name, enable: cb.checked});
     if(!r.ok){ cb.checked = !cb.checked; toast(r.error || _t('ui.js.addWarpSniHost.3'), false); }
-    else toast((cb.checked ? _t('ui.js.togglePeer.2') + ' ' : _t('ui.js.togglePeer.3') + ' ') + name +
-      (r.message && r.message !== _t('ui.js.doCloudRestore.8') ? '\n' + r.message : ''), true);
+    else{
+      // «واگرد» ِ ده‌ثانیه‌ای: کلیدِ اشتباه روی ردیفِ کناری یعنی قطعِ کاربرِ
+      // دیگری؛ برگرداندنش نباید جست‌وجو و کلیکِ دوباره روی جدولِ در حالِ
+      // بازساخت باشد. خودِ واگرد همان API است با مقدارِ مخالف.
+      const was = !cb.checked;
+      toast((cb.checked ? _t('ui.js.togglePeer.2') + ' ' : _t('ui.js.togglePeer.3') + ' ') + name +
+        (r.message && r.message !== _t('ui.js.doCloudRestore.8') ? '\n' + r.message : ''), true,
+        {action: {label: _t('ui.ux.undo'), fn: () => undoPeerToggle(iface, name, was)}});
+    }
   }catch(e){ if(e !== 'auth'){ cb.checked = !cb.checked; toast(_t('ui.js.addWarpSniHost.2'), false);} }
   finally{
     // finally و نه خطِ آخر: اگر خودِ catch استثنا بدهد (toast خطا بدهد، یا
@@ -6737,7 +7258,10 @@ async function showStoredConf(iface, name){
 }
 
 async function delPeer(iface, name){
-  if(!confirm(_t('ui.js.delPeer.1', {p0: name, p1: iface})))
+  // برگشت‌ناپذیرترین کنشِ روزمره ⇒ نامِ کاربر باید تایپ شود (یک کلیکِ اشتباه
+  // روی ردیفِ کناری دیگر کافی نیست)
+  if(!await askConfirm(_t('ui.js.delPeer.1', {p0: name, p1: iface}),
+                       {danger: true, ok: _t('ui.ux.del'), typeText: name}))
     return;
   try{
     const r = await api('/api/peer/delete', {iface: iface, name: name});
@@ -6751,7 +7275,11 @@ async function toggleTunnel(iface, up, btn, isServer){
     : (isServer
        ? _t('ui.js.toggleTunnel.3', {p0: iface})
        : _t('ui.js.toggleTunnel.4', {p0: iface}));
-  if(!confirm(warn)) return;
+  // README خاموش‌کردن را روی این توپولوژی «خطرناک» می‌نامد: wg21/wg22 مسیرِ
+  // پیش‌فرضِ ECMP ِ کاربران‌اند و awg1 تونلِ مادر. پس خاموش‌کردن نامِ اینترفیس را
+  // می‌خواهد؛ روشن‌کردن فقط یک تأییدِ ساده.
+  if(!await askConfirm(warn, up ? {} :
+       {danger: true, ok: _t('ui.ux.tun.off'), typeText: iface})) return;
   btn.disabled = true; busy = true;
   try{
     const r = await api('/api/tunnel/toggle', {iface: iface, up: up});
@@ -6851,8 +7379,8 @@ async function saveMeta(iface, name){
     c_dns: el('e-dns').value.trim(), c_allowed: el('e-callowed').value.trim()};
   const ips = el('e-ips').value.trim();
   if(payload.enforce_action === 'delete' &&
-     !confirm(_t('ui.js.saveMeta.1') + ' ' +
-       _t('ui.js.saveMeta.2'))) return;
+     !await askConfirm(_t('ui.js.saveMeta.1') + ' ' +
+       _t('ui.js.saveMeta.2'), {danger: true})) return;
   try{
     const r = await api('/api/peer/meta', payload);
     if(!r.ok){ el('e-msg').textContent = r.error || _t('ui.js.addWarpSniHost.3'); return; }
@@ -6867,7 +7395,7 @@ async function saveMeta(iface, name){
 }
 
 async function togglePsk(iface, name, enable){
-  if(!confirm(enable
+  if(!await askConfirm(enable
       ? _t('ui.js.togglePsk.1')
       : _t('ui.js.togglePsk.2'))) return;
   try{
@@ -6889,16 +7417,23 @@ async function pingPeer(iface, name, trace){
 }
 
 async function sharePeer(iface, name){
-  const mins = prompt(_t('ui.js.sharePeer.1', {p0: name}), '30');
-  if(mins === null) return;
-  const single = confirm(_t('ui.js.sharePeer.2') + '\n' +
-    '(' + _t('ui.js.sharePeer.3') + ' = ' + _t('ui.js.sharePeer.4') + ' = ' + _t('ui.js.sharePeer.5') + ')');
+  // پیش از این دو پنجره‌ی بومیِ پشتِ‌سرِ‌هم بود و در دومی «لغو» یعنی «چندبارمصرف» —
+  // معنایی که هیچ‌کس از دکمه‌ی لغو انتظار ندارد. حالا یک فرم با یک تیکِ صریح.
+  const f = await askDialog({title: _t('ui.js.showShareResult.1'),
+    text: _t('ui.js.sharePeer.1', {p0: name}).split('\n')[0],
+    ok: _t('ui.ux.share.ok'),
+    fields: [{id: 'mins', type: 'number', label: _t('ui.ux.share.mins'), value: '30', min: 1, max: 1440},
+             {id: 'single', type: 'checkbox', label: _t('ui.ux.share.single'), value: true}]});
+  if(!f) return;
+  const mins = String(f.mins).trim(), single = !!f.single;
   try{
     const r = await api('/api/peer/share',
       {iface: iface, name: name, minutes: mins, single: single});
-    if(!r.ok){ el('e-msg').textContent = r.error || _t('ui.js.addWarpSniHost.3'); return; }
+    // خطا به toast می‌رود: «e-msg» مالِ مودالِ ویرایش است و این‌جا بسته است، پس
+    // پیش از این خطای ساختِ لینک بی‌صدا گم می‌شد (یا روی null می‌شکست).
+    if(!r.ok){ toast(r.error || _t('ui.js.addWarpSniHost.3'), false); return; }
     showShareResult(r.url, single, mins);
-  }catch(e){ if(e !== 'auth') el('e-msg').textContent = _t('ui.js.addWarpSniHost.2'); }
+  }catch(e){ if(e !== 'auth') toast(_t('ui.js.addWarpSniHost.2'), false); }
 }
 
 function showShareResult(url, single, mins){
@@ -6917,7 +7452,7 @@ function showShareResult(url, single, mins){
 }
 
 async function revokeShare(iface, name){
-  if(!confirm(_t('ui.js.revokeShare.1'))) return;
+  if(!await askConfirm(_t('ui.js.revokeShare.1'), {danger: true})) return;
   try{
     const r = await api('/api/peer/share', {iface: iface, name: name, revoke: true});
     toast(r.ok ? _t('ui.js.revokeShare.2') : _t('ui.js.addWarpSniHost.3'), r.ok);
@@ -6926,7 +7461,8 @@ async function revokeShare(iface, name){
 }
 
 async function rotateKey(iface, name){
-  if(!confirm(_t('ui.js.rotateKey.1', {p0: name})))
+  // کانفیگِ فعلیِ کاربر بی‌درنگ از کار می‌افتد ⇒ قرمز
+  if(!await askConfirm(_t('ui.js.rotateKey.1', {p0: name}), {danger: true}))
     return;
   try{
     const r = await api('/api/peer/rotate', {iface: iface, name: name});
@@ -7019,7 +7555,8 @@ const NQMO_CHIP = {HIGH:'hp-dead', MEDIUM:'hp-noreturn', LOW:'hp-idle', OK:'hp-h
                    INSUFFICIENT:'hp-off', INSUFFICIENT_EVIDENCE:'hp-off',
                    VERIFIED:'hp-healthy', ESTIMATED:'hp-idle', CANDIDATE_FOR_TESTING:'hp-noreturn',
                    UNDETERMINED:'hp-off', open:'hp-noreturn', escalated:'hp-dead',
-                   cleared:'hp-healthy', stale:'hp-off', more:'hp-off'};
+                   cleared:'hp-healthy', stale:'hp-off', more:'hp-off',
+                   GOOD:'hp-healthy', DEGRADED:'hp-noreturn', INVALID:'hp-dead'};
 const NQMO_RANK = {HIGH:3, MEDIUM:2, LOW:1, OK:0, INSUFFICIENT:-1};
 
 function _tk(prefix, code){
@@ -7089,7 +7626,69 @@ function nqmoDiagHtml(d){
       ' · ' + nqmoMut(_t('ui.nqmo.since', {p0: fmtAgo(d.since)})) +
       (d.data_quality && d.data_quality !== 'GOOD'
         ? ' · ' + nqmoMut(_tk('ui.nqmo.dq.', d.data_quality)) : '') + act +
-    '</div>' + nqmoEvidenceHtml(d.evidence) + '</div>';
+    '</div>' + nqmoEvidenceHtml(d.evidence) + nqmoActHtml(d.class) + '</div>';
+}
+// راهنمای اقدام برای هر کلاس (§29.154): یک جمله‌ی ثابتِ کاتالوگ، «حالا کجا را ببینم».
+// قاعده‌ی «فقط گزارش» را نمی‌شکند: هیچ دکمه‌ای چیزی را عوض نمی‌کند. کلاسِ ناشناخته ⇒ هیچ.
+function nqmoActHtml(cls){
+  if(typeof cls !== 'string' || !cls) return '';
+  const t = _tk('ui.nqmo.act.', cls);
+  if(t === cls) return '';
+  return '<div class="mut" style="font-size:11px;margin-top:2px">💡 ' + esc(t) + '</div>';
+}
+// تأییدِ گروهی (§29.154): همان /api/nqmo/ack، یکی‌یکی و با همان ممیزی؛ فقط شناسه‌های
+// تأییدنشده‌ی همین فهرست. دکمه فقط با مجوز و فقط وقتی بیش از یکی هست.
+function nqmoAckAllBtn(diags){
+  if(!can('nqmo.ack')) return '';
+  const unacked = d => !d.acked_by && nqmoId(d.id);     // نام‌گذاری‌شده به‌خاطرِ گاردِ پرچمِ خاموش
+  const ids = nqmoArr(diags).filter(unacked).map(d => d.id);
+  if(ids.length < 2) return '';
+  return '<div class="mrow"><button style="padding:1px 10px;font-size:11px" onclick="nqmoAckAll([' +
+         ids.join(',') + '])">' + esc(_t('ui.nqmo.ackall', {p0: ids.length})) + '</button></div>';
+}
+// نوارِ خلاصه (§29.154): بدونِ اسکرول معلوم شود چیزی باز است یا نه. شمارشِ دستگاه‌ها از
+// top_confidence ِ هر ردیف است (سرور برای هر دستگاه فقط بدترین را می‌فرستد)، پس برچسب
+// «دستگاه» است نه «تشخیص».
+function nqmoStripHtml(s){
+  if(!s || !s.available) return '';
+  const g = nqmoArr(s.global), peers = nqmoArr(s.peers);
+  const cnt = v => Number.isSafeInteger(v) && v >= 0 ? v : 0;
+  const open = peers.filter(p => cnt(p.open) > 0);
+  const total = open.reduce((a, p) => a + cnt(p.open), 0);
+  const by = {HIGH: 0, MEDIUM: 0, LOW: 0};
+  open.forEach(p => { if(p.top_confidence in by) by[p.top_confidence]++; });
+  const unacked = g.filter(d => !d.acked_by).length;
+  if(!g.length && !open.length)
+    return warpKV(_t('ui.nqmo.strip'), warpChip(_t('ui.nqmo.strip.none'), s.mode === 'OBSERVATION_ONLY' ? 'hp-off' : 'hp-healthy'));
+  let h = '';
+  if(open.length)
+    h += warpChip(_t('ui.nqmo.strip.peers', {p0: total, p1: open.length}), by.HIGH ? 'hp-dead' : by.MEDIUM ? 'hp-noreturn' : 'hp-idle') +
+         ' ' + ['HIGH', 'MEDIUM', 'LOW'].filter(k => by[k]).map(k => nqmoChip('ui.nqmo.lv.', k) + '<span dir="ltr">×' + by[k] + '</span>').join(' ');
+  if(g.length)
+    h += (h ? ' · ' : '') + warpChip(_t('ui.nqmo.strip.global', {p0: g.length}), unacked ? 'hp-noreturn' : 'hp-idle') +
+         (unacked ? ' ' + nqmoMut(_t('ui.nqmo.strip.unacked', {p0: unacked})) : '');
+  return warpKV(_t('ui.nqmo.strip'), h);
+}
+// فیلترِ جدولِ دستگاه‌ها (خالص): متن روی نام/اینترفیس، «فقط مشکل‌دارها» = تشخیصِ باز یا
+// کیفیتِ غیرِ OK. اندیسِ اصلی حفظ می‌شود تا showNqmoPeer همان ردیف را باز کند.
+function nqmoFilterRows(rows, f){
+  const q = String((f && f.q) || '').trim().toLowerCase();
+  return nqmoArr(rows).map((p, i) => ({p: p, i: i})).filter(({p}) => {
+    if(f && f.only && !((p.open | 0) > 0 || (p.quality && p.quality !== 'OK' && p.quality !== 'INSUFFICIENT'))) return false;
+    if(!q) return true;
+    return String(p.name || '').toLowerCase().includes(q) || String(p.iface || '').toLowerCase().includes(q);
+  });
+}
+// فیلترِ رویدادها (خالص): نوع (open/escalated/cleared؛ stale زیرِ cleared) و متن روی
+// کلاس، دستگاه، اینترفیس یا موضوع
+function nqmoFilterEvents(evs, f){
+  const q = String((f && f.q) || '').trim().toLowerCase(), kind = (f && f.kind) || '';
+  return nqmoArr(evs).filter(e => {
+    if(kind && e.kind !== kind) return false;
+    if(!q) return true;
+    return [e.class, e.peer, e.iface, e.subject].some(v => typeof v === 'string' && v.toLowerCase().includes(q)) ||
+           (e.class && _tk('ui.nqmo.cls.', e.class).toLowerCase().includes(q));
+  });
 }
 // دیکشنریِ پاک‌شده‌ی موتور (advisory، همبستگی) ⇒ key=value ِ لاتین
 function nqmoKvLtr(o, skip){
@@ -7123,28 +7722,137 @@ function nqmoModeHtml(s){
   }
   return h;
 }
+// آمادگیِ ارتقا از «فقط مشاهده» (سندِ ۰۱ §۴): روزهای داده و تشخیص‌های سایه‌ایِ HIGH.
+// فقط در همان حالت معنا دارد؛ سرور آستانه را می‌فرستد (days_required)، رابط حفظ نمی‌کند.
+function nqmoPromoHtml(s){
+  const p = (s.promotion && typeof s.promotion === 'object' && !Array.isArray(s.promotion))
+    ? s.promotion : null;
+  if(!p || s.mode !== 'OBSERVATION_ONLY') return '';
+  const days = nqmoFix(p.data_days, 1), need = Number.isSafeInteger(p.days_required) ? p.days_required : null;
+  const high = Number.isSafeInteger(p.shadow_high_7d) && p.shadow_high_7d >= 0 ? p.shadow_high_7d : null;
+  if(days === null && high === null) return '';
+  const or = v => v === null ? '—' : v;
+  const known = days !== null && need !== null && high !== null;
+  // حکم روی عددِ خام، نه روی نمایشِ گردشده: ۶٫۹۹ روز «۷٫۰» نشان داده می‌شود ولی ۷ نیست
+  const ready = known && Number(p.data_days) >= need && high === 0;
+  return warpKV(_t('ui.nqmo.promo'),
+    esc(_t('ui.nqmo.promo.days', {p0: or(days), p1: or(need)})) + ' &nbsp;·&nbsp; ' +
+    esc(_t('ui.nqmo.obs.shadow', {p0: or(high)})) + ' ' +
+    (known ? warpChip(_t(ready ? 'ui.nqmo.promo.ok' : 'ui.nqmo.promo.no'),
+                      ready ? 'hp-healthy' : 'hp-noreturn') : ''));
+}
+// جزئیاتِ پوشش (engine.task_export): چرا C1 قرمز است، چند endpoint مبهم/بی‌مدل مانده،
+// کدام نخ ناسالم است، و اینکه پایگاهِ ASN کهنه است. هر بخش فقط با مقدارِ واقعی.
+function nqmoCovDetailHtml(cov){
+  const parts = [];
+  const age = nqmoFix(cov.meta_age_s, 0);
+  if(cov.meta_error === true) parts.push(warpChip(_t('ui.nqmo.meta.err'), 'hp-dead'));
+  else if(age !== null) parts.push(esc(_t('ui.nqmo.meta.age', {p0: age})));
+  const cnt = v => Number.isSafeInteger(v) && v >= 0 ? v : null;
+  const amb = cnt(cov.ambiguous_endpoints), unm = cnt(cov.unmodelled_endpoints);
+  if(amb !== null && amb > 0) parts.push(warpChip(_t('ui.nqmo.ep.amb', {p0: amb}), 'hp-noreturn'));
+  if(unm !== null && unm > 0) parts.push(warpChip(_t('ui.nqmo.ep.unm', {p0: unm}), 'hp-noreturn'));
+  if(cov.asn_stale === true) parts.push(warpChip(_t('ui.nqmo.asn.stale'), 'hp-noreturn'));
+  const th = (cov.threads && typeof cov.threads === 'object' && !Array.isArray(cov.threads))
+    ? cov.threads : {};
+  const names = Object.keys(th).filter(k => typeof th[k] === 'boolean');
+  if(names.length)
+    parts.push(esc(_t('ui.nqmo.threads')) + ' ' + names.map(n => nqmoLtr(n, true) + ' ' +
+               nqmoColHtml(th[n])).join(' '));
+  return parts.length ? warpKV(_t('ui.nqmo.cov.detail'), parts.join(' &nbsp;·&nbsp; ')) : '';
+}
+// هزینه‌ی خودِ موتور (§29.153): CPU و RSS ِ دقیقه‌ی آخر، و پرچمِ sampling که یعنی شنودِ
+// S4 به چرخشِ نمونه رفته و کیفیتِ داده‌ی گمشدگی عمداً افت کرده. ردیف فقط با مقدارِ واقعی.
+function nqmoEngineCostHtml(e){
+  if(!e || typeof e !== 'object' || Array.isArray(e)) return '';
+  const cpu = nqmoFix(e.cpu_pct, 1), rss = nqmoFix(e.rss_mb, 0), cap = nqmoFix(e.cpu_pct_max, 0);
+  const parts = [];
+  if(cpu !== null) parts.push('<span dir="ltr">CPU ' + esc(cpu) + '%' + (cap !== null ? ' / ' + esc(cap) + '%' : '') + '</span>');
+  if(rss !== null) parts.push('<span dir="ltr">RSS ' + esc(rss) + ' MB</span>');
+  if(e.sampling === true) parts.push(warpChip(_t('ui.nqmo.sampling'), 'hp-noreturn'));
+  else if(e.sampling === false) parts.push(nqmoMut(_t('ui.nqmo.sampling.off')));
+  return parts.length ? warpKV(_t('ui.nqmo.cost'), parts.join(' &nbsp;·&nbsp; ')) : '';
+}
+// شمارشِ همبستگی‌ها بدونِ prefix و ASN: برای هر بیننده؛ جدولِ کامل همچنان فقط با nqmo.detail
+function nqmoCorrSummaryHtml(c){
+  if(!c || typeof c !== 'object' || Array.isArray(c)) return '';
+  const cnt = v => Number.isSafeInteger(v) && v >= 0 ? v : null;
+  const g = cnt(c.groups), aff = cnt(c.affected_peers), act = cnt(c.active_peers);
+  if(g === null) return '';
+  let h = g === 0 ? nqmoMut(_t('ui.nqmo.corr.none'))
+    : warpChip(_t('ui.nqmo.corr.v', {p0: g, p1: aff === null ? '—' : aff, p2: act === null ? '—' : act}), 'hp-noreturn');
+  const causes = (Array.isArray(c.causes) ? c.causes : []).filter(x => typeof x === 'string' && /^[A-Z_]{1,16}$/.test(x));
+  if(g > 0 && causes.length)
+    h += ' ' + nqmoMut(_t('ui.nqmo.corr.cause')) + ' ' +
+         causes.map(x => esc(_tk('ui.nqmo.cause.', x))).join(' · ');
+  return warpKV(_t('ui.nqmo.corr.sum'), h);
+}
+// خطاهای اخیرِ موتور: محل و زمان برای همه، متنِ خطا فقط وقتی سرور (nqmo.detail) داده
+function nqmoErrorsHtml(errs){
+  const rows = nqmoArr(errs).filter(e => e && typeof e === 'object' && typeof e.where === 'string');
+  if(!rows.length) return '';
+  const lines = rows.slice().reverse().map(e =>
+    esc(e.ts ? fmtTs(e.ts) : '—') + ' ' + esc(e.where) +
+    (typeof e.error === 'string' && e.error ? ': ' + esc(e.error) : '')).join('<br>');
+  return warpKV(_t('ui.nqmo.errors'),
+    warpChip(_t('ui.nqmo.errors.n', {p0: rows.length}), 'hp-dead') +
+    '<div class="mono" data-ltr dir="ltr" style="font-size:11px;color:var(--muted);' +
+    'text-align:left;margin-top:2px">' + lines + '</div>');
+}
+// پنجره‌ی تحلیل: «YYYY/MM/DD HH:MM تا HH:MM» وقتی هر دو سر در یک روزند؛ ثانیه حذف
+// (پنجره همیشه روی مرزِ دقیقه است). fmtTs ِ بدل در تست «TS» می‌دهد ⇒ دست‌نخورده می‌ماند.
+function nqmoWindowText(a){
+  const x = fmtTs(a), y = fmtTs(a + 300);
+  const same = x.length > 16 && y.length > 16 && x.slice(0, 10) === y.slice(0, 10);
+  return _t('ui.nqmo.window.v', {p0: x.length > 16 ? x.slice(0, 16) : x,
+                                 p1: same ? y.slice(11, 16) : (y.length > 16 ? y.slice(0, 16) : y)});
+}
 function nqmoStatusHtml(s){
   if(!s || !s.available) return nqmoMut(_tk('ui.nqmo.why.', s && s.why));
   const obj = v => (v && typeof v === 'object' && !Array.isArray(v)) ? v : {};
-  const cov = obj(s.coverage), st = obj(s.store), col = obj(s.collectors);
-  let h = warpKV(_t('ui.nqmo.mode'), nqmoModeHtml(s)) +
-    warpKV(_t('ui.nqmo.age'), esc(fmtAgo(s.generated_at)));
+  const cov = obj(s.coverage), st = obj(s.store), col = obj(s.collectors), pr = obj(s.probe);
+  // دیرکرد: مرزِ «کهنه» ۱۸۰ ثانیه است (NQMO_STATE_STALE)؛ از ۱۲۰ به بعد هشدار، نه غیب‌شدنِ ناگهانی
+  const age = nqmoFix(s.age_s, 0);
+  let h = nqmoStripHtml(s) + warpKV(_t('ui.nqmo.mode'), nqmoModeHtml(s)) + nqmoPromoHtml(s) +
+    warpKV(_t('ui.nqmo.age'), esc(fmtAgo(s.generated_at)) +
+           (age !== null && Number(age) >= 120 ? ' ' + warpChip(_t('ui.nqmo.age.late'), 'hp-noreturn') : ''));
+  // پنجره‌ی تحلیل: اعدادِ هر دستگاه از این پنجره‌ی ۵ دقیقه‌ای می‌آیند، نه از زمانِ خروجی
+  const lw = nqmoFix(s.last_window, 0);
+  if(lw !== null)
+    h += warpKV(_t('ui.nqmo.window'), '<span dir="ltr">' + esc(nqmoWindowText(Number(lw))) + '</span>');
+  if(pr.running === true)
+    h += warpKV(_t('ui.nqmo.probe'), warpChip(Number.isSafeInteger(pr.run_id) && pr.run_id > 0
+      ? _t('ui.nqmo.probe.running', {p0: pr.run_id}) : _t('ui.nqmo.probe.running0'), 'hp-idle'));
   const cols = Object.keys(col);
   if(cols.length)
     h += warpKV(_t('ui.nqmo.collectors'), cols.map(c => nqmoLtr(c) + ' ' +
                 nqmoColHtml(col[c])).join(' &nbsp; '));
+  h += nqmoEngineCostHtml(cov.engine);
   if(cov.peers_total !== null && cov.peers_total !== undefined)
     h += warpKV(_t('ui.nqmo.coverage'), esc(_t('ui.nqmo.coverage.v',
-                {p0: cov.peers_active == null ? '—' : cov.peers_active, p1: cov.peers_total})));
+                {p0: cov.peers_active == null ? '—' : cov.peers_active, p1: cov.peers_total})) +
+                '<br>' + nqmoMut(_t('ui.nqmo.notcovered')));
+  h += nqmoCovDetailHtml(cov);
   const mb = nqmoFix(st.size_mb, 1);
   if(mb !== null)
-    h += warpKV(_t('ui.nqmo.store'), esc(mb + ' MB') +
-                (st.read_only ? ' ' + warpChip(_t('ui.nqmo.store.ro'), 'hp-dead') : ''));
+    h += warpKV(_t('ui.nqmo.store'), '<span dir="ltr">' + esc(mb + ' MB') + '</span>' +
+                (st.read_only ? ' ' + warpChip(_t('ui.nqmo.store.ro'), 'hp-dead') : '') +
+                (st.recreated === true ? ' ' + warpChip(_t('ui.nqmo.store.recreated'), 'hp-noreturn') : ''));
+  h += nqmoErrorsHtml(s.errors);
   const g = nqmoArr(s.global), adv = nqmoArr(s.advisories), corr = nqmoArr(s.correlations);
+  // در «فقط مشاهده» تشخیص‌ها محاسبه می‌شوند ولی عمداً پنهان‌اند (سندِ ۰۱ §۴)؛ «هیچ تشخیصی
+  // نیست» آن‌جا ادعای بی‌پایه است. شمارِ سایه‌ای از promotion می‌آید.
+  const shadow = obj(s.promotion).shadow_high_7d;
+  const obs = s.mode === 'OBSERVATION_ONLY';
   h += '<div class="ed-sec">' + _t('ui.nqmo.global') + '</div>' +
-       (g.length ? g.map(nqmoDiagHtml).join('') : nqmoMut(_t('ui.nqmo.noglobal')));
+       (g.length ? g.map(nqmoDiagHtml).join('') + nqmoAckAllBtn(g)
+        : obs ? nqmoMut(_t('ui.nqmo.obs.hidden')) +
+                (Number.isSafeInteger(shadow) && shadow > 0
+                  ? ' ' + warpChip(_t('ui.nqmo.obs.shadow', {p0: shadow}), 'hp-noreturn') : '')
+        : nqmoMut(_t('ui.nqmo.noglobal')));
   if(adv.length)
     h += '<div class="ed-sec">' + _t('ui.nqmo.adv') + '</div>' + adv.map(nqmoAdvHtml).join('');
+  h += nqmoCorrSummaryHtml(s.correlation_summary);
   if(s.detail === true && corr.length)
     h += '<div class="ed-sec">' + _t('ui.nqmo.corr') + '</div>' +
          '<div class="mono" data-ltr dir="ltr" style="font-size:11px;text-align:left">' +
@@ -7159,31 +7867,82 @@ function nqmoSortPeers(peers){
 }
 function nqmoPeerRowHtml(p, i){
   const rtt = nqmoFix(p.rtt_ms_med, 0), loss = nqmoPct(p.loss_point);
+  const hist = (p.history && typeof p.history === 'object' && !Array.isArray(p.history)) ? p.history : {};
   // عدد و یکا در span ِ ltr: در متنِ راست‌چین «62 ms» وارونه («ms ۶۲») می‌نشست
   return '<tr><td><a href="#" onclick="showNqmoPeer(' + i + ');return false" ' +
       'style="color:var(--blue);text-decoration:none">' +
       nqmoLtr(p.name) + '</a> ' + nqmoLtr(p.iface, true) + '</td>' +
     '<td>' + (p.quality ? nqmoChip('ui.nqmo.q.', p.quality) : '—') + '</td>' +
-    '<td>' + (rtt === null ? '—' : '<span dir="ltr">' + esc(rtt) + ' ms</span>') + '</td>' +
-    '<td>' + (loss === null ? '—' : '<span dir="ltr">' + esc(loss) + '%</span>') + '</td>' +
+    '<td>' + (rtt === null ? '—' : '<span dir="ltr">' + esc(rtt) + ' ms</span>') +
+             nqmoSparkHtml(hist.rtt_ms, 'rtt') + '</td>' +
+    '<td>' + (loss === null ? '—' : '<span dir="ltr">' + esc(loss) + '%</span>') +
+             nqmoSparkHtml(hist.loss, 'loss') + '</td>' +
     '<td>' + (p.mtu_status ? nqmoChip('ui.nqmo.mtu.', p.mtu_status) : '—') + '</td>' +
     '<td>' + (p.open ? esc(p.open) + ' · ' + nqmoChip('ui.nqmo.lv.', p.top_confidence) + ' ' +
                        esc(_tk('ui.nqmo.cls.', p.top_class)) : '—') + '</td></tr>';
+}
+// اسپارک‌لاینِ ۲۴ ساعته (§29.153): SVG ِ درون‌خطی، یک نقطه برای هر ساعت، خانه‌ی null
+// خط را می‌شکند (نه صفر، نه درون‌یابی). مقدارها فقط عددِ متناهیِ نامنفی؛ هر چیزِ
+// دیگر «بدونِ نمودار». y از بالا کوچک‌تر است، پس وارونه می‌شود. بدونِ هیچ متنِ
+// داده‌ای داخلِ SVG ⇒ چیزی برای تزریق نیست.
+function nqmoSparkHtml(arr, kind){
+  if(!Array.isArray(arr) || !arr.length || arr.length > 48) return '';
+  const vals = arr.map(v => (typeof v === 'number' && isFinite(v) && v >= 0) ? v : null);
+  const nums = vals.filter(v => v !== null);
+  if(nums.length < 2) return '';
+  const W = 72, H = 16, max = Math.max(...nums, kind === 'loss' ? 0.01 : 1), min = 0;
+  const x = i => (i * (W - 2) / (vals.length - 1) + 1).toFixed(1);
+  const y = v => (H - 1 - (v - min) / (max - min) * (H - 2)).toFixed(1);
+  const segs = [];
+  let cur = [];
+  vals.forEach((v, i) => {
+    if(v === null){ if(cur.length > 1) segs.push(cur); cur = []; return; }
+    cur.push(x(i) + ',' + y(v));
+  });
+  if(cur.length > 1) segs.push(cur);
+  if(!segs.length) return '';
+  const last = vals[vals.length - 1];
+  const color = kind === 'loss' ? 'var(--amber)' : 'var(--blue)';
+  return '<svg class="nq-spark" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H +
+    '" aria-hidden="true" style="vertical-align:middle;margin-inline-start:6px;direction:ltr">' +
+    segs.map(s => '<polyline fill="none" stroke="' + color + '" stroke-width="1.2" points="' +
+                  s.join(' ') + '"/>').join('') +
+    (last !== null ? '<circle cx="' + x(vals.length - 1) + '" cy="' + y(last) + '" r="1.6" fill="' +
+                     color + '"/>' : '') + '</svg>';
+}
+// چرا عددی غایب است: کیفیتِ هر جریانِ داوری‌شده (S1 = RTT، S2 = تکه‌ها، S4 = گمشدگی)
+// و توکن‌های quality_why ِ موتور (واژگانِ باز ⇒ خامِ لاتین، نه کلیدِ ترجمه)
+function nqmoStreamsHtml(m){
+  const st = (m.streams && typeof m.streams === 'object' && !Array.isArray(m.streams)) ? m.streams : {};
+  const names = Object.keys(st).filter(s => typeof st[s] === 'string');
+  const why = (Array.isArray(m.why) ? m.why : []).filter(w => typeof w === 'string' && /^[A-Za-z0-9_:-]{1,40}$/.test(w));
+  if(!names.length && !why.length) return '';
+  let h = names.map(s => nqmoLtr(s, true) + ' ' + nqmoChip('ui.nqmo.dq.', st[s])).join(' ');
+  if(why.length)
+    h += (h ? ' · ' : '') + nqmoMut(_t('ui.nqmo.whytok')) + ' ' +
+         '<span class="mono" dir="ltr" style="font-size:11px">' + why.map(esc).join(' ') + '</span>';
+  return warpKV(_t('ui.nqmo.streams'), h);
 }
 function nqmoSummaryHtml(m){
   if(!m) return nqmoMut(_t('ui.nqmo.nosummary'));
   const med = nqmoFix(m.rtt_ms_med, 0), pt = nqmoPct(m.loss_point);
   const cnt = v => Number.isSafeInteger(v) && v >= 0 ? v : 0;      // شمارِ نمونه
   const or = v => v === null ? '—' : v;
+  const hist = (m.history && typeof m.history === 'object' && !Array.isArray(m.history)) ? m.history : {};
+  const sp = kind => {
+    const s = nqmoSparkHtml(hist[kind === 'loss' ? 'loss' : 'rtt_ms'], kind);
+    return s ? ' ' + s + ' ' + nqmoMut(_t('ui.nqmo.hist24')) : '';
+  };
   return warpKV(_t('ui.nqmo.th.quality'), m.quality ? nqmoChip('ui.nqmo.q.', m.quality) : '—') +
     warpKV(_t('ui.nqmo.th.rtt'), esc(med === null
       ? _t('ui.nqmo.rtt.few', {p0: cnt(m.rtt_n)})
-      : _t('ui.nqmo.rtt.v', {p0: med, p1: or(nqmoFix(m.rtt_ms_min, 0)), p2: cnt(m.rtt_n)}))) +
+      : _t('ui.nqmo.rtt.v', {p0: med, p1: or(nqmoFix(m.rtt_ms_min, 0)), p2: cnt(m.rtt_n)})) + sp('rtt')) +
     warpKV(_t('ui.nqmo.th.loss'), esc(pt === null
       ? _t('ui.nqmo.loss.few', {p0: cnt(m.loss_n)})
       : _t('ui.nqmo.loss.v', {p0: pt, p1: or(nqmoPct(m.loss_lb)), p2: or(nqmoPct(m.loss_ub)),
-                              p3: cnt(m.loss_n)}))) +
-    warpKV(_t('ui.nqmo.th.mtu'), m.mtu_status ? nqmoChip('ui.nqmo.mtu.', m.mtu_status) : '—');
+                              p3: cnt(m.loss_n)})) + sp('loss')) +
+    warpKV(_t('ui.nqmo.th.mtu'), m.mtu_status ? nqmoChip('ui.nqmo.mtu.', m.mtu_status) : '—') +
+    nqmoStreamsHtml(m);
 }
 function nqmoRecHtml(r){
   const cur = r.current_value === null || r.current_value === undefined ? '—' : nqmoVal(r.current_value);
@@ -7206,7 +7965,7 @@ function nqmoPeerHtml(p){
          '</button></div>';
   const ds = nqmoArr(p.diagnoses), rs = nqmoArr(p.recommendations), as = nqmoArr(p.advisories);
   h += '<div class="ed-sec">' + _t('ui.nqmo.diags') + '</div>' +
-       (ds.length ? ds.map(nqmoDiagHtml).join('') : nqmoMut(_t('ui.nqmo.nodiags')));
+       (ds.length ? ds.map(nqmoDiagHtml).join('') + nqmoAckAllBtn(ds) : nqmoMut(_t('ui.nqmo.nodiags')));
   if(rs.length) h += '<div class="ed-sec">' + _t('ui.nqmo.recs') + '</div>' + rs.map(nqmoRecHtml).join('');
   if(as.length) h += '<div class="ed-sec">' + _t('ui.nqmo.adv') + '</div>' + as.map(nqmoAdvHtml).join('');
   return h;
@@ -7252,19 +8011,67 @@ async function loadNqmo(){
   nqmoRows = s.available ? nqmoSortPeers(s.peers) : [];
   pc.classList.toggle('hidden', !s.available);
   ec.classList.toggle('hidden', !s.available);
-  el('nqmo-peers').querySelector('tbody').innerHTML = nqmoRows.length
-    ? nqmoRows.map(nqmoPeerRowHtml).join('')
-    : '<tr><td colspan="6">' + nqmoMut(_t('ui.nqmo.nopeers')) + '</td></tr>';
-  faLocalize(box); faLocalize(el('nqmo-peers'));
+  nqmoRenderPeers();
+  faLocalize(box);
   if(s.available) loadNqmoEvents();
   nqmoSchedule();
+}
+// فیلترها فقط سمتِ مرورگر (§29.154): سرور همان سند را می‌دهد، رندر از nqmoRows/nqmoEvs
+let nqmoFilt = {q: '', only: false}, nqmoEvFilt = {q: '', kind: ''}, nqmoEvs = [];
+const NQMO_EV_KINDS = ['', 'open', 'escalated', 'cleared'];
+function nqmoRenderPeers(){
+  const tb = el('nqmo-peers') && el('nqmo-peers').querySelector('tbody');
+  if(!tb) return;
+  nqmoFilt.q = el('nqmo-pf') ? el('nqmo-pf').value : '';
+  const rows = nqmoFilterRows(nqmoRows, nqmoFilt);
+  tb.innerHTML = rows.length
+    ? rows.map(({p, i}) => nqmoPeerRowHtml(p, i)).join('')
+    : '<tr><td colspan="6">' + nqmoMut(_t(nqmoRows.length ? 'ui.nqmo.filter.empty' : 'ui.nqmo.nopeers')) + '</td></tr>';
+  if(el('nqmo-pf-n'))
+    el('nqmo-pf-n').textContent = nqmoRows.length ? _t('ui.nqmo.filter.n', {p0: rows.length, p1: nqmoRows.length}) : '';
+  if(el('nqmo-pf-only')) el('nqmo-pf-only').classList.toggle('primary', nqmoFilt.only);
+  faLocalize(el('nqmo-peers')); if(el('nqmo-pf-n')) faLocalize(el('nqmo-pf-n'));
+}
+function nqmoToggleOnly(){ nqmoFilt.only = !nqmoFilt.only; nqmoRenderPeers(); }
+function nqmoEvKind(k){ nqmoEvFilt.kind = NQMO_EV_KINDS.includes(k) ? k : ''; nqmoRenderEvents(); }
+function nqmoEvKindsHtml(cur){
+  return NQMO_EV_KINDS.map(k => '<button style="padding:1px 8px;font-size:11px"' +
+    (k === cur ? ' class="primary"' : '') + ' onclick="nqmoEvKind(\'' + k + '\')">' +
+    esc(k ? _tk('ui.nqmo.ev.', k) : _t('ui.nqmo.evall')) + '</button>').join(' ');
+}
+function nqmoRenderEvents(){
+  const box = el('nqmo-events');
+  if(!box) return;
+  nqmoEvFilt.q = el('nqmo-ef') ? el('nqmo-ef').value : '';
+  const rows = nqmoFilterEvents(nqmoEvs, nqmoEvFilt);
+  box.innerHTML = rows.length ? nqmoEventsHtml(rows)
+    : nqmoMut(_t(nqmoEvs.length ? 'ui.nqmo.filter.empty' : 'ui.nqmo.noevents'));
+  if(el('nqmo-ef-kinds')) el('nqmo-ef-kinds').innerHTML = nqmoEvKindsHtml(nqmoEvFilt.kind);
+  if(el('nqmo-ef-n'))
+    el('nqmo-ef-n').textContent = nqmoEvs.length ? _t('ui.nqmo.filter.n', {p0: Math.min(rows.length, 50), p1: nqmoEvs.length}) : '';
+  faLocalize(box); if(el('nqmo-ef-n')) faLocalize(el('nqmo-ef-n'));
 }
 async function loadNqmoEvents(){
   const box = el('nqmo-events');
   let r;
   try{ r = await api('/api/nqmo/events', {since: 0, limit: 200}); }catch(e){ return; }
-  box.innerHTML = r.ok ? nqmoEventsHtml(r.events) : nqmoMut(r.error || '');
-  faLocalize(box);
+  if(!r.ok){ box.innerHTML = nqmoMut(r.error || ''); return; }
+  nqmoEvs = nqmoArr(r.events);
+  nqmoRenderEvents();
+}
+// تأییدِ گروهی: یکی‌یکی از همان مسیر، تا هر رد (مثلاً «دیگر باز نیست») جدا شمرده شود
+async function nqmoAckAll(ids){
+  if(!can('nqmo.ack') || !Array.isArray(ids)) return;
+  ids = ids.filter(v => Number.isSafeInteger(v) && v > 0).slice(0, 100);
+  if(!ids.length) return;
+  if(!await askConfirm(_t('ui.nqmo.ackall.confirm', {p0: ids.length}))) return;
+  let ok = 0;
+  for(const id of ids){
+    const r = await nqmoPost('/api/nqmo/ack', {id: id});
+    if(r && r.ok) ok++;
+  }
+  toast(_t('ui.nqmo.ackall.ok', {p0: ok, p1: ids.length}), ok === ids.length);
+  nqmoAfterCommand();
 }
 function showNqmoPeer(i){
   const p = nqmoRows[i];
@@ -7303,7 +8110,7 @@ async function nqmoPost(path, body){
 }
 async function nqmoAck(id){
   if(!can('nqmo.ack') || !nqmoId(id)) return;
-  if(!confirm(_t('ui.nqmo.ack.confirm', {p0: id}))) return;
+  if(!await askConfirm(_t('ui.nqmo.ack.confirm', {p0: id}))) return;
   const r = await nqmoPost('/api/nqmo/ack', {id: id});
   if(!r) return;
   if(!r.ok){ toast(nqmoErr(r), false); return; }
@@ -7313,7 +8120,7 @@ async function nqmoAck(id){
 async function nqmoProbe(){
   const c = nqmoPeerCtx;
   if(!c || !can('nqmo.probe')) return;
-  if(!confirm(_t('ui.nqmo.probe.confirm', {p0: c.name}))) return;
+  if(!await askConfirm(_t('ui.nqmo.probe.confirm', {p0: c.name}))) return;
   const r = await nqmoPost('/api/nqmo/probe', {iface: c.iface, name: c.name});
   if(!r) return;
   if(!r.ok){ toast(nqmoErr(r), false); return; }
@@ -7324,7 +8131,7 @@ async function nqmoProbe(){
 async function nqmoSetMode(to){
   if(!can('nqmo.manage') || !NQMO_MODES.includes(to)) return;
   const cur = nqmoEngineMode || (nqmoLast && nqmoLast.mode);
-  if(!confirm(_t('ui.nqmo.mode.confirm', {p0: _tk('ui.nqmo.md.', cur),
+  if(!await askConfirm(_t('ui.nqmo.mode.confirm', {p0: _tk('ui.nqmo.md.', cur),
                                           p1: _tk('ui.nqmo.md.', to)}))) return;
   const r = await nqmoPost('/api/nqmo/mode', {to: to});
   if(!r) return;
@@ -7533,14 +8340,15 @@ async function submitPanelUser(name){
 }
 
 async function delUser(name){
-  if(!confirm(_t('ui.js.delUser.1', {p0: name}))) return;
+  if(!await askConfirm(_t('ui.js.delUser.1', {p0: name}), {danger: true, ok: _t('ui.ux.del')})) return;
   const r = await api('/api/users/delete', {username: name});
   if(!r.ok){ toast(r.error || _t('ui.js.addWarpSniHost.3'), false); return; }
   toast(_t('ui.js.delPeer.2', {p0: name}), true);
   loadPanelUsers();
 }
 async function resetUserPw(name){
-  const pw = prompt(_t('ui.js.resetUserPw.1', {p0: name}));
+  // رمز با ورودیِ password (prompt ِ بومی آن را آشکار نشان می‌داد)
+  const pw = await askPrompt(_t('ui.js.resetUserPw.1', {p0: name}), '', {type: 'password'});
   if(!pw) return;
   const r = await api('/api/users/reset', {username: name, password: pw});
   if(!r.ok){ toast(r.error || _t('ui.js.addWarpSniHost.3'), false); return; }
@@ -7606,7 +8414,7 @@ async function submitRole(orig){
 }
 
 async function delRole(name){
-  if(!confirm(_t('ui.js.delRole.1', {p0: name}))) return;
+  if(!await askConfirm(_t('ui.js.delRole.1', {p0: name}), {danger: true, ok: _t('ui.ux.del')})) return;
   const r = await api('/api/roles/delete', {name: name});
   if(!r.ok){ toast(r.error || _t('ui.js.addWarpSniHost.3'), false); return; }
   toast(_t('ui.js.delRole.3', {p0: name}), true);
@@ -7690,7 +8498,7 @@ async function doRestore(){
       if(d.add.length) lines.push('  + ' + d.add.slice(0, 10).join(', ') +
         (d.add.length > 10 ? ' …' : ''));
     });
-    if(!confirm(lines.join('\n'))){ el('b-msg').textContent = ''; return; }
+    if(!await askConfirm(lines.join('\n'), {danger: true})){ el('b-msg').textContent = ''; return; }
     const r = await fetch('/api/restore', {method: 'POST',
       headers: {'Content-Type': 'application/octet-stream', 'X-Confirm-Password': pw},
       body: buf});
@@ -8099,11 +8907,826 @@ async function showLogModal(){
   pre.scrollTop = pre.scrollHeight;
 }
 
+// =====================================================================
+// ================ لایه‌ی تجربه‌ی کاربری (۷ نوامبر ۲۰۲۶) ================
+// =====================================================================
+// هیچ‌کدام از این‌ها مسیرِ داده یا API ِ تازه‌ای نمی‌سازند: فقط همان داده‌ی
+// /api/stats و endpointهای موجود را بهتر نشان می‌دهند. هر جا مجوز لازم است،
+// همان can() ِ applyRole تصمیم می‌گیرد و سرور هم دوباره می‌سنجد.
+
+// ---- حالت‌های یکدستِ بارگذاری / خالی / خطا ----
+// action = {label, fn}: fn متنِ ثابتِ کد است ('loadWarp()')، هرگز داده‌ی کاربر.
+function RETRY(fn){ return {label: _t('ui.ux.st.retry'), fn: fn}; }
+function stateHtml(kind, msg, action){
+  const def = kind === 'loading' ? _t('ui.common.loadingstate')
+            : kind === 'error' ? _t('ui.ux.st.error') : _t('ui.ux.st.none');
+  return '<div class="st-box st-' + kind + '" role="' + (kind === 'error' ? 'alert' : 'status') + '">' +
+    (kind === 'loading' ? '<span class="st-spin" aria-hidden="true"></span>'
+                        : '<span aria-hidden="true">' + (kind === 'error' ? '⚠' : '∅') + '</span>') +
+    '<span>' + esc(msg || def) + '</span>' +
+    (action ? '<button type="button" onclick="' + esc(action.fn) + '">' + esc(action.label) + '</button>' : '') +
+    '</div>';
+}
+function stateRow(cols, kind, msg, action){
+  return '<tr class="st-row"><td colspan="' + cols + '">' + stateHtml(kind, msg, action) + '</td></tr>';
+}
+function statsLoadFailed(){
+  [['users', 11], ['tunnels', 10], ['ifaces', 10]].forEach(function(p){
+    const tb = el(p[0]) && el(p[0]).querySelector('tbody');
+    if(tb) tb.innerHTML = stateRow(p[1], 'error', '', RETRY('refresh(true)'));
+  });
+}
+function auditLoadFailed(msg){
+  if(lastAudit && lastAudit.length) return;   // داده‌ی سالمِ قبلی بماند
+  const tb = el('audit').querySelector('tbody');
+  if(tb) tb.innerHTML = stateRow(8, 'error', msg || '', RETRY('loadAudit()'));
+}
+
+// ---- واگردِ روشن/خاموشِ کاربر ----
+async function undoPeerToggle(iface, name, enable){
+  busy = true;
+  try{
+    const r = await api('/api/peer/toggle', {iface: iface, name: name, enable: enable});
+    toast(r.ok ? _t('ui.ux.undone', {name: name}) : (r.error || _t('ui.js.addWarpSniHost.3')), r.ok);
+  }catch(e){ if(e !== 'auth') toast(_t('ui.js.addWarpSniHost.2'), false); }
+  finally{ busy = false; }
+  refresh(true);
+}
+
+// ---- عنصرهای قابلِ فوکوسِ دیده‌شده (برای تله‌ی Tab و فوکوسِ اول) ----
+function focusables(root){
+  return Array.from(root.querySelectorAll(
+    'a[href],button,input:not([type=hidden]),select,textarea,[tabindex]'))
+    .filter(e => !e.disabled && e.getAttribute('tabindex') !== '-1' &&
+                 !e.closest('.hidden') && e.getClientRects().length > 0);
+}
+function trapTab(ev, root){
+  const f = focusables(root);
+  if(!f.length) return;
+  const first = f[0], last = f[f.length - 1], a = document.activeElement;
+  if(!root.contains(a)){ ev.preventDefault(); first.focus(); return; }
+  if(ev.shiftKey && a === first){ ev.preventDefault(); last.focus(); }
+  else if(!ev.shiftKey && a === last){ ev.preventDefault(); first.focus(); }
+}
+
+// ---- پنجره‌ی تأیید/ورودی (جای confirm/prompt ِ بومی) ----
+// o: {title, text, ok, cancel, danger, typeText, noCancel, fields:[{id,type,label,value,min,max,readonly,ltr}]}
+// برمی‌گرداند: انصراف ⇒ null؛ بی‌فیلد ⇒ true؛ با فیلد ⇒ {id: مقدار}.
+// typeText: دکمه‌ی تأیید تا وقتی همین متن دقیقاً تایپ نشده خاموش می‌ماند.
+let _ask = null;
+function askDialog(o){
+  o = o || {};
+  if(_ask) _askDone(null);
+  return new Promise(resolve => {
+    el('ask-box').classList.toggle('danger', !!o.danger);
+    el('ask-title').textContent = o.title || _t(o.danger ? 'ui.ux.ask.danger' : 'ui.ux.ask.title');
+    el('ask-body').textContent = o.text || '';
+    el('ask-msg').textContent = '';
+    const okb = el('ask-ok'), cb = el('ask-cancel');
+    okb.textContent = o.ok || _t('ui.ux.ask.ok');
+    okb.className = o.danger ? 'danger solid' : 'primary';
+    cb.textContent = o.cancel || _t('ui.ux.ask.cancel');
+    cb.classList.toggle('hidden', !!o.noCancel);
+    let h = '';
+    if(o.typeText){
+      h += '<div class="ask-type">' + esc(_t('ui.ux.ask.type')) + '<br><code>' +
+        esc(o.typeText) + '</code></div>' +
+        '<input type="text" id="ask-f-_type" autocomplete="off" spellcheck="false" dir="auto" ' +
+        'aria-label="' + esc(_t('ui.ux.ask.type')) + '">';
+    }
+    (o.fields || []).forEach(f => {
+      const id = 'ask-f-' + f.id;
+      if(f.type === 'checkbox'){
+        h += '<label class="chk"><input type="checkbox" id="' + id + '"' + (f.value ? ' checked' : '') +
+          '> ' + esc(f.label) + '</label>';
+        return;
+      }
+      h += (f.label ? '<label for="' + id + '">' + esc(f.label) + '</label>' : '') +
+        '<input type="' + esc(f.type || 'text') + '" id="' + id + '" value="' +
+        esc(f.value == null ? '' : f.value) + '"' +
+        (f.min != null ? ' min="' + esc(f.min) + '"' : '') +
+        (f.max != null ? ' max="' + esc(f.max) + '"' : '') +
+        (f.readonly ? ' readonly' : '') + (f.ltr ? ' dir="ltr"' : '') +
+        (o.fields.length === 1 && !f.label ? ' aria-labelledby="ask-body"' : '') +
+        ' autocomplete="' + (f.type === 'password' ? 'new-password' : 'off') + '" spellcheck="false">';
+    });
+    el('ask-fields').innerHTML = h;
+    const typed = el('ask-f-_type');
+    const check = () => { okb.disabled = !!typed && typed.value.trim() !== String(o.typeText).trim(); };
+    if(typed) typed.addEventListener('input', check);
+    check();
+    const a = document.activeElement;
+    _ask = {resolve: resolve, ret: (a && !el('ask-bg').contains(a)) ? a : null, o: o};
+    el('ask-bg').classList.remove('hidden');
+    // فوکوسِ اول: نخستین فیلد؛ در تأییدِ خطرناکِ بی‌فیلد روی «انصراف»، تا Enter ِ
+    // عجولانه چیزی را حذف نکند
+    const first = el('ask-fields').querySelector('input:not([type=checkbox])') ||
+                  el('ask-fields').querySelector('input');
+    setTimeout(() => {
+      if(!_ask) return;
+      if(first){ first.focus(); if(first.type !== 'checkbox' && first.select) first.select(); }
+      else (o.danger ? cb : okb).focus();
+    }, 30);
+  });
+}
+function _askDone(val){
+  if(!_ask) return;
+  const a = _ask; _ask = null;
+  el('ask-bg').classList.add('hidden');
+  el('ask-fields').innerHTML = '';   // رمزِ تایپ‌شده در DOM نماند
+  try{ if(a.ret && a.ret.isConnected) a.ret.focus(); }catch(e){}
+  a.resolve(val);
+}
+function askOk(){
+  if(!_ask || el('ask-ok').disabled) return;
+  const o = _ask.o;
+  if(!o.fields || !o.fields.length){ _askDone(true); return; }
+  const out = {};
+  for(const f of o.fields){
+    const e = el('ask-f-' + f.id);
+    if(f.type === 'checkbox'){ out[f.id] = e.checked; continue; }
+    if(f.type === 'number'){
+      const v = e.value.trim(), n = Number(v);
+      if(v === '' || !isFinite(n) || (f.min != null && n < f.min) || (f.max != null && n > f.max)){
+        el('ask-msg').textContent = faNum(_t('ui.ux.ask.range', {min: f.min, max: f.max}));
+        e.focus(); return;
+      }
+    }
+    out[f.id] = e.value;
+  }
+  _askDone(out);
+}
+function askConfirm(text, o){
+  return askDialog(Object.assign({text: text}, o || {})).then(v => !!v);
+}
+function askPrompt(text, def, o){
+  o = o || {};
+  return askDialog({title: o.title || _t('ui.ux.ask.input'), text: text,
+      ok: o.readonly ? _t('ui.ux.close') : o.ok, noCancel: !!o.readonly,
+      fields: [{id: 'v', type: o.type || 'text', value: def == null ? '' : def,
+                readonly: !!o.readonly, ltr: !!(o.ltr || o.readonly)}]})
+    .then(v => (v && !o.readonly) ? v.v : null);
+}
+
+// ---- مودالِ اصلی: نقشِ دیالوگ، فوکوسِ اول و بازگشتی، و «تغییرِ ذخیره‌نشده» ----
+// به‌جای دست‌بردن در ده‌ها تابعِ show*Modal، باز/بسته‌شدنِ #modal-bg با یک
+// MutationObserver دیده می‌شود — هر مودالِ تازه هم خودکار همین رفتار را می‌گیرد.
+let _modalRet = null, _modalDirty = false;
+function modalOpen(){ return !el('modal-bg').classList.contains('hidden'); }
+function initModalA11y(){
+  const bg = el('modal-bg'), body = el('modal-body');
+  let was = modalOpen();
+  new MutationObserver(() => {
+    const now = modalOpen();
+    if(now === was) return;
+    was = now;
+    if(now){
+      const a = document.activeElement;
+      _modalRet = (a && a !== document.body && !bg.contains(a)) ? a : null;
+      _modalDirty = false;
+      // بعضی مودال‌ها خودشان فیلدی را فوکوس می‌کنند (۶۰ms)؛ اگر کرده‌اند دست نمی‌زنیم
+      setTimeout(() => {
+        if(!modalOpen() || bg.contains(document.activeElement)) return;
+        const f = focusables(body).find(e => /^(INPUT|SELECT|TEXTAREA)$/.test(e.tagName));
+        (f || el('modal-ok')).focus();
+      }, 90);
+    } else {
+      _modalDirty = false;
+      const r = _modalRet; _modalRet = null;
+      try{ if(r && r.isConnected) r.focus(); }catch(e){}
+    }
+  }).observe(bg, {attributes: true, attributeFilter: ['class']});
+  // «کثیف» فقط در مودالِ فرم‌دار (دکمه‌ی اصلیِ ذخیره دارد) و نه جعبه‌ی جست‌وجوی لاگ‌ها
+  body.addEventListener('input', ev => {
+    const t = ev.target;
+    if(!ev.isTrusted || t.classList.contains('filter') || t.classList.contains('pxlog-filter')) return;
+    if(body.querySelector('button.primary')) _modalDirty = true;
+  });
+}
+function closeModalSafe(){
+  if(el('modal-ok').classList.contains('hidden')) return;
+  if(_modalDirty){
+    askConfirm(_t('ui.ux.ask.discard'), {danger: true, ok: _t('ui.ux.ask.discard.ok')})
+      .then(y => { if(y){ _modalDirty = false; el('modal-ok').click(); } });
+    return;
+  }
+  el('modal-ok').click();   // در همه‌ی مودال‌ها دکمه‌ی «بستن» است و پاک‌سازیِ خودش را دارد
+}
+
+// ---- منوهای نوارِ بالا (مدیریت / حساب) ----
+let _menuOpen = '';
+function menuItems(pop){
+  return Array.from(pop.querySelectorAll('[role=menuitem]')).filter(b => !b.classList.contains('hidden'));
+}
+function menuToggle(k){ if(_menuOpen === k) menuClose(); else menuOpenK(k); }
+function menuOpenK(k){
+  menuClose(false);
+  const pop = el(k + '-pop'), btn = el(k + '-btn');
+  pop.classList.remove('hidden');
+  btn.setAttribute('aria-expanded', 'true');
+  _menuOpen = k;
+  const it = menuItems(pop);
+  if(it[0]) it[0].focus();
+}
+// refocus پیش‌فرض true: آیتمی که مودال باز می‌کند فوکوس را به دکمه‌ی منو
+// برمی‌گرداند تا مودال هنگامِ بسته‌شدن بداند فوکوس را کجا پس بدهد.
+function menuClose(refocus){
+  if(!_menuOpen) return;
+  const k = _menuOpen; _menuOpen = '';
+  el(k + '-pop').classList.add('hidden');
+  el(k + '-btn').setAttribute('aria-expanded', 'false');
+  if(refocus !== false) el(k + '-btn').focus();
+}
+function menuMove(key){
+  const it = menuItems(el(_menuOpen + '-pop'));
+  if(!it.length) return;
+  let i = it.indexOf(document.activeElement);
+  if(key === 'Home') i = 0;
+  else if(key === 'End') i = it.length - 1;
+  else i = (i + (key === 'ArrowDown' ? 1 : -1) + it.length) % it.length;
+  it[i].focus();
+}
+
+// ---- ناوبریِ بخش‌ها و جمع‌کردنِ هر بخش ----
+const SECS = [];          // [{k, h, els, chip, label}]
+let _folded = new Set(), _secActive = '';
+function navBuild(){
+  try{ _folded = new Set(JSON.parse(localStorage.getItem('wgFold') || '[]')); }
+  catch(e){ _folded = new Set(); }
+  const nav = el('secnav');
+  document.querySelectorAll('h2[data-sec]').forEach(h => {
+    const k = h.dataset.sec, els = [];
+    // محتوای بخش = همه‌ی خواهرهای بعدی تا سرتیترِ بعدی (یک‌بار، پیش از هر درجِ پویا)
+    for(let n = h.nextElementSibling; n && !n.matches('h2[data-sec]') && n.id !== 'overlay';
+        n = n.nextElementSibling) els.push(n);
+    let label = '';
+    h.childNodes.forEach(c => { if(c.nodeType === 3) label += c.nodeValue; });
+    label = label.replace(/\s+/g, ' ').trim();
+    const fb = document.createElement('button');
+    // شِورونِ SVG و نه نویسه‌ی ▾: زیرمجموعه‌ی Vazirmatn آن را ندارد و نقطه‌ای ریز می‌شد
+    fb.type = 'button'; fb.className = 'sec-fold';
+    fb.innerHTML = '<svg viewBox="0 0 10 10" width="11" height="11" aria-hidden="true">' +
+      '<path d="M2 3.5 5 6.5 8 3.5" fill="none" stroke="currentColor" stroke-width="1.7" ' +
+      'stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    fb.title = _t('ui.ux.sec.fold');
+    fb.setAttribute('aria-label', _t('ui.ux.sec.fold') + ': ' + label);
+    h.insertBefore(fb, h.firstChild);
+    h.addEventListener('click', ev => {
+      if(ev.target.closest('a,input,select,textarea')) return;
+      secFold(k);
+    });
+    const chip = document.createElement('button');
+    chip.type = 'button'; chip.className = 'snav';
+    chip.innerHTML = '<span>' + esc(label) + '</span><span class="snb hidden"></span>';
+    chip.addEventListener('click', () => secGo(k));
+    nav.appendChild(chip);
+    SECS.push({k: k, h: h, els: els, chip: chip, label: label, fb: fb});
+  });
+  const sp = document.createElement('span'); sp.className = 'snav-sp'; nav.appendChild(sp);
+  const fa = document.createElement('button');
+  fa.type = 'button'; fa.id = 'snav-fold'; fa.className = 'snav';
+  fa.addEventListener('click', foldAllToggle);
+  nav.appendChild(fa);
+  SECS.forEach(s => applyFold(s, _folded.has(s.k)));
+  navSync();
+  window.addEventListener('scroll', navScrollTick, {passive: true});
+  window.addEventListener('resize', navScrollTick, {passive: true});
+}
+function secVisible(s){ return !s.h.classList.contains('hidden'); }
+function applyFold(s, on){
+  s.h.classList.toggle('is-folded', on);
+  s.els.forEach(e => e.classList.toggle('sec-folded', on));
+  s.fb.setAttribute('aria-expanded', String(!on));
+  s.chip.classList.toggle('folded', on);
+}
+function saveFold(){
+  try{ localStorage.setItem('wgFold', JSON.stringify(Array.from(_folded))); }catch(e){}
+}
+// نمودارهای canvas ِ بخشی که پنهان بوده عرضِ صفر گرفته‌اند؛ پس از بازشدن
+// همان مسیرِ «تغییرِ اندازه» ِ صفحه آن‌ها را از نو می‌کشد.
+function afterUnfold(){
+  rerender();
+  try{ window.dispatchEvent(new Event('resize')); }catch(e){}
+}
+function secFold(k, force){
+  const s = SECS.find(x => x.k === k); if(!s) return;
+  const on = force === undefined ? !_folded.has(k) : !!force;
+  if(on) _folded.add(k); else _folded.delete(k);
+  applyFold(s, on); saveFold(); navSync();
+  if(!on) afterUnfold();
+  navScrollTick();
+}
+function foldAllToggle(){
+  const vis = SECS.filter(secVisible);
+  const anyOpen = vis.some(s => !_folded.has(s.k));
+  vis.forEach(s => { if(anyOpen) _folded.add(s.k); else _folded.delete(s.k); applyFold(s, anyOpen); });
+  saveFold(); navSync();
+  if(!anyOpen) afterUnfold();
+}
+function reducedMotion(){
+  try{ return matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(e){ return false; }
+}
+function secGo(k){
+  const s = SECS.find(x => x.k === k);
+  if(!s || !secVisible(s)) return;
+  if(_folded.has(k)) secFold(k, false);
+  s.h.scrollIntoView({behavior: reducedMotion() ? 'auto' : 'smooth', block: 'start'});
+  try{ s.fb.focus({preventScroll: true}); }catch(e){}
+  navActive(k);
+}
+function navSync(){
+  if(!SECS.length) return;
+  const vis = SECS.filter(secVisible);
+  SECS.forEach(s => s.chip.classList.toggle('hidden', !secVisible(s)));
+  el('secnav').classList.toggle('hidden', totpForced || vis.length < 2);
+  const anyOpen = vis.some(s => !_folded.has(s.k));
+  const fa = el('snav-fold');
+  fa.textContent = (anyOpen ? '⊟ ' : '⊞ ') + _t(anyOpen ? 'ui.ux.nav.foldall' : 'ui.ux.nav.unfoldall');
+  navScrollTick();
+}
+let _navRaf = 0;
+function navScrollTick(){
+  if(_navRaf) return;
+  _navRaf = requestAnimationFrame(() => {
+    _navRaf = 0;
+    const vis = SECS.filter(secVisible);
+    if(!vis.length) return;
+    // آستانه باید از scroll-margin-top ِ h2 (۶۰px) بزرگ‌تر باشد؛ وگرنه بخشی که
+    // secGo همین حالا به آن پریده، یک پیکسل پایین‌تر از آستانه می‌نشیند و چیپِ
+    // بخشِ قبلی روشن می‌ماند
+    const top = Math.max(el('secnav').getBoundingClientRect().bottom, 0) +
+                Math.max(40, Math.min(140, innerHeight * 0.25));
+    let act = vis[0];
+    vis.forEach(s => { if(s.h.getBoundingClientRect().top <= top) act = s; });
+    // ته صفحه: بخشِ کوتاهِ آخر هرگز به بالای صفحه نمی‌رسد
+    if(innerHeight + scrollY >= document.documentElement.scrollHeight - 4){
+      const last = vis.filter(s => s.h.getBoundingClientRect().top < innerHeight).pop();
+      if(last) act = last;
+    }
+    navActive(act.k);
+  });
+}
+function navActive(k){
+  if(_secActive === k) return;
+  _secActive = k;
+  SECS.forEach(s => {
+    const on = s.k === k;
+    s.chip.classList.toggle('on', on);
+    if(on) s.chip.setAttribute('aria-current', 'true'); else s.chip.removeAttribute('aria-current');
+  });
+  const s = SECS.find(x => x.k === k), nav = el('secnav');
+  if(!s) return;
+  const nr = nav.getBoundingClientRect(), cr = s.chip.getBoundingClientRect();
+  if(cr.left < nr.left) nav.scrollBy({left: cr.left - nr.left - 16});
+  else if(cr.right > nr.right) nav.scrollBy({left: cr.right - nr.right + 16});
+}
+function navBadge(k, text, bad){
+  const s = SECS.find(x => x.k === k); if(!s) return;
+  const b = s.chip.querySelector('.snb');
+  b.classList.toggle('hidden', !text);
+  b.classList.toggle('bad', !!bad);
+  if(b.textContent !== text) b.textContent = text || '';
+}
+function focusSectionFilter(){
+  const s = SECS.find(x => x.k === _secActive);
+  const pick = root => root && Array.from(root.querySelectorAll('input.filter'))
+    .find(e => e.getClientRects().length > 0);
+  let f = null;
+  if(s && !_folded.has(s.k)) s.els.some(e => (f = pick(e)));
+  if(!f && el('ufilter').getClientRects().length) f = el('ufilter');
+  if(f){ f.focus(); f.select(); }
+}
+
+// ---- سرستون‌های مرتب‌شونده: نشانگرِ جهت، aria-sort و دسترسیِ صفحه‌کلید ----
+function syncSortHeaders(){
+  [['users', usort], ['tunnels', tsort], ['ifaces', isort]].forEach(function(p){
+    const t = el(p[0]); if(!t) return;
+    t.querySelectorAll('th.sortable').forEach(th => {
+      const on = p[1].key && th.dataset.sk === p[1].key;
+      th.classList.toggle('s-asc', !!on && p[1].dir > 0);
+      th.classList.toggle('s-desc', !!on && p[1].dir < 0);
+      th.setAttribute('aria-sort', on ? (p[1].dir > 0 ? 'ascending' : 'descending') : 'none');
+    });
+  });
+}
+
+// ---- رویدادهای اخیر (زنگوله) ----
+// منبع‌ها: ممیزیِ ۲۴ ساعت (audit.view)، رویدادهای WARP (tun.view)، رویدادهای
+// NQMO (همان آرایه‌ای که بخشِ NQMO خودش می‌گیرد) و گذارِ سلامتِ تونل‌ها که
+// همین مرورگر بینِ دو نمونه‌ی /api/stats دیده. اصلاح‌های خودکارِ tunnel-guard
+// فقط به تلگرام می‌روند و در API نیستند — یادداشتِ پای کشو همین را می‌گوید.
+const TUN_FINE = new Set(['healthy', 'idle', 'chain']);
+const _tunPrev = new Map();
+let _evLive = [], _evAudit = [], _evWarp = [], _evOnlyBad = false;
+let _evSeen = 0, _evSeenShown = 0, _evTimer = null;
+function evEnabled(){ return !totpForced && (can('audit.view') || can('tun.view') || nqmoSeen()); }
+function evInit(){
+  try{ _evSeen = +localStorage.getItem('wgEvSeen') || 0; }catch(e){}
+  // نخستین بار: فقط رویدادهای از این پس «تازه» شمرده شوند، نه کلِ ۲۴ ساعت
+  if(!_evSeen){ _evSeen = Math.floor(Date.now() / 1000); evSaveSeen(); }
+}
+function evSaveSeen(){ try{ localStorage.setItem('wgEvSeen', String(_evSeen)); }catch(e){} }
+function auditSev(a){
+  if(!a.ok) return 'bad';
+  const s = String(a.action || ''), parts = new Set(s.split(/[._]/));
+  if(['del', 'disable', 'down', 'degrade', 'standby', 'failopen', 'delete'].some(w => parts.has(w)) ||
+     s === 'iface.loop.found') return 'bad';
+  if(['add', 'enable', 'up', 'fix', 'restore'].some(w => parts.has(w))) return 'ok';
+  return 'info';
+}
+function evTrack(s){
+  const seen = new Set();
+  const note = (key, iface, prev, cur, label) => {
+    if(prev === undefined || prev === cur) return;
+    if(TUN_FINE.has(prev) && TUN_FINE.has(cur)) return;   // healthy ↔ idle نوسانِ بی‌معناست
+    _evLive.push({ts: Date.now() / 1000, src: 'live', jump: key === 'sec' ? 'wg' : 'tun',
+      sev: TUN_FINE.has(cur) ? 'ok' : 'bad',
+      title: _t('ui.ux.ev.live.health', {i: iface, a: label(prev), b: label(cur)}), meta: ''});
+    if(_evLive.length > 60) _evLive.shift();
+    evDirty();
+  };
+  const tl = h => (TUN_HEALTH[h] || TUN_HEALTH.off).t;
+  (s.tunnels || []).forEach(t => {
+    const cur = t.health || (t.active ? 'healthy' : 'off'), key = 't:' + t.iface;
+    note('tun', t.iface, _tunPrev.get(key), cur, tl);
+    _tunPrev.set(key, cur); seen.add(key);
+  });
+  (s.sections || []).forEach(sec => {
+    const cur = sec.active ? 'healthy' : 'off', key = 's:' + sec.iface;
+    note('sec', sec.iface, _tunPrev.get(key), cur, tl);
+    _tunPrev.set(key, cur); seen.add(key);
+  });
+  Array.from(_tunPrev.keys()).forEach(k => { if(!seen.has(k)) _tunPrev.delete(k); });
+}
+async function evPoll(){
+  clearTimeout(_evTimer);
+  _evTimer = setTimeout(evPoll, 60000);
+  if(document.hidden || !evEnabled()) return;
+  const since = Date.now() / 1000 - 86400;
+  if(can('audit.view')){
+    try{
+      const r = await fetch('/api/audit?' + new URLSearchParams({category: 'all', days: '1'}))
+        .then(x => x.json());
+      // ورودهای موفق هر روز ده‌ها بار رخ می‌دهند و رویداد نیستند؛ ورودِ ناموفق هست
+      if(r && r.ok) _evAudit = (r.rows || [])
+        .filter(a => a.ts >= since && !(a.category === 'auth' && a.ok)).slice(0, 200);
+    }catch(e){}
+  } else _evAudit = [];
+  if(can('tun.view')){
+    try{
+      const r = await api('/api/warp/events', {});
+      if(r && r.ok) _evWarp = (r.events || []).filter(e => e.ts >= since).slice(0, 100);
+    }catch(e){}
+  } else _evWarp = [];
+  evDirty();
+}
+function evItems(){
+  const out = [], since = Date.now() / 1000 - 86400;
+  _evAudit.forEach(a => out.push({ts: a.ts, src: 'audit', jump: 'audit', sev: auditSev(a),
+    title: auditAction(a.action) + (a.target && a.target !== '*' ? ' — ' + a.target : ''),   // «*» = اقدامِ بی‌هدف (بکاپ، گزارش)
+    meta: [auditDetail(a.detail), auditActor(a.actor)].filter(Boolean).join(' · ')}));
+  _evWarp.forEach(e => out.push({ts: e.ts, src: 'warp', jump: 'warp',
+    sev: e.kind === 'restore' ? 'ok' : (['degrade', 'failopen_sni', 'standby'].includes(e.kind) ? 'bad' : 'info'),
+    title: 'WARP: ' + _tOr('ui.warpev.' + e.kind, e.label || e.kind), meta: e.detail || ''}));
+  if(nqmoSeen()) (nqmoEvs || []).forEach(e => {
+    if(!e || !e.ts || e.ts < since) return;
+    const kind = e.kind === 'cleared' && e.stale ? 'stale' : e.kind;
+    out.push({ts: e.ts, src: 'nqmo', jump: 'nqmo',
+      sev: kind === 'cleared' ? 'ok' : (kind === 'open' || kind === 'escalated' ? 'bad' : 'info'),
+      title: 'NQMO: ' + _tk('ui.nqmo.ev.', kind) + (e.class ? ' — ' + _tk('ui.nqmo.cls.', e.class) : ''),
+      meta: e.scope === 'PEER' ? (e.peer || '') + (e.iface ? ' @ ' + e.iface : '') : (e.subject || '')});
+  });
+  _evLive.forEach(e => { if(e.ts >= since) out.push(e); });
+  out.sort((a, b) => b.ts - a.ts);
+  // رویدادِ تکراری (مثلاً خودترمیمیِ دوره‌ایِ یک مسیر هر چند ثانیه) کشو را پر
+  // نکند: ردیف‌های پیاپیِ هم‌شکل یکی می‌شوند و شمارشان کنارِ عنوان می‌آید.
+  const merged = [];
+  out.forEach(it => {
+    const k = it.src + '\u0001' + it.sev + '\u0001' + it.title + '\u0001' + it.meta;
+    const last = merged[merged.length - 1];
+    if(last && last._k === k){ last.n++; last.oldest = it.ts; }
+    else merged.push(Object.assign({}, it, {_k: k, n: 1, oldest: it.ts}));
+  });
+  return merged.slice(0, 80);
+}
+function evOpenNow(){ return !el('evpanel').classList.contains('hidden'); }
+function evDirty(){ evBadge(); if(evOpenNow()) evRender(); }
+function evBadge(){
+  const b = el('bell-n'); if(!b) return;
+  const un = evItems().filter(i => i.ts > _evSeen && i.sev !== 'info');
+  b.classList.toggle('hidden', !un.length);
+  b.classList.toggle('bad', un.some(i => i.sev === 'bad'));
+  b.textContent = un.length > 9 ? faNum('9') + '+' : faNum(String(un.length));
+  el('bell-btn').setAttribute('aria-label', un.length
+    ? _t('ui.ux.ev.btn') + ' — ' + _t('ui.ux.ev.unread', {n: faNum(String(un.length))}) : _t('ui.ux.ev.btn'));
+}
+function evRender(){
+  const list = el('ev-list');
+  let items = evItems();
+  if(_evOnlyBad) items = items.filter(i => i.sev === 'bad');
+  if(!items.length){ list.innerHTML = stateHtml('empty', _t('ui.ux.ev.empty')); return; }
+  // متن‌ها faLocalize نمی‌شوند: نامِ کاربر و تونل (شناسه) باید لاتین بماند؛
+  // فقط زمانِ نسبی (agoFa) خودش ارقامِ زبان را دارد.
+  list.innerHTML = items.map(it =>
+    '<button type="button" class="ev-it ' + it.sev + (it.ts > _evSeenShown ? ' unread' : '') +
+      '" data-jump="' + esc(it.jump) + '">' +
+      '<span class="evd" aria-hidden="true"></span><span class="evb">' +
+      '<span class="evt">' + esc(it.title) +
+        (it.n > 1 ? ' <span class="evn">' + esc(_t('ui.ux.ev.times', {n: faNum(String(it.n))})) + '</span>' : '') +
+      '</span>' +
+      '<span class="evm">' + esc(agoFa(it.ts)) + ' · ' + esc(_t('ui.ux.ev.src.' + it.src)) +
+      (it.meta ? ' · ' + esc(it.meta) : '') + '</span></span></button>').join('');
+}
+function evFilter(onlyBad){
+  _evOnlyBad = !!onlyBad;
+  el('ev-f-all').classList.toggle('on', !_evOnlyBad);
+  el('ev-f-bad').classList.toggle('on', _evOnlyBad);
+  el('ev-f-all').setAttribute('aria-pressed', String(!_evOnlyBad));
+  el('ev-f-bad').setAttribute('aria-pressed', String(_evOnlyBad));
+  evRender();
+}
+function evMarkAll(){
+  const items = evItems();
+  _evSeen = Math.max(_evSeen, Math.floor(Date.now() / 1000), items.length ? Math.ceil(items[0].ts) : 0);
+  _evSeenShown = _evSeen;
+  evSaveSeen(); evBadge(); evRender();
+}
+function evToggle(){ if(evOpenNow()) evClose(); else evOpen(); }
+function evOpen(){
+  if(!evEnabled()) return;
+  menuClose(false);
+  _evSeenShown = _evSeen;   // آنچه پیش از باز شدن تازه بود، نشانِ «تازه» را نگه دارد
+  evRender();
+  el('evpanel').classList.remove('hidden');
+  el('bell-btn').setAttribute('aria-expanded', 'true');
+  _evSeen = Math.max(_evSeen, Math.floor(Date.now() / 1000));
+  evSaveSeen(); evBadge();
+  const f = focusables(el('evpanel'))[0]; if(f) f.focus();
+  evPoll();   // تازه‌ترین داده هنگامِ باز کردن
+}
+function evClose(refocus){
+  if(!evOpenNow()) return;
+  el('evpanel').classList.add('hidden');
+  el('bell-btn').setAttribute('aria-expanded', 'false');
+  if(refocus !== false) el('bell-btn').focus();
+}
+
+// ---- قلاب‌های پس از هر /api/stats و پس از هر applyRole ----
+function uxAfterStats(s){
+  const users = s.users || [];
+  navBadge('wg', users.length ? faNum(users.filter(u => u.online).length + '/' + users.length) : '');
+  const bad = (s.tunnels || []).filter(t => ['dead', 'noreturn', 'loop'].includes(t.health)).length;
+  navBadge('tun', bad ? '⚠ ' + faNum(String(bad)) : '', true);
+  evTrack(s);
+}
+function uxAfterRole(){
+  navSync();
+  el('adm-menu').classList.toggle('hidden', totpForced || !menuItems(el('adm-pop')).length);
+  const ev = evEnabled();
+  el('bell-btn').classList.toggle('hidden', !ev);
+  if(ev && !_evTimer) evPoll();
+  if(!ev) evClose(false);
+}
+
+// ---- جست‌وجوی سراسری و فرمان (Ctrl/⌘+K) ----
+const CK_GROUPS = ['user', 'tun', 'if', 'px', 'sec', 'act'];
+const CK_LANGS = {fa: 'فارسی', en: 'English', ru: 'Русский', zh: '中文'};
+let _ck = {items: [], sel: 0, ret: null};
+function cmdkNorm(s){
+  return String(s == null ? '' : s).toLowerCase()
+    .replace(/[يى]/g, 'ی').replace(/ك/g, 'ک').replace(/‌/g, ' ')
+    .replace(/[۰-۹]/g, d => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
+    .replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)));
+}
+function cmdkSource(){
+  const out = [];
+  const add = (g, ic, label, sub, fn, kw) => out.push({g: g, ic: ic, label: label, sub: sub || '', fn: fn,
+    key: cmdkNorm(label + ' ' + (sub || '') + ' ' + (kw || '')), lk: cmdkNorm(label)});
+  SECS.forEach(s => { if(secVisible(s)) add('sec', '§', _t('ui.ux.cmdk.goto', {s: s.label}), '', () => secGo(s.k), s.label); });
+  if(lastStats){
+    if(can('wg.view')) (lastStats.users || []).forEach(u =>
+      add('user', u.enabled ? (u.online ? '🟢' : '⚪') : '⛔', u.name, u.allowed_ips + ' · ' + u.iface,
+          () => cmdkJumpUser(u), u.note || ''));
+    if(can('tun.view')) (lastStats.tunnels || []).forEach(t =>
+      add('tun', '⇄', t.iface, t.endpoint || '', () => cmdkJumpFilter('tun', 'tfilter', t.iface)));
+    if(can('net.view')) (lastStats.interfaces || []).forEach(i =>
+      add('if', '⌁', i.iface, (i.addresses || []).join(' '), () => cmdkJumpFilter('net', 'ifilter', i.iface)));
+  }
+  if(can('proxy.view') && Array.isArray(lastProxy)) lastProxy.forEach(p =>
+    add('px', '🌐', p.username, '', () => secGo('proxy')));
+  const act = (cond, ic, key, fn) => { if(cond) add('act', ic, _t(key), '', fn); };
+  act(can('wg.add'), '＋', 'ui.wg.add', showAddModal);
+  act(can('wg.view'), '📊', 'ui.wg.overview', showOverview);
+  act(can('users.manage'), '👥', 'ui.au.cat.panel', () => secGo('pu'));
+  act(can('settings.ips'), '🛡', 'ui.top.iplimit', showAllowModal);
+  act(can('alerts.manage'), '🔔', 'ui.top.alerts', showAlertsModal);
+  act(can('bot.manage'), '🤖', 'ui.top.bot', showBotModal);
+  act(can('ecmp.manage'), '🛡', 'ui.top.ecmp', showEcmpModal);
+  act(can('backup.get') || can('backup.restore'), '💾', 'ui.top.backup', showBackupModal);
+  act(can('audit.view'), '📜', 'ui.top.actionlog', showLogModal);
+  act(evEnabled(), '🔔', 'ui.ux.ev.btn', evOpen);
+  act(true, '🔐', 'ui.th.totp', showTotpModal);
+  act(true, '🔑', 'ui.top.chpw', showPwModal);
+  act(true, '🌓', 'ui.top.theme.aria', toggleTheme);
+  act(true, '🎨', 'ui.top.pal.aria', togglePal);
+  act(true, '📺', 'ui.top.tv.aria', tvOpen);
+  act(true, '⊟', 'ui.ux.nav.foldall', () => { if(SECS.filter(secVisible).some(s => !_folded.has(s.k))) foldAllToggle(); });
+  act(true, '⊞', 'ui.ux.nav.unfoldall', () => { if(!SECS.filter(secVisible).some(s => !_folded.has(s.k))) foldAllToggle(); });
+  act(true, '⌨', 'ui.ux.keys.title', showKeysHelp);
+  Object.keys(CK_LANGS).forEach(l => { if(l !== LANG)
+    add('act', '🌐', _t('ui.ux.cmdk.lang', {l: CK_LANGS[l]}), '', () => setLang(l), l); });
+  act(true, '⏻', 'ui.top.logout', logout);
+  return out;
+}
+function cmdkFilter(q){
+  const all = cmdkSource(), nq = cmdkNorm(q).trim();
+  let res;
+  if(!nq) res = all.filter(i => i.g === 'sec' || i.g === 'act').map(i => ({i: i, s: 0}));
+  else {
+    const words = nq.split(/\s+/);
+    res = all.filter(i => words.every(w => i.key.includes(w)))
+      .map(i => ({i: i, s: i.lk.startsWith(nq) ? 0 : (i.lk.includes(nq) ? 1 : 2)}));
+  }
+  res.sort((a, b) => (CK_GROUPS.indexOf(a.i.g) - CK_GROUPS.indexOf(b.i.g)) || (a.s - b.s) ||
+                     a.i.label.localeCompare(b.i.label));
+  const per = {}, out = [];
+  res.forEach(r => { per[r.i.g] = (per[r.i.g] || 0) + 1; if(per[r.i.g] <= (nq ? 8 : 40)) out.push(r.i); });
+  return out.slice(0, 60);
+}
+function cmdkRender(){
+  const list = el('cmdk-list');
+  _ck.items = cmdkFilter(el('cmdk-in').value);
+  _ck.sel = Math.min(_ck.sel, Math.max(0, _ck.items.length - 1));
+  if(!_ck.items.length){
+    list.innerHTML = '<div class="cmdk-none" role="status">' + esc(_t('ui.ux.cmdk.none')) + '</div>';
+    el('cmdk-in').removeAttribute('aria-activedescendant');
+    return;
+  }
+  let g = '', h = '';
+  _ck.items.forEach((it, i) => {
+    if(it.g !== g){ g = it.g; h += '<div class="cmdk-g" role="presentation">' + esc(_t('ui.ux.cmdk.g.' + g)) + '</div>'; }
+    h += '<div class="cmdk-it' + (i === _ck.sel ? ' sel' : '') + '" role="option" id="ck-' + i +
+      '" data-i="' + i + '" aria-selected="' + (i === _ck.sel) + '">' +
+      '<span class="ck-ic" aria-hidden="true">' + esc(it.ic) + '</span>' +
+      '<span class="ck-l">' + esc(it.label) + '</span>' +
+      (it.sub ? '<span class="ck-s">' + esc(it.sub) + '</span>' : '') + '</div>';
+  });
+  list.innerHTML = h;
+  el('cmdk-in').setAttribute('aria-activedescendant', 'ck-' + _ck.sel);
+}
+function cmdkSel(i){
+  if(!_ck.items.length) return;
+  _ck.sel = (i + _ck.items.length) % _ck.items.length;
+  el('cmdk-list').querySelectorAll('.cmdk-it').forEach(n => {
+    const on = +n.dataset.i === _ck.sel;
+    n.classList.toggle('sel', on); n.setAttribute('aria-selected', String(on));
+    if(on) n.scrollIntoView({block: 'nearest'});
+  });
+  el('cmdk-in').setAttribute('aria-activedescendant', 'ck-' + _ck.sel);
+}
+function cmdkOpen(){
+  if(!el('overlay').classList.contains('hidden') || totpForced) return;
+  menuClose(false);
+  const a = document.activeElement;
+  _ck.ret = (a && a !== document.body) ? a : null;
+  _ck.sel = 0;
+  el('cmdk-in').value = '';
+  el('cmdk-bg').classList.remove('hidden');
+  cmdkRender();
+  setTimeout(() => el('cmdk-in').focus(), 20);
+}
+function cmdkClose(noRefocus){
+  if(el('cmdk-bg').classList.contains('hidden')) return;
+  el('cmdk-bg').classList.add('hidden');
+  if(!noRefocus) try{ if(_ck.ret && _ck.ret.isConnected) _ck.ret.focus(); }catch(e){}
+}
+function cmdkRun(i){
+  const it = _ck.items[i]; if(!it) return;
+  cmdkClose(true);
+  it.fn();
+}
+function cmdkJumpUser(u){
+  secGo('wg');
+  ufChip = '';
+  el('ufilter').value = u.name;
+  _rowFlash = u.iface + '|' + u.name;
+  rerender();
+}
+function cmdkJumpFilter(sec, inputId, val){
+  secGo(sec);
+  el(inputId).value = val;
+  rerender();
+}
+
+// ---- راهنمای میان‌برها ----
+function showKeysHelp(){
+  const mod = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '') ? '⌘' : 'Ctrl';
+  openPlainModal(_t('ui.ux.keys.title'));
+  const row = (keys, txt) => '<tr><td style="white-space:nowrap">' +
+    keys.map(k => '<kbd>' + esc(k) + '</kbd>').join(' + ') + '</td><td>' + esc(txt) + '</td></tr>';
+  el('modal-body').innerHTML = '<table class="keys-t"><tbody>' +
+    row([mod, 'K'], _t('ui.ux.keys.cmdk')) +
+    row(['/'], _t('ui.ux.keys.filter')) +
+    row(['Esc'], _t('ui.ux.keys.esc')) +
+    row(['↑', '↓', 'Enter'], _t('ui.ux.keys.nav')) +
+    row(['?'], _t('ui.ux.keys.help')) +
+    '</tbody></table>';
+}
+
+// ---- صفحه‌کلید: Escape ِ لایه‌ای، تله‌ی Tab، و میان‌برها ----
+function topLayer(){
+  if(!el('ask-bg').classList.contains('hidden')) return el('ask-box');
+  if(!el('cmdk-bg').classList.contains('hidden')) return el('cmdk-bg');
+  if(modalOpen()) return el('modal-bg').querySelector('.box');
+  if(!el('overlay').classList.contains('hidden')) return el('overlay');
+  return null;
+}
+// بالاترین لایه اول بسته می‌شود: تأیید ← جست‌وجو ← منو ← منوی کشویی ← کشو ← مودال
+function uxEscape(){
+  if(_ask){ _askDone(null); return true; }
+  if(!el('cmdk-bg').classList.contains('hidden')){ cmdkClose(); return true; }
+  if(_menuOpen){ menuClose(true); return true; }
+  if(_cselOpen){ _cselOpen.remove(); _cselOpen = null; return true; }
+  if(evOpenNow()){ evClose(); return true; }
+  if(modalOpen() && !el('modal-ok').classList.contains('hidden')){ closeModalSafe(); return true; }
+  return false;
+}
+function isTyping(t){
+  return !!t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+}
+function uxKeydown(ev){
+  if(_tv.on) return;                       // نمای TV کلیدهای خودش را دارد (tvKey)
+  const k = ev.key;
+  // روی چیدمانِ فارسی K حرفِ «ن» می‌دهد؛ ev.code مستقل از چیدمان است
+  if((ev.ctrlKey || ev.metaKey) && !ev.altKey && (k === 'k' || k === 'K' || ev.code === 'KeyK')){
+    if(!el('overlay').classList.contains('hidden') || totpForced || _ask) return;
+    ev.preventDefault();
+    if(el('cmdk-bg').classList.contains('hidden')) cmdkOpen(); else cmdkClose();
+    return;
+  }
+  if(k === 'Escape'){ if(uxEscape()){ ev.preventDefault(); ev.stopPropagation(); } return; }
+  if(k === 'Tab'){ const L = topLayer(); if(L) trapTab(ev, L); return; }
+  if(_menuOpen && /^(ArrowDown|ArrowUp|Home|End)$/.test(k)){ ev.preventDefault(); menuMove(k); return; }
+  if(ev.ctrlKey || ev.metaKey || ev.altKey) return;
+  if(isTyping(ev.target) || topLayer() || _menuOpen) return;
+  const slash = ev.code === 'Slash' || k === '/' || k === '?' || k === '؟';
+  if(!slash) return;
+  ev.preventDefault();
+  if(ev.shiftKey || k === '?' || k === '؟') showKeysHelp(); else focusSectionFilter();
+}
+
+function uxInit(){
+  navBuild();
+  initModalA11y();
+  evInit();
+  el('ask-ok').addEventListener('click', askOk);
+  el('ask-cancel').addEventListener('click', () => _askDone(null));
+  el('ask-box').addEventListener('keydown', ev => {
+    if(ev.key === 'Enter' && ev.target.tagName === 'INPUT'){ ev.preventDefault(); askOk(); }
+  });
+  const ci = el('cmdk-in');
+  ci.addEventListener('input', () => { _ck.sel = 0; cmdkRender(); });
+  ci.addEventListener('keydown', ev => {
+    if(ev.key === 'ArrowDown'){ ev.preventDefault(); cmdkSel(_ck.sel + 1); }
+    else if(ev.key === 'ArrowUp'){ ev.preventDefault(); cmdkSel(_ck.sel - 1); }
+    else if(ev.key === 'Home' && !ci.value){ ev.preventDefault(); cmdkSel(0); }
+    else if(ev.key === 'End' && !ci.value){ ev.preventDefault(); cmdkSel(_ck.items.length - 1); }
+    else if(ev.key === 'Enter'){ ev.preventDefault(); cmdkRun(_ck.sel); }
+  });
+  const cl = el('cmdk-list');
+  cl.addEventListener('mousemove', ev => {
+    const n = ev.target.closest('.cmdk-it'); if(n && +n.dataset.i !== _ck.sel) cmdkSel(+n.dataset.i);
+  });
+  cl.addEventListener('click', ev => { const n = ev.target.closest('.cmdk-it'); if(n) cmdkRun(+n.dataset.i); });
+  // کلیک روی پس‌زمینه‌ی جست‌وجو آن را می‌بندد (چیزی از دست نمی‌رود)
+  el('cmdk-bg').addEventListener('mousedown', ev => { if(ev.target === el('cmdk-bg')) cmdkClose(); });
+  el('ev-list').addEventListener('click', ev => {
+    const b = ev.target.closest('.ev-it'); if(!b) return;
+    evClose(false); secGo(b.dataset.jump);
+  });
+  document.addEventListener('mousedown', ev => {
+    if(evOpenNow() && !el('evpanel').contains(ev.target) && !ev.target.closest('#bell-btn') && !topLayer())
+      evClose(false);
+  });
+  document.addEventListener('click', ev => {
+    if(_menuOpen && !ev.target.closest('.menu')) menuClose(false);
+  });
+  document.addEventListener('keydown', uxKeydown);
+  document.querySelectorAll('th.sortable').forEach(th => {
+    th.tabIndex = 0;
+    th.addEventListener('keydown', ev => {
+      if(ev.key === 'Enter' || ev.key === ' '){ ev.preventDefault(); th.click(); }
+    });
+  });
+  syncSortHeaders();
+}
+
 initTheme();
 initLang();
 // نشانیِ خودِ پنل زیرِ عنوانِ ورود — از مرورگر، نه از کانفیگ و نه سخت‌کد
 (function(){ const e = el('login-host'); if(e) e.textContent = location.host; })();
 buildGauges();
+uxInit();           // ناوبریِ بخش‌ها، منوها، پنجره‌ی تأیید، کیبورد — پیش از نخستین refresh
 loadGraphState();
 applyGraphHash();   // لینکِ اشتراکیِ گراف (#g=…) بر state ذخیره‌شده مقدم است
 initPal();
