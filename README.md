@@ -260,9 +260,16 @@ The bot runs inside the panel process, so it needs no extra service. It is a
 complete second way to manage the server — no SSH, no browser. Each bot user
 sees only the buttons their role allows.
 
-- **18 commands** (one of them, `/botwatch`, only for the owner) and a button
+- **19 commands** (one of them, `/botwatch`, only for the owner) and a button
   menu. Each user gets the command list in their own language, chosen with
   `/lang`
+- **Excel export** (`/excel`): one `.xlsx` file for the last 1, 3, 7 or 30 days
+  or any range you type, in Gregorian or Solar Hijri dates. Three kinds: all
+  WireGuard clients, the whole server (every sheet the user's role may see), or
+  one WireGuard or proxy user with daily and hourly traffic, their path through
+  the server as native Excel shapes, connection quality, share links, proxy
+  sources and destinations, and the admin actions on that user. Passwords never
+  reach the file
 - **WireGuard clients**: create one step by step (an optional preshared key, a
   monthly quota, a lifetime cap, a speed limit and an expiry date), then renew
   it, change its quota or speed limit, enable or disable it, rotate its key or
@@ -524,7 +531,11 @@ flowchart LR
 - **For each client.** Clicking a client opens the last 15 minutes, the diagnoses
   with their evidence, and the recommendations with their reason and limits. The
   client edit dialog has the same content in a **Quality and MTU (WG-NQMO)** block.
-- **In Telegram.** A new, escalated or cleared diagnosis becomes an alert.
+- **In Telegram.** A new, escalated or cleared diagnosis becomes an alert. Bot users
+  whose role can see quality get `/quality` (and a menu button): the same summary,
+  worst clients first, and each client's numbers, diagnoses and recommendations.
+  It is read-only, never shows prefixes, ASNs or raw evidence, and appears only
+  while the engine is turned on.
 - **In Prometheus.** The same numbers as `wg_nqmo_*` series, with example queries
   under [Reference](#wg-nqmo-reference).
 

@@ -9934,15 +9934,17 @@ class BotMenuAndReportLanguageTests(unittest.TestCase):
         self.assertIn("botwatch", menus[11])
         for key in ("default", 22, 33):
             self.assertNotIn("botwatch", menus[key])
-        self.assertEqual(len(menus[11]), 18)
-        self.assertEqual(len(menus[22]), 17)
+        self.assertEqual(len(menus[11]), 19)
+        self.assertEqual(len(menus[22]), 18)
 
     def test_every_menu_description_is_translated(self):
         src = _read_panel_source()
         body = src[src.index("def bot_setcommands"):
                    src.index("BOT = TelegramBot()")]
         keys = re.findall(r'"(bot\.cmd\.[a-z]+)"', body)
-        self.assertEqual(len(keys), 18)
+        # ۱۹ دستورِ همیشگی + «quality» که فقط با پرچمِ WG-NQMO ثبت می‌شود
+        self.assertEqual(len(keys), 20)
+        self.assertIn("bot.cmd.quality", keys)
         for k in keys:
             self.assertIn(k, self.m.I18N)
 

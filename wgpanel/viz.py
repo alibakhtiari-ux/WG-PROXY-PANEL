@@ -841,3 +841,49 @@ def flow_to_canvas(X, xl, scale=0.5, link_sheet=None, link_rows=None):
         cv.shape(n["id"], x, y, w, h, fill=f_, line=l_, geom="roundRect", dash=n.get("shape") == "dashed",
                  txbody=xl.body(paras), link=link, tip=(det.get(n["id"]) or {}).get("title") or n["label"])
     return cv, g["rows"] * rh + 10
+
+
+def seq_to_canvas(X, xl, scale=0.5):
+    """نمودارِ seq ِ کاوشگر (ردیابیِ کاربر) ⇒ xlsx.Canvas: کنشگرها بالا، خطِ زندگیِ خط‌چین،
+    پیامِ هر گام پیکانی با برچسب، گامِ «self» و یادداشت جعبه‌ای روی خط‌ها. مختصاتِ دیداری؛
+    آینه‌کردنِ برگه‌ی RTL کارِ Book است، این‌جا فقط ترتیبِ کنشگرها به جهتِ نمودار است."""
+    d = X["diagrams"][0]
+    actors = d["actors"]
+    cw = d.get("colw", 200) * scale
+    W = cw * len(actors)
+    rtl = d.get("dir", "rtl") == "rtl"
+    cv = xl.Canvas(W + 8)
+    idx = {a["id"]: i for i, a in enumerate(actors)}
+
+    def cx_(aid):
+        i = idx.get(aid, 0)
+        return (W - (i + 0.5) * cw) if rtl else (i + 0.5) * cw
+    head, sh = 44.0, 38.0                     # ارتفاعِ سرِ کنشگر، فاصله‌ی گام‌ها
+    steps = d.get("steps") or []
+    bottom = head + 18 + sh * len(steps) + 10
+    for a in actors:
+        f_, l_, t_ = TONE_HEX.get(a.get("tone"), TONE_HEX["core"])
+        x = cx_(a["id"])
+        paras = [xl.para(a["label"], 8.5, True, t_)] + ([xl.para(a["sub"], 7, False, "334155")] if a.get("sub") else [])
+        cv.shape("actor:" + a["id"], x - cw / 2 + 6, 4, cw - 12, head - 8, fill=f_, line=l_, geom="roundRect",
+                 txbody=xl.body(paras))
+        cv.line("life:" + a["id"], x, head - 4, x, bottom, TONE_HEX["muted"][1], lw=0.75, dash=True, arrow=False)
+    det = X.get("details") or {}
+    y = head + 18
+    for s in steps:
+        f_, l_, t_ = TONE_HEX.get(s.get("tone"), TONE_HEX["core"])
+        label = "%s. %s" % (s.get("n", ""), s.get("label") or "")
+        tip = (det.get(s.get("id")) or {}).get("title") or s.get("label") or ""
+        if s.get("type") == "msg" and s.get("from") != s.get("to"):
+            x1, x2 = cx_(s["from"]), cx_(s["to"])
+            cv.shape("lbl:" + s["id"], min(x1, x2) + 4, y - 16, abs(x2 - x1) - 8, 15,
+                     txbody=xl.body([xl.para(label, 7.5, False, t_)], ins=0, anchor="b"), tip=tip)
+            cv.line("msg:" + s["id"], x1, y + 2, x2, y + 2, l_, lw=1.25)
+        else:
+            over = s.get("over") or [s.get("from") or actors[0]["id"]]
+            xs = [cx_(o) for o in over if o in idx] or [cx_(actors[0]["id"])]
+            x0, x1 = min(xs) - cw * 0.42, max(xs) + cw * 0.42
+            cv.shape("note:" + s["id"], x0, y - 14, x1 - x0, 26, fill=f_, line=l_, geom="roundRect",
+                     txbody=xl.body([xl.para(label, 7.5, s.get("type") == "note", t_)], ins=1), tip=tip)
+        y += sh
+    return cv, bottom + 6
